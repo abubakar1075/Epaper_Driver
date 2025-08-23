@@ -45,6 +45,7 @@ dependencies:
   
   # Permissions
   permission_handler: ^11.2.1
+  tuple: ^2.0.2
 
 dev_dependencies:
   flutter_test:

@@ -8,6 +8,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:tuple/tuple.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,14 +55,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   static const int ACK_COMPLETE = 0x03;
   static const int ACK_ERROR = 0xFF;
 
-  // Hardware palette for 6-color e-paper display
+  // Hardware palette for 6-color e-paper display - exact RGB values from Python
   static const List<ColorMap> hwPalette = [
-    ColorMap(0x00, Color(0xFF000000)), // Black
-    ColorMap(0xFF, Color(0xFFFFFFFF)), // White
-    ColorMap(0xFC, Color(0xFFFFFF00)), // Yellow
-    ColorMap(0xE0, Color(0xFFD20000)), // Red
-    ColorMap(0x03, Color(0xFF0000B4)), // Blue (0, 0, 180)
-    ColorMap(0x1C, Color(0xFF009600)), // Green (0, 150, 0)
+    ColorMap(0x00, Color.fromRGBO(0, 0, 0, 1)),       // Black
+    ColorMap(0xFF, Color.fromRGBO(255, 255, 255, 1)), // White
+    ColorMap(0xFC, Color.fromRGBO(255, 255, 0, 1)),   // Yellow (255, 255, 0)
+    ColorMap(0xE0, Color.fromRGBO(210, 0, 0, 1)),     // Red (210, 0, 0)
+    ColorMap(0x03, Color.fromRGBO(0, 0, 180, 1)),     // Blue (0, 0, 180)
+    ColorMap(0x1C, Color.fromRGBO(0, 150, 0, 1)),     // Green (0, 150, 0)
   ];
   
   // Image processing options
@@ -165,8 +166,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         return;
       }
       
-      // Apply brightness, contrast, saturation adjustments
-      originalImage = _enhanceImage(originalImage);
+  // (Enhancements applied within quantization step to avoid double processing)
       
       // Resize the image according to the fit mode
       img.Image resizedImage;
@@ -183,11 +183,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         );
       }
       
-      // Convert to 6-color palette with optional dithering
-      img.Image convertedImage = _quantizeTo6Colors(resizedImage);
-      
-      // Create the raw bytes for BLE transfer
-      Uint8List processedBytes = _createRawBytes(convertedImage);
+      // Convert to 6-color palette with optional dithering and get raw bytes
+      Tuple2<img.Image, Uint8List> result = _quantizeTo6ColorAndCreateRawBytes(resizedImage);
+      img.Image convertedImage = result.item1;
+      Uint8List processedBytes = result.item2;
       
       // Optionally rotate the image data 180 degrees
       if (_rotate180) {
@@ -289,6 +288,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       }
     }
     
+    // Apply color boosting to better match hardware palette
+    // This helps ensure colors will map correctly to the 6-color palette
+    for (int y = 0; y < result.height; y++) {
+      for (int x = 0; x < result.width; x++) {
+        var pixel = result.getPixel(x, y);
+        int r = pixel.r.toInt();
+        int g = pixel.g.toInt();
+        int b = pixel.b.toInt();
+        
+        // Boost yellow detection
+        if (r > 200 && g > 200 && b < 100) {
+          result.setPixelRgb(x, y, 255, 255, 0); // Pure yellow
+        }
+        
+        // Boost red detection
+        if (r > 200 && g < 100 && b < 100) {
+          result.setPixelRgb(x, y, 210, 0, 0); // Match hardware red
+        }
+        
+        // Boost blue detection
+        if (r < 100 && g < 100 && b > 200) {
+          result.setPixelRgb(x, y, 0, 0, 180); // Match hardware blue
+        }
+        
+        // Boost green detection
+        if (r < 100 && g > 150 && b < 100) {
+          result.setPixelRgb(x, y, 0, 150, 0); // Match hardware green
+        }
+      }
+    }
+    
     return result;
   }
 
@@ -334,84 +364,95 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return canvas;
   }
 
-  // Quantize to the 6-color palette
-  img.Image _quantizeTo6Colors(img.Image image) {
-    // Apply brightness, contrast, saturation adjustments first
-    img.Image processed = _enhanceImage(image.clone());
-    
-    // Create a palette with our 6 specific colors
-    final palette = <int>[];
-    for (var mapping in hwPalette) {
-      final c = mapping.rgbColor;
-      palette.addAll([c.red, c.green, c.blue]);
+  // Quantize to 6-color palette with manual nearest-color + optional Floyd–Steinberg dithering
+  Tuple2<img.Image, Uint8List> _quantizeTo6ColorAndCreateRawBytes(img.Image image) {
+    // Apply enhancements once (Python enhances inside its quantize function)
+    final img.Image enhanced = _enhanceImage(image.clone());
+    final int w = enhanced.width;
+    final int h = enhanced.height;
+
+    // Working buffer (r,g,b doubles) for dithering adjustments
+    final List<double> work = List<double>.filled(w * h * 3, 0.0, growable: false);
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        final p = enhanced.getPixel(x, y);
+        final int base = (y * w + x) * 3;
+        work[base] = p.r.toDouble();
+        work[base + 1] = p.g.toDouble();
+        work[base + 2] = p.b.toDouble();
+      }
     }
-    
-    // Add extra padding to fill the palette size to 256 entries (required by image library)
-    while (palette.length < 256 * 3) {
-      palette.addAll([0, 0, 0]);
+
+    final List<int> codes = hwPalette.map((c) => c.code).toList();
+    final List<List<int>> palette = hwPalette
+        .map((m) => [m.rgbColor.red, m.rgbColor.green, m.rgbColor.blue])
+        .toList(growable: false);
+
+    final Uint8List rawCodes = Uint8List(w * h);
+    final img.Image displayImage = img.Image(width: w, height: h, format: img.Format.uint8);
+
+    // Floyd–Steinberg weights
+    const double w1 = 7 / 16, w2 = 3 / 16, w3 = 5 / 16, w4 = 1 / 16;
+    final bool useDither = _useDithering;
+
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        final int base = (y * w + x) * 3;
+        double r = work[base];
+        double g = work[base + 1];
+        double b = work[base + 2];
+
+        r = r.clamp(0.0, 255.0);
+        g = g.clamp(0.0, 255.0);
+        b = b.clamp(0.0, 255.0);
+
+        int bestIdx = 0;
+        double bestDist = double.infinity;
+        for (int i = 0; i < palette.length; i++) {
+          final pr = palette[i][0].toDouble();
+          final pg = palette[i][1].toDouble();
+          final pb = palette[i][2].toDouble();
+          final double dr = pr - r;
+          final double dg = pg - g;
+          final double db = pb - b;
+          final double dist = dr * dr + dg * dg + db * db;
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = i;
+          }
+        }
+
+        final int nr = palette[bestIdx][0];
+        final int ng = palette[bestIdx][1];
+        final int nb = palette[bestIdx][2];
+
+        final int pixelIndex = y * w + x;
+        rawCodes[pixelIndex] = codes[bestIdx];
+        displayImage.setPixelRgb(x, y, nr, ng, nb);
+
+        if (useDither) {
+          final double errR = r - nr;
+          final double errG = g - ng;
+          final double errB = b - nb;
+          void addErr(int tx, int ty, double f) {
+            if (tx < 0 || tx >= w || ty < 0 || ty >= h) return;
+            final int tb = (ty * w + tx) * 3;
+            work[tb] += errR * f;
+            work[tb + 1] += errG * f;
+            work[tb + 2] += errB * f;
+          }
+          addErr(x + 1, y, w1);
+          addErr(x - 1, y + 1, w2);
+            addErr(x, y + 1, w3);
+          addErr(x + 1, y + 1, w4);
+        }
+      }
     }
-    
-    // Use quantize with the created palette and the proper dithering setting
-    var dithering = _useDithering 
-        ? img.DitherKernel.floydSteinberg
-        : img.DitherKernel.none;
-    
-    return img.quantize(
-      processed,
-      numberOfColors: hwPalette.length,
-      method: img.QuantizeMethod.octree,  // Use octree as Flutter doesn't have median cut
-      dither: dithering
-    );
+
+    return Tuple2(displayImage, rawCodes);
   }
 
   // Create raw bytes for BLE transfer - map pixels to palette codes
-  Uint8List _createRawBytes(img.Image image) {
-    final int pixelCount = image.width * image.height;
-    final Uint8List result = Uint8List(pixelCount);
-    
-    // Map of colors to palette codes
-    final Map<int, int> colorToCodeMap = {};
-    for (var mapping in hwPalette) {
-      final c = mapping.rgbColor;
-      // Create a color key based on RGB values (format varies by platform)
-      int colorKey = (c.red << 16) | (c.green << 8) | c.blue;
-      colorToCodeMap[colorKey] = mapping.code;
-    }
-    
-    // Map each pixel to the closest palette color
-    for (int y = 0; y < image.height; y++) {
-      for (int x = 0; x < image.width; x++) {
-        final img.Pixel pixel = image.getPixel(x, y);
-        final int r = pixel.r.toInt();
-        final int g = pixel.g.toInt();
-        final int b = pixel.b.toInt();
-        
-        // Find the closest color in our hardware palette
-        int closestColorIndex = 0;
-        double minDistance = double.infinity;
-        
-        for (int i = 0; i < hwPalette.length; i++) {
-          final Color c = hwPalette[i].rgbColor;
-          final double dr = (c.red - r).toDouble();
-          final double dg = (c.green - g).toDouble();
-          final double db = (c.blue - b).toDouble();
-          final double distance = dr * dr + dg * dg + db * db;
-          
-          if (distance < minDistance) {
-            minDistance = distance;
-            closestColorIndex = i;
-          }
-        }
-        
-        // Store the byte code for this color
-        final int index = y * image.width + x;
-        result[index] = hwPalette[closestColorIndex].code;
-      }
-    }
-    
-    return result;
-  }
-
   // Pack pixels 2-per-byte to reduce BLE transfer size
   Uint8List _packPixels(Uint8List rawData) {
     // Map from 8-bit color codes to 4-bit codes
@@ -830,173 +871,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     ],
                   ),
                 ),
-              const SizedBox(height: 16),
-              
-              // Image processing options
-              if (_originalImage != null)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Image Settings', style: Theme.of(context).textTheme.titleMedium),
-                        
-                        // Fit mode
-                        Row(
-                          children: [
-                            const Text('Resize Mode:'),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('Fit'),
-                              selected: _useFitMode,
-                              onSelected: (selected) {
-                                setState(() {
-                                  _useFitMode = selected;
-                                });
-                                _processImage();
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('Stretch'),
-                              selected: !_useFitMode,
-                              onSelected: (selected) {
-                                setState(() {
-                                  _useFitMode = !selected;
-                                });
-                                _processImage();
-                              },
-                            ),
-                          ],
-                        ),
-                        
-                        // Dithering
-                        Row(
-                          children: [
-                            const Text('Dithering:'),
-                            const SizedBox(width: 8),
-                            Switch(
-                              value: _useDithering,
-                              onChanged: (value) {
-                                setState(() {
-                                  _useDithering = value;
-                                });
-                                _processImage();
-                              },
-                            ),
-                          ],
-                        ),
-                        
-                        // Brightness slider
-                        Row(
-                          children: [
-                            const Text('Brightness:'),
-                            Expanded(
-                              child: Slider(
-                                value: _brightness,
-                                min: 0.5,
-                                max: 1.5,
-                                divisions: 10,
-                                label: _brightness.toStringAsFixed(1),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _brightness = value;
-                                  });
-                                },
-                                onChangeEnd: (value) {
-                                  _processImage();
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        // Contrast slider
-                        Row(
-                          children: [
-                            const Text('Contrast:'),
-                            Expanded(
-                              child: Slider(
-                                value: _contrast,
-                                min: 0.5,
-                                max: 1.5,
-                                divisions: 10,
-                                label: _contrast.toStringAsFixed(1),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _contrast = value;
-                                  });
-                                },
-                                onChangeEnd: (value) {
-                                  _processImage();
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        // Saturation slider
-                        Row(
-                          children: [
-                            const Text('Saturation:'),
-                            Expanded(
-                              child: Slider(
-                                value: _saturation,
-                                min: 0.5,
-                                max: 1.5,
-                                divisions: 10,
-                                label: _saturation.toStringAsFixed(1),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _saturation = value;
-                                  });
-                                },
-                                onChangeEnd: (value) {
-                                  _processImage();
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        // Rotation
-                        Row(
-                          children: [
-                            const Text('Rotate 180°:'),
-                            const SizedBox(width: 8),
-                            Switch(
-                              value: _rotate180,
-                              onChanged: (value) {
-                                setState(() {
-                                  _rotate180 = value;
-                                });
-                                _processImage();
-                              },
-                            ),
-                          ],
-                        ),
-                        
-                        // Reset button
-                        ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _brightness = 1.0;
-                              _contrast = 1.0;
-                              _saturation = 1.0;
-                              _useFitMode = true;
-                              _useDithering = true;
-                              _rotate180 = true;
-                            });
-                            _processImage();
-                          },
-                          child: const Text('Reset Settings'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              
               const SizedBox(height: 16),
               
               // BLE section
