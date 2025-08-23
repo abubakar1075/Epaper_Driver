@@ -1,0 +1,56 @@
+#ifndef _SPICOM_H_
+#define _SPICOM_H_
+#include "Arduino.h"
+
+// IO settings (focused on XIAO ESP32C3)
+// Original sketch used A14..A17 (not present on XIAO boards). We now define explicit GPIOs.
+// Pinout Definitions (as requested):
+// ePaper  -> XIAO ESP32C3
+// RST     -> D0 (GPIO2)
+// CS      -> D1 (GPIO3)
+// DC      -> D3 (GPIO5)
+// BUSY    -> D2 (GPIO4)
+// SCK     -> D8 (GPIO10)
+// MOSI    -> D10 (GPIO0)
+// 3V3     -> 3V3
+// GND     -> GND
+// (MISO not used by most ePaper panels)
+// If you need a different wiring, define PIN_EPD_* / EPD_SPI_* before including this header.
+// Power:
+//   VCC  -> 3V3 (DO NOT use 5V if panel is 3.3V logic)
+//   GND  -> GND
+//   If panel needs a separate ENABLE pin, tie according to its datasheet.
+
+// Unconditional pin mapping for XIAO ESP32C3 (conditions removed as requested)
+/*#define PIN_EPD_RST   D0   // D0
+#define PIN_EPD_CS    D1   // D1
+#define PIN_EPD_BUSY  D2   // D2
+#define PIN_EPD_DC    D3   // D3
+#define EPD_SPI_SCK   D8  // D8 (SCK)
+#define EPD_SPI_MOSI  D10   // D10 (MOSI)
+#define EPD_SPI_MISO  -1  // not used
+*/
+
+#define PIN_EPD_RST   4   // D0
+#define PIN_EPD_CS    2   // D1
+#define PIN_EPD_BUSY  5   // D2
+#define PIN_EPD_DC    3   // D3
+#define EPD_SPI_SCK   12  // D8 (SCK)
+#define EPD_SPI_MOSI  11   // D10 (MOSI)
+#define EPD_SPI_MISO  -1  // not used
+
+#define isEPD_W21_BUSY digitalRead(PIN_EPD_BUSY)
+#define EPD_W21_RST_0 digitalWrite(PIN_EPD_RST,LOW)
+#define EPD_W21_RST_1 digitalWrite(PIN_EPD_RST,HIGH)
+#define EPD_W21_DC_0  digitalWrite(PIN_EPD_DC,LOW)
+#define EPD_W21_DC_1  digitalWrite(PIN_EPD_DC,HIGH)
+#define EPD_W21_CS_0  digitalWrite(PIN_EPD_CS,LOW)
+#define EPD_W21_CS_1  digitalWrite(PIN_EPD_CS,HIGH)
+
+
+void SPI_Write(unsigned char value);
+void EPD_W21_WriteDATA(unsigned char datas);
+void EPD_W21_WriteCMD(unsigned char command);
+
+
+#endif
