@@ -71,7 +71,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   double _brightness = 1.0;
   double _contrast = 1.0;
   double _saturation = 1.0;
-  bool _rotate180 = true;
 
   // UI State
   File? _originalImage;
@@ -208,15 +207,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Build 800x480 from interactive frame (pan/zoom/rotate) regardless of fit mode toggle
   img.Image resizedImage = _generateCroppedBaseImage(originalImage);
       
-      // Convert to 6-color palette with optional dithering and get raw bytes
+      // Convert to 6-color palette with optional dithering and get raw codes
       Tuple2<img.Image, Uint8List> result = _quantizeTo6ColorAndCreateRawBytes(resizedImage);
-      img.Image convertedImage = result.item1;
-      Uint8List processedBytes = result.item2;
-      
-      // Optionally rotate the image data 180 degrees
-      if (_rotate180) {
-        processedBytes = Uint8List.fromList(processedBytes.reversed.toList());
-      }
+      img.Image convertedImage = result.item1; // 800x480 (landscape)
+      Uint8List processedBytes = result.item2;  // raw color codes length = 800*480
+
+  // (Do not rotate here; rotation will be applied right before packing when sending)
       
       setState(() {
         _processedImage = convertedImage;
@@ -752,8 +748,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try {
       _updateStatus("Preparing image data...");
       
-      // Pack the pixels to reduce transfer size
-      Uint8List packedData = _packPixels(_processedBytes!);
+      // Device shows image upside down -> perform vertical flip (not full 180 rotate) before packing.
+      final int w = IMAGE_WIDTH;
+      final int h = IMAGE_HEIGHT;
+      final Uint8List src = _processedBytes!; // raw codes length w*h
+      final Uint8List flipped = Uint8List(src.length);
+      for (int y = 0; y < h; y++) {
+        final int srcOffset = y * w;
+        final int dstOffset = (h - 1 - y) * w; // vertical flip, keep x order
+        flipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
+      }
+      Uint8List packedData = _packPixels(flipped);
       _updateStatus("Packed data size: ${packedData.length} bytes");
       
       // First send the total size as a 4-byte value
