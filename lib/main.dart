@@ -104,6 +104,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   double _frameWidth = 0;
   double _frameHeight = 0;
   Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
+  bool _verticalFrame = false; // portrait orientation toggle
   
   // For image processing
   final ImagePicker _picker = ImagePicker();
@@ -235,22 +236,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final double cosR = math.cos(_viewRotation);
     final double sinR = math.sin(_viewRotation);
     final double invScale = 1.0 / _viewScale;
-    final img.Image out = img.Image(width: IMAGE_WIDTH, height: IMAGE_HEIGHT, format: img.Format.uint8);
-    for (int oy = 0; oy < IMAGE_HEIGHT; oy++) {
-      final double wy = _frameOrigin.dy + (oy / IMAGE_HEIGHT) * _frameHeight; // workspace y
-      for (int ox = 0; ox < IMAGE_WIDTH; ox++) {
-        final double wx = _frameOrigin.dx + (ox / IMAGE_WIDTH) * _frameWidth; // workspace x
-        // workspace -> image local (subtract translation)
+    final int targetW = _verticalFrame ? IMAGE_HEIGHT : IMAGE_WIDTH; // 480 if vertical
+    final int targetH = _verticalFrame ? IMAGE_WIDTH : IMAGE_HEIGHT; // 800 if vertical
+    final img.Image working = img.Image(width: targetW, height: targetH, format: img.Format.uint8);
+    for (int oy = 0; oy < targetH; oy++) {
+      final double wy = _frameOrigin.dy + (oy / targetH) * _frameHeight; // workspace y
+      for (int ox = 0; ox < targetW; ox++) {
+        final double wx = _frameOrigin.dx + (ox / targetW) * _frameWidth; // workspace x
         double ix = wx - _viewTranslation.dx;
         double iy = wy - _viewTranslation.dy;
-        // undo rotation
         double rx = ix * cosR + iy * sinR;
         double ry = -ix * sinR + iy * cosR;
-        // undo scale
         double sx = rx * invScale;
         double sy = ry * invScale;
         if (sx < 0 || sy < 0 || sx >= source.width - 1 || sy >= source.height - 1) {
-          out.setPixelRgba(ox, oy, 255, 255, 255, 255);
+          working.setPixelRgba(ox, oy, 255, 255, 255, 255);
           continue;
         }
         final int x0 = sx.floor();
@@ -267,10 +267,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         final r0 = lerp(p00.r, p10.r, tx); final g0 = lerp(p00.g, p10.g, tx); final b0 = lerp(p00.b, p10.b, tx);
         final r1 = lerp(p01.r, p11.r, tx); final g1 = lerp(p01.g, p11.g, tx); final b1 = lerp(p01.b, p11.b, tx);
         final r = lerp(r0, r1, ty); final g = lerp(g0, g1, ty); final b = lerp(b0, b1, ty);
-        out.setPixelRgba(ox, oy, r, g, b, 255);
+        working.setPixelRgba(ox, oy, r, g, b, 255);
       }
     }
-    return out;
+    if (_verticalFrame) {
+      return img.copyRotate(working, angle: 90);
+    }
+    return working;
   }
 
   // Apply image enhancements (brightness, contrast, saturation)
@@ -924,6 +927,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 if (_originalImage != null) _buildCropFrame(),
                 const SizedBox(height: 12),
                 if (_originalImage != null) Row(children:[
+                  ElevatedButton(
+                    onPressed: (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized = false; }); },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _verticalFrame ? Colors.deepPurple : null,
+                      foregroundColor: _verticalFrame ? Colors.white : null,
+                    ),
+                    child: Text(_verticalFrame ? 'Vertical ✓' : 'Vertical'),
+                  ),
+                  const SizedBox(width:8),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: _processImage,
@@ -992,12 +1004,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       child: LayoutBuilder(builder: (context, constraints) {
         final workspaceW = constraints.maxWidth;
         final workspaceH = constraints.maxHeight;
-        // Frame is half the width (keeping aspect)
+        // Base frame width half of available
         _frameWidth = workspaceW * 0.5;
-        _frameHeight = _frameWidth * (IMAGE_HEIGHT / IMAGE_WIDTH);
+        if (_verticalFrame) {
+          _frameHeight = _frameWidth * (IMAGE_WIDTH / IMAGE_HEIGHT); // portrait 800/480
+        } else {
+          _frameHeight = _frameWidth * (IMAGE_HEIGHT / IMAGE_WIDTH); // landscape 480/800
+        }
         if (_frameHeight > workspaceH) {
-          _frameHeight = workspaceH * 0.5; // fallback
-          _frameWidth = _frameHeight * (IMAGE_WIDTH / IMAGE_HEIGHT);
+          _frameHeight = workspaceH * 0.5; // fallback based on height
+          if (_verticalFrame) {
+            _frameWidth = _frameHeight * (IMAGE_HEIGHT / IMAGE_WIDTH);
+          } else {
+            _frameWidth = _frameHeight * (IMAGE_WIDTH / IMAGE_HEIGHT);
+          }
         }
         _frameOrigin = Offset(
           (workspaceW - _frameWidth)/2,
