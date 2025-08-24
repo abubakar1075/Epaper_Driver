@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -75,6 +76,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   // UI State
   File? _originalImage;
+  ui.Image? _uiOriginal; // decoded for painting
   img.Image? _processedImage;
   Uint8List? _processedBytes;
   final List<BluetoothDevice> _devicesList = [];
@@ -86,6 +88,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   String _statusMessage = "Ready";
   int _transferProgress = 0;
   double _transferSpeed = 0;
+
+  // Crop/transform state for interactive framing
+  bool _viewInitialized = false;
+  double _viewScale = 1.0; // applied to image
+  double _viewRotation = 0.0; // radians
+  Offset _viewTranslation = Offset.zero; // translation inside frame
+  // Gesture temps
+  double _startScale = 1.0;
+  double _startRotation = 0.0;
+  Offset _startTranslation = Offset.zero;
+  Offset _startFocal = Offset.zero;
+  double _frameWidth = 0;
+  double _frameHeight = 0;
+  Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
   
   // For image processing
   final ImagePicker _picker = ImagePicker();
@@ -143,11 +159,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _processedImage = null;
         _processedBytes = null;
         _transferProgress = 0;
+        _uiOriginal = null;
+        _viewInitialized = false;
       });
+      await _loadUiImage();
       
-      // Process the image
-      _processImage();
+      // Wait for user to adjust then press Process / Send
     }
+  }
+
+  Future<void> _loadUiImage() async {
+    if (_originalImage == null) return;
+    final bytes = await _originalImage!.readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    setState(() { _uiOriginal = frame.image; });
   }
 
   // Process the selected image with current settings
@@ -168,20 +194,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       
   // (Enhancements applied within quantization step to avoid double processing)
       
-      // Resize the image according to the fit mode
-      img.Image resizedImage;
-      if (_useFitMode) {
-        // Letterbox mode (maintain aspect ratio)
-        resizedImage = _fitImage(originalImage);
-      } else {
-        // Stretch mode
-        resizedImage = img.copyResize(
-          originalImage,
-          width: IMAGE_WIDTH,
-          height: IMAGE_HEIGHT,
-          interpolation: img.Interpolation.linear
-        );
-      }
+  // Build 800x480 from interactive frame (pan/zoom/rotate) regardless of fit mode toggle
+  img.Image resizedImage = _generateCroppedBaseImage(originalImage);
       
       // Convert to 6-color palette with optional dithering and get raw bytes
       Tuple2<img.Image, Uint8List> result = _quantizeTo6ColorAndCreateRawBytes(resizedImage);
@@ -202,6 +216,51 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     } catch (e) {
       _updateStatus("Error processing image: $e");
     }
+  }
+
+  img.Image _generateCroppedBaseImage(img.Image source) {
+    if (_uiOriginal == null || _frameWidth == 0 || _frameHeight == 0) {
+      return _fitImage(source);
+    }
+    final double cosR = math.cos(_viewRotation);
+    final double sinR = math.sin(_viewRotation);
+    final double invScale = 1.0 / _viewScale;
+    final img.Image out = img.Image(width: IMAGE_WIDTH, height: IMAGE_HEIGHT, format: img.Format.uint8);
+    for (int oy = 0; oy < IMAGE_HEIGHT; oy++) {
+      final double wy = _frameOrigin.dy + (oy / IMAGE_HEIGHT) * _frameHeight; // workspace y
+      for (int ox = 0; ox < IMAGE_WIDTH; ox++) {
+        final double wx = _frameOrigin.dx + (ox / IMAGE_WIDTH) * _frameWidth; // workspace x
+        // workspace -> image local (subtract translation)
+        double ix = wx - _viewTranslation.dx;
+        double iy = wy - _viewTranslation.dy;
+        // undo rotation
+        double rx = ix * cosR + iy * sinR;
+        double ry = -ix * sinR + iy * cosR;
+        // undo scale
+        double sx = rx * invScale;
+        double sy = ry * invScale;
+        if (sx < 0 || sy < 0 || sx >= source.width - 1 || sy >= source.height - 1) {
+          out.setPixelRgba(ox, oy, 255, 255, 255, 255);
+          continue;
+        }
+        final int x0 = sx.floor();
+        final int y0 = sy.floor();
+        final int x1 = x0 + 1;
+        final int y1 = y0 + 1;
+        final double tx = sx - x0;
+        final double ty = sy - y0;
+        final p00 = source.getPixel(x0, y0);
+        final p10 = source.getPixel(x1, y0);
+        final p01 = source.getPixel(x0, y1);
+        final p11 = source.getPixel(x1, y1);
+        int lerp(num a, num b, double t) => (a + (b - a) * t).round();
+        final r0 = lerp(p00.r, p10.r, tx); final g0 = lerp(p00.g, p10.g, tx); final b0 = lerp(p00.b, p10.b, tx);
+        final r1 = lerp(p01.r, p11.r, tx); final g1 = lerp(p01.g, p11.g, tx); final b1 = lerp(p01.b, p11.b, tx);
+        final r = lerp(r0, r1, ty); final g = lerp(g0, g1, ty); final b = lerp(b0, b1, ty);
+        out.setPixelRgba(ox, oy, r, g, b, 255);
+      }
+    }
+    return out;
   }
 
   // Apply image enhancements (brightness, contrast, saturation)
@@ -835,24 +894,24 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 _statusCard(),
               ] else ...[
                 // Connected: show image workflow
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.photo_library),
-                        label: const Text('Select Image Please'),
-                      ),
+                Row(children:[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _pickImage,
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('Select Image Please'),
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _disconnectDevice,
-                      icon: const Icon(Icons.bluetooth_disabled),
-                      label: Text('Disconnect ${_connectedDevice!.advName}'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width:8),
+                  ElevatedButton.icon(
+                    onPressed: _disconnectDevice,
+                    icon: const Icon(Icons.bluetooth_disabled),
+                    label: Text('Disconnect ${_connectedDevice!.advName}'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                if (_originalImage != null) _buildCropFrame(),
                 const SizedBox(height: 12),
                 if (_originalImage != null) Row(children:[
                   Expanded(
@@ -916,6 +975,94 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       ],
     ),
   );
+
+  Widget _buildCropFrame() {
+    return SizedBox(
+      height: 320, // workspace height
+      child: LayoutBuilder(builder: (context, constraints) {
+        final workspaceW = constraints.maxWidth;
+        final workspaceH = constraints.maxHeight;
+        // Frame is half the width (keeping aspect)
+        _frameWidth = workspaceW * 0.5;
+        _frameHeight = _frameWidth * (IMAGE_HEIGHT / IMAGE_WIDTH);
+        if (_frameHeight > workspaceH) {
+          _frameHeight = workspaceH * 0.5; // fallback
+          _frameWidth = _frameHeight * (IMAGE_WIDTH / IMAGE_HEIGHT);
+        }
+        _frameOrigin = Offset(
+          (workspaceW - _frameWidth)/2,
+          (workspaceH - _frameHeight)/2,
+        );
+        if (!_viewInitialized && _uiOriginal != null) {
+          final iw = _uiOriginal!.width.toDouble();
+          final ih = _uiOriginal!.height.toDouble();
+          // scale so image fully covers frame
+          final coverScale = math.max(_frameWidth / iw, _frameHeight / ih);
+          _viewScale = coverScale;
+          // center image in workspace
+          _viewTranslation = Offset(
+            (workspaceW - iw*coverScale)/2,
+            (workspaceH - ih*coverScale)/2,
+          );
+          _viewInitialized = true;
+        }
+        return GestureDetector(
+          onScaleStart: (d){
+            _startScale = _viewScale; _startRotation = _viewRotation; _startTranslation = _viewTranslation; _startFocal = d.focalPoint;},
+          onScaleUpdate: (d){
+            setState((){
+              _viewScale = (_startScale * d.scale).clamp(0.2, 20.0);
+              _viewRotation = _startRotation + d.rotation;
+              _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
+            });
+          },
+          child: Stack(children:[
+            // Image
+            CustomPaint(
+              size: Size.infinite,
+              painter: _WorkspacePainter(
+                image: _uiOriginal,
+                scale: _viewScale,
+                rotation: _viewRotation,
+                translation: _viewTranslation,
+              ),
+            ),
+            // Frame overlay
+            Positioned(
+              left: _frameOrigin.dx,
+              top: _frameOrigin.dy,
+              width: _frameWidth,
+              height: _frameHeight,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.black, width: 3),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+        );
+      }),
+    );
+  }
+}
+
+class _WorkspacePainter extends CustomPainter {
+  final ui.Image? image; final double scale; final double rotation; final Offset translation;
+  const _WorkspacePainter({required this.image, required this.scale, required this.rotation, required this.translation});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final img = image; if (img==null) { canvas.drawRect(Offset.zero & size, Paint()..color=Colors.black12); return; }
+    canvas.save();
+    canvas.translate(translation.dx, translation.dy);
+    canvas.rotate(rotation);
+    canvas.scale(scale, scale);
+    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,img.width.toDouble(), img.height.toDouble()), image: img, fit: BoxFit.contain, alignment: Alignment.topLeft);
+    canvas.restore();
+  }
+  @override
+  bool shouldRepaint(covariant _WorkspacePainter old)=> old.image!=image || old.scale!=scale || old.rotation!=rotation || old.translation!=translation;
 }
 
 // Helper class for color mapping
