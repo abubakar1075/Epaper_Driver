@@ -67,7 +67,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   ];
   
   // Image processing options
-  bool _useFitMode = true;
   bool _useDithering = true;
   double _brightness = 1.0;
   double _contrast = 1.0;
@@ -1016,32 +1015,34 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
             });
           },
-          child: Stack(children:[
-            // Image
-            CustomPaint(
-              size: Size.infinite,
-              painter: _WorkspacePainter(
-                image: _uiOriginal,
-                scale: _viewScale,
-                rotation: _viewRotation,
-                translation: _viewTranslation,
+          child: ClipRect(
+            child: Stack(children:[
+              // Image (clipped to workspace bounds now)
+              CustomPaint(
+                size: Size(workspaceW, workspaceH),
+                painter: _WorkspacePainter(
+                  image: _uiOriginal,
+                  scale: _viewScale,
+                  rotation: _viewRotation,
+                  translation: _viewTranslation,
+                ),
               ),
-            ),
-            // Frame overlay
-            Positioned(
-              left: _frameOrigin.dx,
-              top: _frameOrigin.dy,
-              width: _frameWidth,
-              height: _frameHeight,
-              child: IgnorePointer(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.black, width: 3),
+              // Frame overlay
+              Positioned(
+                left: _frameOrigin.dx,
+                top: _frameOrigin.dy,
+                width: _frameWidth,
+                height: _frameHeight,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.black, width: 3),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ]),
+            ]),
+          ),
         );
       }),
     );
