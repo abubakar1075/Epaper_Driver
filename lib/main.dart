@@ -965,7 +965,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     child: Row(children:[
                       if (_originalImage != null) Expanded(child: Column(children:[const Text('Original'), Expanded(child: Image.file(_originalImage!, fit: BoxFit.contain))])),
                       if (_originalImage != null && _processedImage != null) const VerticalDivider(),
-                      if (_processedImage != null) Expanded(child: Column(children:[const Text('Processed'), Expanded(child: Image.memory(Uint8List.fromList(img.encodePng(_processedImage!)), fit: BoxFit.contain))])),
+                      if (_processedImage != null) Expanded(child: Column(children:[
+                        const Text('Processed'),
+                        Expanded(
+                          child: Builder(builder: (context){
+                            Widget w = Image.memory(Uint8List.fromList(img.encodePng(_processedImage!)), fit: BoxFit.contain);
+                            if (_verticalFrame) {
+                              // Show portrait orientation to match user expectation (backend remains landscape)
+                              w = RotatedBox(quarterTurns: 3, child: w); // 270° CW == 90° CCW
+                            }
+                            return w;
+                          }),
+                        )
+                      ])),
                     ]),
                   ),
                 if (_isSending) ...[
