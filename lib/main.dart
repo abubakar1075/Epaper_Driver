@@ -798,179 +798,124 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Image preview section
-              Text('Image', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('Select Image'),
+              if (_connectedDevice == null) ...[
+                Text('BLE Control', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: _isScanning ? null : _scanForDevices,
+                  icon: const Icon(Icons.bluetooth_searching),
+                  label: Text(_isScanning ? 'Scanning...' : 'Scan for BLE Devices'),
+                ),
+                const SizedBox(height: 8),
+                if (_devicesList.isNotEmpty)
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ListView.builder(
+                      itemCount: _devicesList.length,
+                      itemBuilder: (context, index) {
+                        final d = _devicesList[index];
+                        return ListTile(
+                          title: Text(d.advName.isEmpty ? '(Unnamed)' : d.advName),
+                          subtitle: Text(d.remoteId.str),
+                          trailing: const Icon(Icons.bluetooth),
+                          onTap: _isConnecting ? null : () => _connectToDevice(d),
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  if (_originalImage != null)
+                if (_isConnecting) const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: LinearProgressIndicator(),
+                ),
+                const SizedBox(height: 16),
+                _statusCard(),
+              ] else ...[
+                // Connected: show image workflow
+                Row(
+                  children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: _processImage,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Process Image'),
+                        onPressed: _pickImage,
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text('Select Image Please'),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _disconnectDevice,
+                      icon: const Icon(Icons.bluetooth_disabled),
+                      label: Text('Disconnect ${_connectedDevice!.advName}'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_originalImage != null) Row(children:[
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _processImage,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Process Image'),
+                    ),
+                  ),
+                  const SizedBox(width:8),
+                  if (_processedBytes != null)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isSending ? null : _sendImageData,
+                        icon: const Icon(Icons.send),
+                        label: Text(_isSending ? 'Sending...' : 'Send To Device'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      ),
+                    ),
+                ]),
+                const SizedBox(height: 12),
+                if (_originalImage != null || _processedImage != null)
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(children:[
+                      if (_originalImage != null) Expanded(child: Column(children:[const Text('Original'), Expanded(child: Image.file(_originalImage!, fit: BoxFit.contain))])),
+                      if (_originalImage != null && _processedImage != null) const VerticalDivider(),
+                      if (_processedImage != null) Expanded(child: Column(children:[const Text('Processed'), Expanded(child: Image.memory(Uint8List.fromList(img.encodePng(_processedImage!)), fit: BoxFit.contain))])),
+                    ]),
+                  ),
+                if (_isSending) ...[
+                  const SizedBox(height: 12),
+                  LinearProgressIndicator(value: _transferProgress/100),
+                  Text('${_transferProgress}% - ${_transferSpeed.toStringAsFixed(2)} KB/s'),
                 ],
-              ),
-              const SizedBox(height: 16),
-              
-              // Image preview
-              if (_originalImage != null || _processedImage != null)
-                Container(
-                  height: 200,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      // Original image
-                      if (_originalImage != null)
-                        Expanded(
-                          child: Column(
-                            children: [
-                              const Text('Original'),
-                              Expanded(
-                                child: Image.file(
-                                  _originalImage!,
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      
-                      // Vertical divider
-                      if (_originalImage != null && _processedImage != null)
-                        const VerticalDivider(),
-                      
-                      // Processed image
-                      if (_processedImage != null)
-                        Expanded(
-                          child: Column(
-                            children: [
-                              const Text('Processed'),
-                              Expanded(
-                                child: Image.memory(
-                                  Uint8List.fromList(img.encodePng(_processedImage!)),
-                                  fit: BoxFit.contain,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 16),
-              
-              // BLE section
-              Text('BLE Control', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              
-              // Scan button
-              ElevatedButton.icon(
-                onPressed: _isScanning ? null : _scanForDevices,
-                icon: const Icon(Icons.bluetooth_searching),
-                label: Text(_isScanning ? 'Scanning...' : 'Scan for BLE Devices'),
-              ),
-              const SizedBox(height: 8),
-              
-              // Device list
-              if (_devicesList.isNotEmpty)
-                Container(
-                  height: 150,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ListView.builder(
-                    itemCount: _devicesList.length,
-                    itemBuilder: (context, index) {
-                      final device = _devicesList[index];
-                      final bool isConnected = _connectedDevice?.remoteId == device.remoteId;
-                      
-                      return ListTile(
-                        title: Text(device.advName),
-                        subtitle: Text(device.remoteId.str),
-                        trailing: isConnected
-                            ? const Icon(Icons.bluetooth_connected, color: Colors.green)
-                            : const Icon(Icons.bluetooth, color: Colors.blue),
-                        onTap: isConnected || _isConnecting ? null : () => _connectToDevice(device),
-                      );
-                    },
-                  ),
-                ),
-              const SizedBox(height: 8),
-              
-              // Connect/Disconnect button
-              if (_connectedDevice != null)
-                ElevatedButton.icon(
-                  onPressed: _disconnectDevice,
-                  icon: const Icon(Icons.bluetooth_disabled),
-                  label: Text('Disconnect from ${_connectedDevice!.advName}'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              
-              const SizedBox(height: 16),
-              
-              // Send button
-              if (_connectedDevice != null && _processedBytes != null)
-                ElevatedButton.icon(
-                  onPressed: _isSending ? null : _sendImageData,
-                  icon: const Icon(Icons.send),
-                  label: Text(_isSending ? 'Sending...' : 'Send Image to Device'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              
-              // Progress bar
-              if (_isSending)
-                Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(value: _transferProgress / 100),
-                    Text('$_transferProgress% - ${_transferSpeed.toStringAsFixed(2)} KB/s'),
-                  ],
-                ),
-              
-              const SizedBox(height: 16),
-              
-              // Status section
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Status', style: Theme.of(context).textTheme.titleMedium),
-                    Text(_statusMessage),
-                  ],
-                ),
-              ),
+                const SizedBox(height: 12),
+                _statusCard(),
+              ]
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _statusCard() => Container(
+    padding: const EdgeInsets.all(8),
+    decoration: BoxDecoration(
+      color: Colors.grey[200],
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Status', style: Theme.of(context).textTheme.titleMedium),
+        Text(_statusMessage),
+      ],
+    ),
+  );
 }
 
 // Helper class for color mapping
