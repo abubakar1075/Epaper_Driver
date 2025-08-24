@@ -93,6 +93,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   double _viewScale = 1.0; // applied to image
   double _viewRotation = 0.0; // radians
   Offset _viewTranslation = Offset.zero; // translation inside frame
+  // Zoom limits (will be refined after image/frame init)
+  double _minScale = 0.05;
+  double _maxScale = 40.0;
   // Gesture temps
   double _startScale = 1.0;
   double _startRotation = 0.0;
@@ -115,6 +118,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   void dispose() {
     _disconnectDevice();
     super.dispose();
+  }
+
+  void _resetView(){
+    if(_uiOriginal==null){ return; }
+    setState((){
+      _viewInitialized = false; // recompute cover scale next build
+      _viewRotation = 0.0;
+    });
   }
 
   // Request necessary permissions
@@ -998,6 +1009,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           // scale so image fully covers frame
           final coverScale = math.max(_frameWidth / iw, _frameHeight / ih);
           _viewScale = coverScale;
+          // Allow zooming out to a small fraction of cover, in, to large magnification
+          _minScale = coverScale * 0.01; // 1% of cover size (very far zoom out)
+          if (_minScale < 0.005) _minScale = 0.005;
+          _maxScale = coverScale * 80; // very deep zoom possible
           // center image in workspace
           _viewTranslation = Offset(
             (workspaceW - iw*coverScale)/2,
@@ -1006,11 +1021,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           _viewInitialized = true;
         }
         return GestureDetector(
+          onDoubleTap: _resetView,
           onScaleStart: (d){
             _startScale = _viewScale; _startRotation = _viewRotation; _startTranslation = _viewTranslation; _startFocal = d.focalPoint;},
           onScaleUpdate: (d){
             setState((){
-              _viewScale = (_startScale * d.scale).clamp(0.2, 20.0);
+              _viewScale = (_startScale * d.scale).clamp(_minScale, _maxScale);
               _viewRotation = _startRotation + d.rotation;
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
             });
@@ -1038,6 +1054,43 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.black, width: 3),
                     ),
+                  ),
+                ),
+              ),
+              // Zoom controls overlay (top-right)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.35),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.add, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
+                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); }); },
+                        tooltip: 'Zoom In',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.remove, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
+                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); }); },
+                        tooltip: 'Zoom Out',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
+                        onPressed: _resetView,
+                        tooltip: 'Reset View (also double-tap)',
+                      ),
+                    ],
                   ),
                 ),
               ),
