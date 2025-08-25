@@ -105,13 +105,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _verticalFrame = false; // portrait orientation toggle
   // Slider-driven tuning
   double _ditherStrength = 1.0; // 0=off .. 1=full
-  double _strongColorBoost = 0.6; // influences brightness/contrast/saturation mapping
+  double _strongColorBoost = 1.0; // influences brightness/contrast/saturation mapping (default max)
 
   // In‑memory image library
   final List<_LibraryEntry> _library = [];
   int? _selectedLibraryIndex; // selected index in library view
   bool _showLibrary = false; // toggle to show library screen when connected
   bool _showDeviceList = false; // show device list while connected
+  Uint8List? _processedPngBytes; // cache processed PNG
+  DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _autoProcessTimer; // debounce auto processing
+  int _processGen = 0; // increments each processing request
+  bool _processing = false; // true while an image processing task is active
 
   // Common small button style
   final ButtonStyle _smallBtnStyle = ElevatedButton.styleFrom(
@@ -155,11 +160,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   Widget _connectedTopBar(){
     return Row(children:[
-      _smallBtn('Back', (){ setState(()=> _showDeviceList = true); }),
-      const SizedBox(width:6),
       _smallBtn('Image', _pickImage, icon: Icons.photo_library),
       const SizedBox(width:6),
       _smallBtn('My Library('+_library.length.toString()+')', _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); }, icon: Icons.collections),
+      const SizedBox(width:6),
+      _smallBtn('Back', (){ setState(()=> _showDeviceList = true); }),
       const Spacer(),
     ]);
   }
@@ -202,9 +207,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children:[
-  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); }),
-        const SizedBox(width:6),
-  _smallBtn('Process', _originalImage==null ? null : _processImage),
+  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); _scheduleAutoProcess(); }),
         const SizedBox(width:6),
   _smallBtn('Add', _originalImage==null ? null : _addCurrentToLibrary),
         const SizedBox(width:6),
@@ -221,11 +224,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Future<void> _addCurrentToLibrary() async {
     // Ensure we have processed bytes for current frame
     if(_originalImage==null){ return; }
-    if(_processedBytes==null){ await _processImage(); }
+  if(_processedBytes==null){ await _processImage(); }
     if(_processedBytes==null || _processedImage==null){ return; }
     // Encode PNG for thumbnail display
-    final png = Uint8List.fromList(img.encodePng(_processedImage!));
-    final entry = _LibraryEntry(image: _processedImage!.clone(), rawCodes: Uint8List.fromList(_processedBytes!), pngBytes: png, created: DateTime.now());
+  final png = _processedPngBytes ?? Uint8List.fromList(img.encodePng(_processedImage!));
+  final entry = _LibraryEntry(image: _processedImage!.clone(), rawCodes: Uint8List.fromList(_processedBytes!), pngBytes: png, created: DateTime.now(), wasVertical: _verticalFrame);
     setState((){ _library.insert(0, entry); });
     _updateStatus('Added to library (total ${_library.length})');
   }
@@ -263,7 +266,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     child: Stack(children:[
                       Positioned.fill(child: Padding(
                         padding: const EdgeInsets.all(3),
-                        child: Image.memory(e.pngBytes, fit: BoxFit.cover),
+                        child: e.wasVertical ? RotatedBox(quarterTurns: 3, child: Image.memory(e.pngBytes, fit: BoxFit.cover)) : Image.memory(e.pngBytes, fit: BoxFit.cover),
                       )),
                       Positioned(
                         right:4, bottom:4,
@@ -297,6 +300,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _processedImage = entry.image.clone();
       _processedBytes = Uint8List.fromList(entry.rawCodes); // raw codes length w*h
       _showLibrary = false; // return to main view for progress indicators
+      _processedPngBytes = entry.pngBytes;
+      _verticalFrame = entry.wasVertical;
     });
     _sendImageData();
   }
@@ -316,10 +321,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       child: Row(children:[
         if (_originalImage != null) Expanded(child: _previewPanel('Original', Image.file(_originalImage!, fit: BoxFit.contain))),
         if (_originalImage != null && _processedImage != null) const VerticalDivider(width:1),
-        if (_processedImage != null) Expanded(child: _previewPanel('Processed', Builder(builder: (_){
-          Widget w = Image.memory(Uint8List.fromList(img.encodePng(_processedImage!)), fit: BoxFit.contain);
-          if (_verticalFrame) { w = RotatedBox(quarterTurns: 3, child: w); }
-          return w; }))),
+        if (_processedImage != null && _processedPngBytes!=null) Expanded(child: _previewPanel('Processed', Builder(builder: (_){
+          Widget w = Image.memory(_processedPngBytes!, fit: BoxFit.contain);
+          if (_verticalFrame) { w = RotatedBox(quarterTurns: 3, child: w); } // rotate 270 (90+180) for correct portrait orientation
+          return w; })) ),
         // Compact sliders column
         const SizedBox(width:6),
         _compactSliders(),
@@ -329,7 +334,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   Widget _previewPanel(String title, Widget child){
     return Column(children:[
-      Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children:[
+        Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
+        if(title=='Processed' && _processing) ...[
+          const SizedBox(width:6), const SizedBox(width:12,height:12, child: CircularProgressIndicator(strokeWidth:2))
+        ],
+      ]),
       const SizedBox(height:4),
       Expanded(child: ClipRRect(
         borderRadius: BorderRadius.circular(6),
@@ -387,6 +397,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
+  void _scheduleAutoProcess(){
+    _autoProcessTimer?.cancel();
+    _autoProcessTimer = Timer(const Duration(milliseconds:250), (){ if(mounted && _originalImage!=null){ _processImage(); } });
+  }
+
   @override
   void dispose(){
     _disconnectDevice();
@@ -399,6 +414,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _viewInitialized = false; // recompute cover scale next build
       _viewRotation = 0.0;
     });
+  _scheduleAutoProcess();
   }
 
   // Request necessary permissions
@@ -427,9 +443,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   // Update the status message
   void _updateStatus(String message) {
-    setState(() {
-      _statusMessage = message;
-    });
+    final now = DateTime.now();
+    if(_isSending && now.difference(_lastStatusUpdate).inMilliseconds < 350 && !message.startsWith('Progress')){ return; }
+    _lastStatusUpdate = now;
+    if(mounted){ setState(()=> _statusMessage = message); }
   }
 
   // Pick an image from gallery
@@ -437,15 +454,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     
     if (pickedFile != null) {
-      setState(() {
-        _originalImage = File(pickedFile.path);
-        _processedImage = null;
-        _processedBytes = null;
-        _transferProgress = 0;
-        _uiOriginal = null;
-        _viewInitialized = false;
-      });
+  setState(() { _originalImage = File(pickedFile.path); _processedImage = null; _processedBytes = null; _processedPngBytes=null; _transferProgress = 0; _uiOriginal = null; _viewInitialized = false; });
       await _loadUiImage();
+  _scheduleAutoProcess();
       
       // Wait for user to adjust then press Process / Send
     }
@@ -459,41 +470,43 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     setState(() { _uiOriginal = frame.image; });
   }
 
-  // Process the selected image with current settings
+  // Process the selected image with current settings (generation-aware to avoid stale updates)
   Future<void> _processImage() async {
     if (_originalImage == null) return;
-    
+    final int myGen = ++_processGen;
+    if(mounted){ setState(()=> _processing = true); }
     _updateStatus("Processing image...");
-    
     try {
       // Load the original image
       final Uint8List imageBytes = await _originalImage!.readAsBytes();
       img.Image? originalImage = img.decodeImage(imageBytes);
-      
       if (originalImage == null) {
+        if(myGen == _processGen && mounted){ setState(()=> _processing = false); }
         _updateStatus("Failed to decode image");
         return;
       }
-      
-  // (Enhancements applied within quantization step to avoid double processing)
-      
-  // Build 800x480 from interactive frame (pan/zoom/rotate) regardless of fit mode toggle
-  img.Image resizedImage = _generateCroppedBaseImage(originalImage);
-      
+      // (Enhancements applied within quantization step to avoid double processing)
+      // Build 800x480 from interactive frame (pan/zoom/rotate)
+      img.Image resizedImage = _generateCroppedBaseImage(originalImage);
+      if(mounted){ setState(()=> _processedPngBytes = null); } // clear cache to force rebuild
       // Convert to 6-color palette with optional dithering and get raw codes
       Tuple2<img.Image, Uint8List> result = _quantizeTo6ColorAndCreateRawBytes(resizedImage);
       img.Image convertedImage = result.item1; // 800x480 (landscape)
       Uint8List processedBytes = result.item2;  // raw color codes length = 800*480
-
-  // (Do not rotate here; rotation will be applied right before packing when sending)
-      
-      setState(() {
-        _processedImage = convertedImage;
-        _processedBytes = processedBytes;
-      });
-      
-      _updateStatus("Image processed successfully (${processedBytes.length} bytes)");
+      // (Do not rotate here; rotation applied before packing when sending)
+      if(myGen == _processGen){
+        if(mounted){
+          setState(() {
+            _processedImage = convertedImage;
+            _processedBytes = processedBytes;
+            _processedPngBytes = Uint8List.fromList(img.encodePng(convertedImage));
+            _processing = false;
+          });
+        }
+        _updateStatus("Image processed successfully (${processedBytes.length} bytes)");
+      }
     } catch (e) {
+      if(myGen == _processGen && mounted){ setState(()=> _processing = false); }
       _updateStatus("Error processing image: $e");
     }
   }
@@ -1258,7 +1271,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _viewRotation = _startRotation + d.rotation;
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
             });
+            // Debounced auto process while user manipulates view
+            _scheduleAutoProcess();
           },
+          onScaleEnd: (d){ _scheduleAutoProcess(); },
           child: ClipRect(
             child: Stack(children:[
               // Image (clipped to workspace bounds now)
@@ -1301,14 +1317,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                         icon: const Icon(Icons.add, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); }); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); }); _scheduleAutoProcess(); },
                         tooltip: 'Zoom In',
                       ),
                       IconButton(
                         icon: const Icon(Icons.remove, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); }); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); }); _scheduleAutoProcess(); },
                         tooltip: 'Zoom Out',
                       ),
                       IconButton(
@@ -1360,5 +1376,6 @@ class _LibraryEntry {
   final Uint8List rawCodes; // raw color codes (one per pixel)
   final Uint8List pngBytes; // cached PNG for thumbnail
   final DateTime created;
-  const _LibraryEntry({required this.image, required this.rawCodes, required this.pngBytes, required this.created});
+  final bool wasVertical; // orientation when saved
+  const _LibraryEntry({required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasVertical});
 }
