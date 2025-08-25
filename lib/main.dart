@@ -67,7 +67,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   ];
   
   // Image processing options
-  bool _useDithering = true;
   double _brightness = 1.0;
   double _contrast = 1.0;
   double _saturation = 1.0;
@@ -119,15 +118,165 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   
   // For image processing
   final ImagePicker _picker = ImagePicker();
-
   @override
-  void initState() {
+  void initState(){
     super.initState();
     _checkPermissions();
   }
 
+  Widget _connectedTopBar(){
+    return Row(children:[
+      Expanded(
+        child: ElevatedButton.icon(
+          onPressed: _pickImage,
+          icon: const Icon(Icons.photo_library),
+          label: const Text('Image'),
+        ),
+      ),
+      const SizedBox(width:6),
+      ElevatedButton.icon(
+        onPressed: _disconnectDevice,
+        icon: const Icon(Icons.bluetooth_disabled),
+        label: Text('Disc ${_connectedDevice!.advName}'),
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+      ),
+    ]);
+  }
+
+  Widget _buildConnected(){
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _connectedTopBar(),
+        const SizedBox(height: 8),
+        if (_originalImage != null) _buildCropFrame() else Expanded(
+          child: Center(child: Text('Pick an image', style: Theme.of(context).textTheme.titleMedium)),
+        ),
+        const SizedBox(height: 6),
+        _buildActionBar(),
+        const SizedBox(height: 6),
+        _buildPreviewAndSliders(),
+        if (_isSending) ...[
+          const SizedBox(height: 4),
+          LinearProgressIndicator(value: _transferProgress/100),
+          Text('${_transferProgress}%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
+        ],
+        const SizedBox(height: 4),
+        _statusCard(),
+      ],
+    );
+  }
+
+  Widget _buildActionBar(){
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(children:[
+        ElevatedButton(
+          onPressed: _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); },
+          child: Text(_verticalFrame ? 'Portrait' : 'Landscape', style: const TextStyle(fontSize:12)),
+        ),
+        const SizedBox(width:6),
+        ElevatedButton(
+          onPressed: _originalImage==null ? null : _processImage,
+          child: const Text('Process', style: TextStyle(fontSize:12)),
+        ),
+        const SizedBox(width:6),
+        ElevatedButton(
+          onPressed: (_processedBytes==null || _isSending) ? null : _sendImageData,
+          child: Text(_isSending ? 'Sending' : 'Send', style: const TextStyle(fontSize:12)),
+        ),
+        const Spacer(),
+        IconButton(
+          tooltip: 'Reset View',
+            onPressed: _originalImage==null ? null : _resetView,
+            icon: const Icon(Icons.center_focus_strong, size:20)),
+      ]),
+    );
+  }
+
+  Widget _buildPreviewAndSliders(){
+    return SizedBox(
+      height: 190,
+      child: Row(children:[
+        if (_originalImage != null) Expanded(child: _previewPanel('Original', Image.file(_originalImage!, fit: BoxFit.contain))),
+        if (_originalImage != null && _processedImage != null) const VerticalDivider(width:1),
+        if (_processedImage != null) Expanded(child: _previewPanel('Processed', Builder(builder: (_){
+          Widget w = Image.memory(Uint8List.fromList(img.encodePng(_processedImage!)), fit: BoxFit.contain);
+          if (_verticalFrame) { w = RotatedBox(quarterTurns: 3, child: w); }
+          return w; }))),
+        // Compact sliders column
+        const SizedBox(width:6),
+        _compactSliders(),
+      ]),
+    );
+  }
+
+  Widget _previewPanel(String title, Widget child){
+    return Column(children:[
+      Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
+      const SizedBox(height:4),
+      Expanded(child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Container(color: Colors.white, child: child),
+      )),
+    ]);
+  }
+
+  Widget _compactSliders(){
+    return SizedBox(
+      width: 130,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Tune', style: TextStyle(fontSize:12,fontWeight: FontWeight.bold)),
+          const SizedBox(height:4),
+          _miniSlider(
+            icon: Icons.grain,
+            label: 'Dith',
+            value: _ditherStrength,
+            onChanged: (v)=> setState(()=> _ditherStrength=v),
+            onEnd: ()=> _processImage(),
+          ),
+          _miniSlider(
+            icon: Icons.auto_awesome,
+            label: 'Color',
+            value: _strongColorBoost,
+            onChanged: (v)=> setState(()=> _strongColorBoost=v),
+            onEnd: ()=> _processImage(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniSlider({required IconData icon, required String label, required double value, required ValueChanged<double> onChanged, required VoidCallback onEnd}){
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children:[Icon(icon, size:14,color: Colors.black54), const SizedBox(width:4), Text(label, style: const TextStyle(fontSize:11))]),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(trackHeight: 4, thumbShape: const RoundSliderThumbShape(enabledThumbRadius:7)),
+            child: Slider(
+              value: value,
+              min: 0,
+              max: 1,
+              divisions: 20,
+              onChanged: onChanged,
+              onChangeEnd: (_)=> onEnd(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
-  void dispose() {
+  void dispose(){
     _disconnectDevice();
     super.dispose();
   }
@@ -474,7 +623,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
     // Floyd–Steinberg weights
     const double w1 = 7 / 16, w2 = 3 / 16, w3 = 5 / 16, w4 = 1 / 16;
-    final bool useDither = _useDithering;
+  final bool useDither = _ditherStrength > 0.01;
 
     for (int y = 0; y < h; y++) {
       for (int x = 0; x < w; x++) {
@@ -512,9 +661,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         displayImage.setPixelRgb(x, y, nr, ng, nb);
 
         if (useDither) {
-          final double errR = r - nr;
-          final double errG = g - ng;
-          final double errB = b - nb;
+          final double strength = _ditherStrength.clamp(0.0,1.0);
+          final double errR = (r - nr) * strength;
+          final double errG = (g - ng) * strength;
+          final double errB = (b - nb) * strength;
           void addErr(int tx, int ty, double f) {
             if (tx < 0 || tx >= w || ty < 0 || ty >= h) return;
             final int tb = (ty * w + tx) * 3;
@@ -876,187 +1026,45 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('EPaper Image Sender'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_connectedDevice == null) ...[
-                Text('BLE Control', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  onPressed: _isScanning ? null : _scanForDevices,
-                  icon: const Icon(Icons.bluetooth_searching),
-                  label: Text(_isScanning ? 'Scanning...' : 'Scan for BLE Devices'),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('EPaper Image Sender'), backgroundColor: Theme.of(context).colorScheme.inversePrimary),
+    body: Padding(padding: const EdgeInsets.all(12), child: _connectedDevice==null ? _buildDisconnected() : _buildConnected()),
+  );
+
+  Widget _buildDisconnected(){
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ElevatedButton.icon(
+          onPressed: _isScanning ? null : _scanForDevices,
+          icon: const Icon(Icons.search),
+          label: Text(_isScanning ? 'Scanning...' : 'Scan'),
+        ),
+        const SizedBox(height:8),
+        Expanded(
+          child: _devicesList.isEmpty ? Center(
+            child: Text(_isScanning ? 'Scanning for devices...' : 'No devices found'),
+          ) : ListView.builder(
+            itemCount: _devicesList.length,
+            itemBuilder: (c,i){
+              final d = _devicesList[i];
+              return Card(
+                child: ListTile(
+                  dense: true,
+                  title: Text(d.advName.isEmpty? '(unknown)': d.advName),
+                  subtitle: Text(d.remoteId.str),
+                  trailing: ElevatedButton(
+                    onPressed: _isConnecting ? null : ()=> _connectToDevice(d),
+                    child: Text(_isConnecting? '...' : 'Connect'),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                if (_devicesList.isNotEmpty)
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: ListView.builder(
-                      itemCount: _devicesList.length,
-                      itemBuilder: (context, index) {
-                        final d = _devicesList[index];
-                        return ListTile(
-                          title: Text(d.advName.isEmpty ? '(Unnamed)' : d.advName),
-                          subtitle: Text(d.remoteId.str),
-                          trailing: const Icon(Icons.bluetooth),
-                          onTap: _isConnecting ? null : () => _connectToDevice(d),
-                        );
-                      },
-                    ),
-                  ),
-                if (_isConnecting) const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: LinearProgressIndicator(),
-                ),
-                const SizedBox(height: 16),
-                _statusCard(),
-              ] else ...[
-                // Connected: show image workflow
-                Row(children:[
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('Select Image Please'),
-                    ),
-                  ),
-                  const SizedBox(width:8),
-                  ElevatedButton.icon(
-                    onPressed: _disconnectDevice,
-                    icon: const Icon(Icons.bluetooth_disabled),
-                    label: Text('Disconnect ${_connectedDevice!.advName}'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                if (_originalImage != null) _buildCropFrame(),
-                const SizedBox(height: 12),
-                if (_originalImage != null) Row(children:[
-                  ElevatedButton(
-                    onPressed: (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized = false; }); },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _verticalFrame ? Colors.deepPurple : null,
-                      foregroundColor: _verticalFrame ? Colors.white : null,
-                    ),
-                    child: Text(_verticalFrame ? 'Vertical ✓' : 'Vertical'),
-                  ),
-                  const SizedBox(width:8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _processImage,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Process Image'),
-                    ),
-                  ),
-                  const SizedBox(width:8),
-                  if (_processedBytes != null)
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isSending ? null : _sendImageData,
-                        icon: const Icon(Icons.send),
-                        label: Text(_isSending ? 'Sending...' : 'Send To Device'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      ),
-                    ),
-                ]),
-                if (_originalImage != null) const SizedBox(height: 16),
-                if (_originalImage != null)
-                  Card(
-                    elevation: 1,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal:16, vertical:12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Image Tuning', style: Theme.of(context).textTheme.titleMedium),
-                          const SizedBox(height: 12),
-                          Row(children:[
-                            const Icon(Icons.grain, size:18, color: Colors.black54),
-                            const SizedBox(width:8),
-                            const Expanded(child: Text('Dithering', style: TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
-                            Text(_ditherStrength<=0.02 ? 'Off' : '${(_ditherStrength*100).round()}%', style: const TextStyle(fontSize:12,color: Colors.black54)),
-                          ]),
-                          Slider(
-                            value: _ditherStrength,
-                            min: 0.0,
-                            max: 1.0,
-                            divisions: 20,
-                            label: _ditherStrength<=0.02 ? 'Off' : (_ditherStrength).toStringAsFixed(2),
-                            onChanged: (v){ setState(()=> _ditherStrength = v); },
-                            onChangeEnd: (_){ _processImage(); },
-                          ),
-                          const SizedBox(height: 4),
-                          Row(children:[
-                            const Icon(Icons.auto_awesome, size:18, color: Colors.black54),
-                            const SizedBox(width:8),
-                            const Expanded(child: Text('Strong Colors', style: TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
-                            Text(_strongColorBoost<=0.01 ? 'Neutral' : '+${(_strongColorBoost*100).round()}%', style: const TextStyle(fontSize:12,color: Colors.black54)),
-                          ]),
-                          Slider(
-                            value: _strongColorBoost,
-                            min: 0.0,
-                            max: 1.0,
-                            divisions: 20,
-                            label: _strongColorBoost.toStringAsFixed(2),
-                            onChanged: (v){ setState(()=> _strongColorBoost = v); },
-                            onChangeEnd: (_){ _processImage(); },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                if (_originalImage != null || _processedImage != null)
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(children:[
-                      if (_originalImage != null) Expanded(child: Column(children:[const Text('Original'), Expanded(child: Image.file(_originalImage!, fit: BoxFit.contain))])),
-                      if (_originalImage != null && _processedImage != null) const VerticalDivider(),
-                      if (_processedImage != null) Expanded(child: Column(children:[
-                        const Text('Processed'),
-                        Expanded(
-                          child: Builder(builder: (context){
-                            Widget w = Image.memory(Uint8List.fromList(img.encodePng(_processedImage!)), fit: BoxFit.contain);
-                            if (_verticalFrame) {
-                              // Show portrait orientation to match user expectation (backend remains landscape)
-                              w = RotatedBox(quarterTurns: 3, child: w); // 270° CW == 90° CCW
-                            }
-                            return w;
-                          }),
-                        )
-                      ])),
-                    ]),
-                  ),
-                if (_isSending) ...[
-                  const SizedBox(height: 12),
-                  LinearProgressIndicator(value: _transferProgress/100),
-                  Text('${_transferProgress}% - ${_transferSpeed.toStringAsFixed(2)} KB/s'),
-                ],
-                const SizedBox(height: 12),
-                _statusCard(),
-              ]
-            ],
+              );
+            },
           ),
         ),
-      ),
+        const SizedBox(height:8),
+        _statusCard(),
+      ],
     );
   }
 
