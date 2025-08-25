@@ -107,6 +107,35 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   double _ditherStrength = 1.0; // 0=off .. 1=full
   double _strongColorBoost = 0.6; // influences brightness/contrast/saturation mapping
 
+  // In‑memory image library
+  final List<_LibraryEntry> _library = [];
+  int? _selectedLibraryIndex; // selected index in library view
+  bool _showLibrary = false; // toggle to show library screen when connected
+  bool _showDeviceList = false; // show device list while connected
+
+  // Common small button style
+  final ButtonStyle _smallBtnStyle = ElevatedButton.styleFrom(
+    minimumSize: const Size(60,34),
+    padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
+    textStyle: const TextStyle(fontSize:11, fontWeight: FontWeight.w500),
+  );
+
+  Widget _smallBtn(String label, VoidCallback? onPressed, {IconData? icon}){
+    if(icon!=null){
+      return ElevatedButton.icon(
+        style: _smallBtnStyle,
+        onPressed: onPressed,
+        icon: Icon(icon, size:14),
+        label: Text(label),
+      );
+    }
+    return ElevatedButton(
+      style: _smallBtnStyle,
+      onPressed: onPressed,
+      child: Text(label),
+    );
+  }
+
   void _updateEnhancementFromBoost(){
     // Map boost 0..1 to reasonable enhancement multipliers tuned for 6‑color ePaper
     // Keep values modest to avoid banding before quantization
@@ -126,24 +155,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   Widget _connectedTopBar(){
     return Row(children:[
-      Expanded(
-        child: ElevatedButton.icon(
-          onPressed: _pickImage,
-          icon: const Icon(Icons.photo_library),
-          label: const Text('Image'),
-        ),
-      ),
+      _smallBtn('Back', (){ setState(()=> _showDeviceList = true); }),
       const SizedBox(width:6),
-      ElevatedButton.icon(
-        onPressed: _disconnectDevice,
-        icon: const Icon(Icons.bluetooth_disabled),
-        label: Text('Disc ${_connectedDevice!.advName}'),
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-      ),
+      _smallBtn('Image', _pickImage, icon: Icons.photo_library),
+      const SizedBox(width:6),
+      _smallBtn('My Library('+_library.length.toString()+')', _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); }, icon: Icons.collections),
+      const Spacer(),
     ]);
   }
 
   Widget _buildConnected(){
+    if(_showLibrary){
+      return _buildLibraryView();
+    }
+    if(_showDeviceList){
+      return _buildDisconnected();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -175,20 +202,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children:[
-        ElevatedButton(
-          onPressed: _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); },
-          child: Text(_verticalFrame ? 'Portrait' : 'Landscape', style: const TextStyle(fontSize:12)),
-        ),
+  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); }),
         const SizedBox(width:6),
-        ElevatedButton(
-          onPressed: _originalImage==null ? null : _processImage,
-          child: const Text('Process', style: TextStyle(fontSize:12)),
-        ),
+  _smallBtn('Process', _originalImage==null ? null : _processImage),
         const SizedBox(width:6),
-        ElevatedButton(
-          onPressed: (_processedBytes==null || _isSending) ? null : _sendImageData,
-          child: Text(_isSending ? 'Sending' : 'Send', style: const TextStyle(fontSize:12)),
-        ),
+  _smallBtn('Add', _originalImage==null ? null : _addCurrentToLibrary),
+        const SizedBox(width:6),
+  _smallBtn(_isSending ? 'Sending' : 'Send', (_processedBytes==null || _isSending) ? null : _sendImageData),
         const Spacer(),
         IconButton(
           tooltip: 'Reset View',
@@ -196,6 +216,98 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             icon: const Icon(Icons.center_focus_strong, size:20)),
       ]),
     );
+  }
+
+  Future<void> _addCurrentToLibrary() async {
+    // Ensure we have processed bytes for current frame
+    if(_originalImage==null){ return; }
+    if(_processedBytes==null){ await _processImage(); }
+    if(_processedBytes==null || _processedImage==null){ return; }
+    // Encode PNG for thumbnail display
+    final png = Uint8List.fromList(img.encodePng(_processedImage!));
+    final entry = _LibraryEntry(image: _processedImage!.clone(), rawCodes: Uint8List.fromList(_processedBytes!), pngBytes: png, created: DateTime.now());
+    setState((){ _library.insert(0, entry); });
+    _updateStatus('Added to library (total ${_library.length})');
+  }
+
+  Widget _buildLibraryView(){
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children:[
+          _smallBtn('Back', ()=> setState(()=> _showLibrary=false)),
+          const SizedBox(width:6),
+          _smallBtn(_isSending? 'Sending' : 'Send', (_selectedLibraryIndex==null || _isSending) ? null : _sendSelectedLibraryItem),
+          const SizedBox(width:6),
+            _smallBtn('Delete', (_selectedLibraryIndex==null || _isSending) ? null : _deleteSelectedLibraryItem),
+          const SizedBox(width:8),
+          Expanded(child: Text('Library (${_library.length})', style: const TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height:8),
+        Expanded(
+          child: _library.isEmpty ? Center(child: Text('No images saved', style: Theme.of(context).textTheme.titleMedium))
+          : GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
+              itemCount: _library.length,
+              itemBuilder: (c,i){
+                final e = _library[i];
+                final selected = i==_selectedLibraryIndex;
+                return GestureDetector(
+                  onTap: ()=> setState(()=> _selectedLibraryIndex = i),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: selected? Theme.of(context).colorScheme.primary : Colors.grey.shade400, width: selected? 3:1),
+                      borderRadius: BorderRadius.circular(6),
+                      color: Colors.white,
+                    ),
+                    child: Stack(children:[
+                      Positioned.fill(child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Image.memory(e.pngBytes, fit: BoxFit.cover),
+                      )),
+                      Positioned(
+                        right:4, bottom:4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
+                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                          child: Text('${e.created.hour.toString().padLeft(2,'0')}:${e.created.minute.toString().padLeft(2,'0')}', style: const TextStyle(color: Colors.white,fontSize:10)),
+                        ),
+                      ),
+                    ]),
+                  ),
+                );
+              },
+            ),
+        ),
+        if(_selectedLibraryIndex!=null) ...[
+          const SizedBox(height:6),
+          _statusCard(),
+        ] else ...[
+          const SizedBox(height:6),
+          _statusCard(),
+        ]
+      ],
+    );
+  }
+
+  void _sendSelectedLibraryItem(){
+    final idx = _selectedLibraryIndex; if(idx==null) return;
+    final entry = _library[idx];
+    setState((){
+      _processedImage = entry.image.clone();
+      _processedBytes = Uint8List.fromList(entry.rawCodes); // raw codes length w*h
+      _showLibrary = false; // return to main view for progress indicators
+    });
+    _sendImageData();
+  }
+
+  void _deleteSelectedLibraryItem(){
+    final idx = _selectedLibraryIndex; if(idx==null) return;
+    setState((){
+      _library.removeAt(idx);
+      _selectedLibraryIndex = null;
+    });
+    _updateStatus('Deleted. ${_library.length} remaining');
   }
 
   Widget _buildPreviewAndSliders(){
@@ -827,6 +939,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _connectedDevice = device;
         _rxCharacteristic = rxChar;
         _isConnecting = false;
+  _showDeviceList = false;
       });
       
       _updateStatus("Connected to ${device.advName}");
@@ -847,6 +960,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       setState(() {
         _connectedDevice = null;
         _rxCharacteristic = null;
+  _showDeviceList = true;
       });
       _updateStatus("Disconnected");
     } catch (e) {
@@ -1028,7 +1142,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('EPaper Image Sender'), backgroundColor: Theme.of(context).colorScheme.inversePrimary),
-    body: Padding(padding: const EdgeInsets.all(12), child: _connectedDevice==null ? _buildDisconnected() : _buildConnected()),
+    body: Padding(padding: const EdgeInsets.all(12), child: (_connectedDevice==null || _showDeviceList) ? _buildDisconnected() : _buildConnected()),
   );
 
   Widget _buildDisconnected(){
@@ -1040,6 +1154,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           icon: const Icon(Icons.search),
           label: Text(_isScanning ? 'Scanning...' : 'Scan'),
         ),
+        if(_connectedDevice!=null) ...[
+          const SizedBox(height:6),
+          ElevatedButton.icon(
+            onPressed: _disconnectDevice,
+            icon: const Icon(Icons.bluetooth_disabled),
+            label: const Text('Disconnect'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+          ),
+        ],
         const SizedBox(height:8),
         Expanded(
           child: _devicesList.isEmpty ? Center(
@@ -1230,4 +1353,12 @@ class ColorMap {
   final Color rgbColor;
   
   const ColorMap(this.code, this.rgbColor);
+}
+
+class _LibraryEntry {
+  final img.Image image; // 800x480 processed 6-color image
+  final Uint8List rawCodes; // raw color codes (one per pixel)
+  final Uint8List pngBytes; // cached PNG for thumbnail
+  final DateTime created;
+  const _LibraryEntry({required this.image, required this.rawCodes, required this.pngBytes, required this.created});
 }
