@@ -104,6 +104,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   double _frameHeight = 0;
   Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
   bool _verticalFrame = false; // portrait orientation toggle
+  // Slider-driven tuning
+  double _ditherStrength = 1.0; // 0=off .. 1=full
+  double _strongColorBoost = 0.6; // influences brightness/contrast/saturation mapping
+
+  void _updateEnhancementFromBoost(){
+    // Map boost 0..1 to reasonable enhancement multipliers tuned for 6‑color ePaper
+    // Keep values modest to avoid banding before quantization
+    final b = _strongColorBoost;
+    _brightness  = 1.0 + b * 0.10; // up to +10%
+    _contrast    = 1.0 + b * 0.30; // up to +30%
+    _saturation  = 1.0 + b * 0.40; // up to +40%
+  }
   
   // For image processing
   final ImagePicker _picker = ImagePicker();
@@ -434,6 +446,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   // Quantize to 6-color palette with manual nearest-color + optional Floyd–Steinberg dithering
   Tuple2<img.Image, Uint8List> _quantizeTo6ColorAndCreateRawBytes(img.Image image) {
+  _updateEnhancementFromBoost();
     // Apply enhancements once (Python enhances inside its quantize function)
     final img.Image enhanced = _enhanceImage(image.clone());
     final int w = enhanced.width;
@@ -959,6 +972,53 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                       ),
                     ),
                 ]),
+                if (_originalImage != null) const SizedBox(height: 16),
+                if (_originalImage != null)
+                  Card(
+                    elevation: 1,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal:16, vertical:12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Image Tuning', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 12),
+                          Row(children:[
+                            const Icon(Icons.grain, size:18, color: Colors.black54),
+                            const SizedBox(width:8),
+                            const Expanded(child: Text('Dithering', style: TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
+                            Text(_ditherStrength<=0.02 ? 'Off' : '${(_ditherStrength*100).round()}%', style: const TextStyle(fontSize:12,color: Colors.black54)),
+                          ]),
+                          Slider(
+                            value: _ditherStrength,
+                            min: 0.0,
+                            max: 1.0,
+                            divisions: 20,
+                            label: _ditherStrength<=0.02 ? 'Off' : (_ditherStrength).toStringAsFixed(2),
+                            onChanged: (v){ setState(()=> _ditherStrength = v); },
+                            onChangeEnd: (_){ _processImage(); },
+                          ),
+                          const SizedBox(height: 4),
+                          Row(children:[
+                            const Icon(Icons.auto_awesome, size:18, color: Colors.black54),
+                            const SizedBox(width:8),
+                            const Expanded(child: Text('Strong Colors', style: TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
+                            Text(_strongColorBoost<=0.01 ? 'Neutral' : '+${(_strongColorBoost*100).round()}%', style: const TextStyle(fontSize:12,color: Colors.black54)),
+                          ]),
+                          Slider(
+                            value: _strongColorBoost,
+                            min: 0.0,
+                            max: 1.0,
+                            divisions: 20,
+                            label: _strongColorBoost.toStringAsFixed(2),
+                            onChanged: (v){ setState(()=> _strongColorBoost = v); },
+                            onChangeEnd: (_){ _processImage(); },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 if (_originalImage != null || _processedImage != null)
                   Container(
