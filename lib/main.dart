@@ -269,6 +269,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                         child: e.wasVertical ? RotatedBox(quarterTurns: 3, child: Image.memory(e.pngBytes, fit: BoxFit.cover)) : Image.memory(e.pngBytes, fit: BoxFit.cover),
                       )),
                       Positioned(
+                        left:4, top:4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
+                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                          child: Text(e.wasVertical? 'Portrait' : 'Landscape', style: const TextStyle(color: Colors.white, fontSize:9, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                      Positioned(
                         right:4, bottom:4,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
