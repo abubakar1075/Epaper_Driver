@@ -1,8 +1,25 @@
-import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
-import 'dart:ui' as ui;
-import 'dart:math' as math;
+// =============================================================
+// EPaper Image Sender (Single-File Learning Version)
+// -------------------------------------------------------------
+// Features:
+// 1. Scan + auto-connect to BLE device (name starts with "EPD").
+// 2. Pick an image from gallery.
+// 3. Pan / Zoom / Rotate to frame the exact display region (800x480).
+// 4. Convert to 6-color hardware palette with optional dithering.
+// 5. Manual "Show In Frame" processing (no auto background runs).
+// 6. Save processed images to an in-memory library & resend later.
+// 7. Send image over BLE in chunks with progress + speed.
+// -------------------------------------------------------------
+// Everything is kept here (instead of splitting into many files)
+// so a beginner can scroll and read sequentially.
+// Look for SECTION headers to navigate.
+// =============================================================
+
+import 'dart:async';          // async helpers
+import 'dart:io';             // File access for picked images
+import 'dart:typed_data';     // Uint8List for raw buffers
+import 'dart:ui' as ui;       // Image decoding for CustomPaint
+import 'dart:math' as math;   // Trig for rotation + min/max
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -40,7 +57,9 @@ class EPaperImageSender extends StatefulWidget {
 }
 
 class _EPaperImageSenderState extends State<EPaperImageSender> {
-  // Constants
+  // =============================================================
+  // CONSTANTS / STATIC CONFIG
+  // =============================================================
   static const int IMAGE_WIDTH = 800;
   static const int IMAGE_HEIGHT = 480;
   static const int BLE_CHUNK_SIZE = 230; // Reduced from 512 to stay under BLE MTU limit
@@ -56,7 +75,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   static const int ACK_COMPLETE = 0x03;
   static const int ACK_ERROR = 0xFF;
 
-  // Hardware palette for 6-color e-paper display - exact RGB values from Python
+  // Hardware palette for 6-color e-paper display - exact RGB values from Python script
   static const List<ColorMap> hwPalette = [
     ColorMap(0x00, Color.fromRGBO(0, 0, 0, 1)),       // Black
     ColorMap(0xFF, Color.fromRGBO(255, 255, 255, 1)), // White
@@ -66,12 +85,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     ColorMap(0x1C, Color.fromRGBO(0, 150, 0, 1)),     // Green (0, 150, 0)
   ];
   
-  // Image processing options
+  // Image enhancement (values are derived from the single "Color" slider)
   double _brightness = 1.0;
   double _contrast = 1.0;
   double _saturation = 1.0;
 
-  // UI State
+  // =============================================================
+  // HIGH-LEVEL STATE (image, BLE, processing, library, UI modes)
+  // =============================================================
   File? _originalImage;
   ui.Image? _uiOriginal; // decoded for painting
   img.Image? _processedImage;
@@ -87,7 +108,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   double _transferSpeed = 0;
   bool _autoConnectTried = false; // ensure single auto-connect attempt per scan
 
-  // Crop/transform state for interactive framing
+  // =============================================================
+  // INTERACTIVE FRAMING (user gestures manipulate these)
+  // =============================================================
   bool _viewInitialized = false;
   double _viewScale = 1.0; // applied to image
   double _viewRotation = 0.0; // radians
@@ -108,7 +131,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   double _ditherStrength = 1.0; // 0=off .. 1=full
   double _strongColorBoost = 1.0; // influences brightness/contrast/saturation mapping (default max)
 
-  // In‑memory image library
+  // =============================================================
+  // IN-MEMORY LIBRARY (session only)
+  // =============================================================
   final List<_LibraryEntry> _library = [];
   int? _selectedLibraryIndex; // selected index in library view
   bool _showLibrary = false; // toggle to show library screen when connected
@@ -119,7 +144,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   int _processGen = 0; // increments each processing request
   bool _processing = false; // true while an image processing task is active
 
-  // Common small button style
+  // =============================================================
+  // UI HELPERS
+  // =============================================================
   final ButtonStyle _smallBtnStyle = ElevatedButton.styleFrom(
     minimumSize: const Size(60,34),
     padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
@@ -142,9 +169,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
+  // Convert single "Color" slider (0..1) to brightness / contrast / saturation multipliers.
   void _updateEnhancementFromBoost(){
-    // Map boost 0..1 to reasonable enhancement multipliers tuned for 6‑color ePaper
-    // Keep values modest to avoid banding before quantization
+    // Keep ranges modest: extreme pre-enhancement causes harsh palette banding.
     final b = _strongColorBoost;
     _brightness  = 1.0 + b * 0.10; // up to +10%
     _contrast    = 1.0 + b * 0.30; // up to +30%
@@ -159,6 +186,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _checkPermissions();
   }
 
+  // Top bar visible while connected (image, library, navigation)
   Widget _connectedTopBar(){
     return Row(children:[
       _smallBtn('Image', _pickImage, icon: Icons.photo_library),
@@ -202,6 +230,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
+  // Main action bar (orientation toggle, add to library, process, send, reset)
   Widget _buildActionBar(){
     return Container(
       padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
@@ -214,7 +243,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
         const SizedBox(width:6),
-  _smallBtn('Show', (_originalImage==null || _processing) ? null : _processImage),
+  _smallBtn('Show In Frame', (_originalImage==null || _processing) ? null : _processImage),
         const SizedBox(width:6),
   _smallBtn(_isSending ? 'Sending' : 'Send', (_processedBytes==null || _isSending) ? null : _sendImageData),
   const Spacer(),
@@ -226,18 +255,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
+  // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
   Future<void> _addCurrentToLibrary() async {
-    // Ensure we have processed bytes for current frame
+    // Process on-demand if not already processed
     if(_originalImage==null){ return; }
   if(_processedBytes==null){ await _processImage(); }
     if(_processedBytes==null || _processedImage==null){ return; }
-    // Encode PNG for thumbnail display
+    // Reuse cached PNG when available
   final png = _processedPngBytes ?? Uint8List.fromList(img.encodePng(_processedImage!));
   final entry = _LibraryEntry(image: _processedImage!.clone(), rawCodes: Uint8List.fromList(_processedBytes!), pngBytes: png, created: DateTime.now(), wasVertical: _verticalFrame);
     setState((){ _library.insert(0, entry); });
     _updateStatus('Added to library (total ${_library.length})');
   }
 
+  // Grid of saved processed images (tap to select, then Send / Delete)
   Widget _buildLibraryView(){
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -328,6 +359,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _updateStatus('Deleted. ${_library.length} remaining');
   }
 
+  // Dual preview (Original vs In Frame) + compact sliders column
   Widget _buildPreviewAndSliders(){
     return SizedBox(
       height: 190,
@@ -345,6 +377,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
+  // Reusable titled preview container (adds spinner for processing state)
   Widget _previewPanel(String title, Widget child){
     return Column(children:[
       Row(mainAxisAlignment: MainAxisAlignment.center, children:[
@@ -361,6 +394,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     ]);
   }
 
+  // Right-side vertical sliders: Dithering strength & Color enhancement
   Widget _compactSliders(){
     return SizedBox(
       width: 130,
@@ -417,6 +451,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     super.dispose();
   }
 
+  // Reset pan/zoom/rotation to initial cover fit
   void _resetView(){
     if(_uiOriginal==null){ return; }
     setState((){
@@ -470,6 +505,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   // Pick an image from gallery
+  // Pick image from gallery and clear prior processed state
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     
@@ -491,6 +527,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   // Process the selected image with current settings (generation-aware to avoid stale updates)
+  // =============================================================
+  // IMAGE PROCESSING PIPELINE (manual trigger) steps:
+  // 1. Decode original file
+  // 2. Sample into framed 800x480 (respect orientation & transforms)
+  // 3. Apply enhancements (brightness/contrast/sat from Color slider)
+  // 4. Quantize + optional Floyd–Steinberg dithering to 6-color palette
+  // 5. Cache processed image + raw palette codes + PNG preview
+  // Generation guard prevents stale results if user clicks multiple times.
+  // =============================================================
   Future<void> _processImage() async {
     if (_originalImage == null) return;
     final int myGen = ++_processGen;
@@ -505,11 +550,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _updateStatus("Failed to decode image");
         return;
       }
-      // (Enhancements applied within quantization step to avoid double processing)
-      // Build 800x480 from interactive frame (pan/zoom/rotate)
+  // Build 800x480 from interactive frame (pan/zoom/rotate)
       img.Image resizedImage = _generateCroppedBaseImage(originalImage);
       if(mounted){ setState(()=> _processedPngBytes = null); } // clear cache to force rebuild
-      // Convert to 6-color palette with optional dithering and get raw codes
+  // Quantize + create raw codes (one per pixel, to be packed later)
       Tuple2<img.Image, Uint8List> result = _quantizeTo6ColorAndCreateRawBytes(resizedImage);
       img.Image convertedImage = result.item1; // 800x480 (landscape)
       Uint8List processedBytes = result.item2;  // raw color codes length = 800*480
@@ -531,6 +575,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }
   }
 
+  // Sample original image into working 800x480 (or rotated) using inverse transform (bilinear sampling)
   img.Image _generateCroppedBaseImage(img.Image source) {
     if (_uiOriginal == null || _frameWidth == 0 || _frameHeight == 0) {
       return _fitImage(source);
@@ -579,6 +624,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   // Apply image enhancements (brightness, contrast, saturation)
+  // Apply brightness / contrast / saturation boosts + simple color nudges toward hardware primaries.
   img.Image _enhanceImage(img.Image original) {
     img.Image result = original.clone();
     
@@ -739,6 +785,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   // Quantize to 6-color palette with manual nearest-color + optional Floyd–Steinberg dithering
+  // Map each pixel to nearest of 6 hardware colors with optional Floyd–Steinberg dithering.
+  // Returns display image (already palette colors) + raw per-pixel 8-bit code list.
   Tuple2<img.Image, Uint8List> _quantizeTo6ColorAndCreateRawBytes(img.Image image) {
   _updateEnhancementFromBoost();
     // Apply enhancements once (Python enhances inside its quantize function)
@@ -830,6 +878,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   // Create raw bytes for BLE transfer - map pixels to palette codes
   // Pack pixels 2-per-byte to reduce BLE transfer size
+  // Convert raw 1-pixel-per-byte color codes into packed 2-pixels-per-byte (4 bits each) for BLE efficiency.
   Uint8List _packPixels(Uint8List rawData) {
     // Map from 8-bit color codes to 4-bit codes
     final Map<int, int> colorMap = {
