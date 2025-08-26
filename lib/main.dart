@@ -18,6 +18,7 @@
 import 'dart:async';          // async helpers
 import 'dart:io';             // File access for picked images
 import 'dart:typed_data';     // Uint8List for raw buffers
+import 'dart:convert';        // json encode/decode for library index
 import 'dart:ui' as ui;       // Image decoding for CustomPaint
 import 'dart:math' as math;   // Trig for rotation + min/max
 import 'package:flutter/material.dart';
@@ -27,6 +28,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tuple/tuple.dart';
+import 'package:path_provider/path_provider.dart'; // persistent storage dir
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -139,6 +141,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _showLibrary = false; // toggle to show library screen when connected
   bool _showDeviceList = false; // show device list while connected
   Uint8List? _processedPngBytes; // cache processed PNG
+  Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
   // Auto process timer removed (manual Show workflow)
   int _processGen = 0; // increments each processing request
@@ -184,14 +187,32 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   void initState(){
     super.initState();
     _checkPermissions();
+    _initPersistentLibrary();
   }
+
+  // Wrapper for triggering rebuild from extension helpers
+  void _refresh(){ if(mounted){ setState(()=>{}); } }
 
   // Top bar visible while connected (image, library, navigation)
   Widget _connectedTopBar(){
     return Row(children:[
       _smallBtn('Image', _pickImage, icon: Icons.photo_library),
       const SizedBox(width:6),
-      _smallBtn('My Library('+_library.length.toString()+')', _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); }, icon: Icons.collections),
+      SizedBox(
+        height: 34,
+        child: ElevatedButton.icon(
+          style: _smallBtnStyle.copyWith(
+            backgroundColor: WidgetStateProperty.resolveWith((states){
+              if(_library.isEmpty || states.contains(WidgetState.disabled)) return Colors.grey.shade400;
+              return Colors.green.shade600;
+            }),
+            foregroundColor: WidgetStateProperty.all(Colors.white),
+          ),
+          onPressed: _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); },
+          icon: const Icon(Icons.collections, size:14),
+          label: Text('My Library('+_library.length.toString()+')'),
+        ),
+      ),
       const SizedBox(width:6),
       _smallBtn('Back', (){ setState(()=> _showDeviceList = true); }),
   const SizedBox(width:6),
@@ -263,9 +284,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     if(_processedBytes==null || _processedImage==null){ return; }
     // Reuse cached PNG when available
   final png = _processedPngBytes ?? Uint8List.fromList(img.encodePng(_processedImage!));
-  final entry = _LibraryEntry(image: _processedImage!.clone(), rawCodes: Uint8List.fromList(_processedBytes!), pngBytes: png, created: DateTime.now(), wasVertical: _verticalFrame);
+  final entry = _LibraryEntry(
+    id: DateTime.now().millisecondsSinceEpoch.toString(),
+    image: _processedImage!.clone(),
+    rawCodes: Uint8List.fromList(_processedBytes!),
+    pngBytes: png,
+    created: DateTime.now(),
+    wasVertical: _verticalFrame,
+    isDefaultAsset: false,
+  title: 'Saved',
+  );
     setState((){ _library.insert(0, entry); });
     _updateStatus('Added to library (total ${_library.length})');
+    _persistLibraryEntry(entry);
   }
 
   // Grid of saved processed images (tap to select, then Send / Delete)
@@ -302,7 +333,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     child: Stack(children:[
                       Positioned.fill(child: Padding(
                         padding: const EdgeInsets.all(3),
-                        child: e.wasVertical ? RotatedBox(quarterTurns: 3, child: Image.memory(e.pngBytes, fit: BoxFit.cover)) : Image.memory(e.pngBytes, fit: BoxFit.cover),
+                        child: Image.memory(e.pngBytes, fit: BoxFit.cover),
                       )),
                       Positioned(
                         left:4, top:4,
@@ -352,11 +383,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   void _deleteSelectedLibraryItem(){
     final idx = _selectedLibraryIndex; if(idx==null) return;
+    final entry = _library[idx];
     setState((){
       _library.removeAt(idx);
       _selectedLibraryIndex = null;
     });
     _updateStatus('Deleted. ${_library.length} remaining');
+    _deleteLibraryEntryFiles(entry);
   }
 
   // Dual preview (Original vs In Frame) + compact sliders column
@@ -368,7 +401,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if (_originalImage != null && _processedImage != null) const VerticalDivider(width:1),
   if (_processedImage != null && _processedPngBytes!=null) Expanded(child: _previewPanel('In Frame', Builder(builder: (_){
           Widget w = Image.memory(_processedPngBytes!, fit: BoxFit.contain);
-          if (_verticalFrame) { w = RotatedBox(quarterTurns: 3, child: w); } // rotate 270 (90+180) for correct portrait orientation
+          // For portrait we no longer rotate the preview; device rotation handled on send.
           return w; })) ),
         // Compact sliders column
         const SizedBox(width:6),
@@ -1469,10 +1502,215 @@ class ColorMap {
 }
 
 class _LibraryEntry {
+  final String id; // unique id or asset id
   final img.Image image; // 800x480 processed 6-color image
   final Uint8List rawCodes; // raw color codes (one per pixel)
   final Uint8List pngBytes; // cached PNG for thumbnail
   final DateTime created;
   final bool wasVertical; // orientation when saved
-  const _LibraryEntry({required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasVertical});
+  final bool isDefaultAsset; // true if from bundled assets
+  final String title; // display name
+  const _LibraryEntry({required this.id, required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasVertical, required this.isDefaultAsset, required this.title});
+}
+
+// Default asset list (optional explicit filenames). If empty or names differ, we fall back to scanning AssetManifest.
+const List<String> kDefaultAssetImages = [
+  'FramePics/pic1.png',
+  'FramePics/pic2.png',
+  'FramePics/pic3.png',
+  'FramePics/pic4.png',
+];
+
+extension _LibraryPersistence on _EPaperImageSenderState {
+  Future<void> _initPersistentLibrary() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      _libraryDir = Directory('${dir.path}/library');
+      if(!await _libraryDir!.exists()){
+        await _libraryDir!.create(recursive: true);
+      }
+      final indexFile = File('${_libraryDir!.path}/index.json');
+      final firstLaunch = !await indexFile.exists();
+      if(!firstLaunch){
+        await _loadLibraryIndex(indexFile);
+        // Migration: ensure bundled assets exist even if library already created before feature added.
+        await _ensureDefaultAssetsPresent();
+      }
+      if(firstLaunch){
+        final defaults = await _resolveDefaultAssetList();
+        for(final assetPath in defaults){
+          try{
+            final data = await rootBundle.load(assetPath);
+            final bytes = data.buffer.asUint8List();
+            final decoded = img.decodeImage(bytes);
+            if(decoded==null) continue;
+            final fitted = _fitImage(decoded);
+            final result = _quantizeTo6ColorAndCreateRawBytes(fitted);
+            final display = result.item1;
+            final raw = result.item2;
+            final png = Uint8List.fromList(img.encodePng(display));
+            final baseName = assetPath.split('/').last.toLowerCase();
+            final entry = _LibraryEntry(
+              id: 'asset_${assetPath.split('/').last}',
+              image: display.clone(),
+              rawCodes: raw,
+              pngBytes: png,
+              created: DateTime.now(),
+              wasVertical: _isPortraitAsset(baseName),
+              isDefaultAsset: true,
+              title: _deriveAssetTitle(baseName),
+            );
+            _library.add(entry);
+            await _persistLibraryEntry(entry, writeIndex:false);
+          }catch(_){ }
+        }
+        await _writeLibraryIndex();
+      }
+  _refresh();
+    } catch (e) {
+      _updateStatus('Library init error: $e');
+    }
+  }
+
+  Future<void> _loadLibraryIndex(File indexFile) async {
+    try{
+      final text = await indexFile.readAsString();
+      final data = jsonDecode(text);
+      if(data is! List) return;
+      for(final item in data){
+        if(item is! Map) continue;
+        final id = item['id'] as String?; if(id==null) continue;
+        final wasVertical = item['wasVertical'] == true;
+        final createdMs = item['created'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+        final rawFile = File('${_libraryDir!.path}/$id.raw');
+        final pngFile = File('${_libraryDir!.path}/$id.png');
+        if(await rawFile.exists() && await pngFile.exists()){
+          try{
+            final rawCodes = await rawFile.readAsBytes();
+            final pngBytes = await pngFile.readAsBytes();
+            final decoded = img.decodeImage(pngBytes);
+            if(decoded==null) continue;
+            final isAsset = id.startsWith('asset_');
+            final baseName = isAsset ? id.replaceFirst('asset_','').toLowerCase() : id.toLowerCase();
+            final title = (item['title'] as String?) ?? (isAsset ? _deriveAssetTitle(baseName) : 'Saved');
+            final correctedPortrait = isAsset ? _isPortraitAsset(baseName) : wasVertical;
+            _library.add(_LibraryEntry(
+              id: id,
+              image: decoded.clone(),
+              rawCodes: Uint8List.fromList(rawCodes),
+              pngBytes: pngBytes,
+              created: DateTime.fromMillisecondsSinceEpoch(createdMs),
+              wasVertical: correctedPortrait,
+              isDefaultAsset: isAsset,
+              title: title,
+            ));
+          }catch(_){ }
+        }
+      }
+    }catch(e){ _updateStatus('Load library error: $e'); }
+  }
+
+  Future<void> _persistLibraryEntry(_LibraryEntry entry, {bool writeIndex = true}) async {
+    try{
+      if(_libraryDir==null) return;
+      final rawFile = File('${_libraryDir!.path}/${entry.id}.raw');
+      final pngFile = File('${_libraryDir!.path}/${entry.id}.png');
+      await rawFile.writeAsBytes(entry.rawCodes, flush: true);
+      await pngFile.writeAsBytes(entry.pngBytes, flush: true);
+      if(writeIndex){ await _writeLibraryIndex(); }
+    }catch(e){ _updateStatus('Persist error: $e'); }
+  }
+
+  Future<void> _writeLibraryIndex() async {
+    try{
+      if(_libraryDir==null) return;
+      final indexFile = File('${_libraryDir!.path}/index.json');
+      final list = _library.map((e)=>{
+        'id': e.id,
+        'created': e.created.millisecondsSinceEpoch,
+        'wasVertical': e.wasVertical,
+      }).toList();
+      await indexFile.writeAsString(jsonEncode(list), flush: true);
+    }catch(e){ _updateStatus('Index write error: $e'); }
+  }
+
+  Future<void> _deleteLibraryEntryFiles(_LibraryEntry entry) async {
+    try{
+      if(_libraryDir==null) return;
+      final rawFile = File('${_libraryDir!.path}/${entry.id}.raw');
+      final pngFile = File('${_libraryDir!.path}/${entry.id}.png');
+      if(await rawFile.exists()) { await rawFile.delete(); }
+      if(await pngFile.exists()) { await pngFile.delete(); }
+      await _writeLibraryIndex();
+    }catch(e){ _updateStatus('Delete file error: $e'); }
+  }
+
+  // Discover asset images under FramePics/ by reading the AssetManifest (handles arbitrary filenames)
+  Future<List<String>> _discoverAssetManifestImages() async {
+    try{
+      final manifestJson = await rootBundle.loadString('AssetManifest.json');
+      final Map<String, dynamic> manifestMap = jsonDecode(manifestJson);
+      final list = manifestMap.keys.where((k)=> k.startsWith('FramePics/') && (k.endsWith('.png')||k.endsWith('.jpg')||k.endsWith('.jpeg'))).toList();
+      list.sort();
+      return list;
+    }catch(_){ return const []; }
+  }
+
+  // Merge explicit list + discovered list (avoid duplicates)
+  Future<List<String>> _resolveDefaultAssetList() async {
+    final discovered = await _discoverAssetManifestImages();
+    final set = <String>{};
+    for(final p in kDefaultAssetImages){ set.add(p); }
+    for(final p in discovered){ set.add(p); }
+    return set.where((p)=> p.startsWith('FramePics/')).toList();
+  }
+
+  // Add any missing default assets not already in library (id uses filename)
+  Future<void> _ensureDefaultAssetsPresent() async {
+    final defaults = await _resolveDefaultAssetList();
+    final existingIds = _library.map((e)=> e.id).toSet();
+    bool added = false;
+    for(final assetPath in defaults){
+      final assetId = 'asset_${assetPath.split('/').last}';
+      if(existingIds.contains(assetId)) continue;
+      try{
+        final data = await rootBundle.load(assetPath);
+        final bytes = data.buffer.asUint8List();
+        final decoded = img.decodeImage(bytes);
+        if(decoded==null) continue;
+        final fitted = _fitImage(decoded);
+        final result = _quantizeTo6ColorAndCreateRawBytes(fitted);
+        final display = result.item1;
+        final raw = result.item2;
+        final png = Uint8List.fromList(img.encodePng(display));
+        final baseName = assetPath.split('/').last.toLowerCase();
+        final entry = _LibraryEntry(
+          id: assetId,
+          image: display.clone(),
+          rawCodes: raw,
+          pngBytes: png,
+          created: DateTime.now(),
+          wasVertical: _isPortraitAsset(baseName),
+          isDefaultAsset: true,
+          title: _deriveAssetTitle(baseName),
+        );
+        _library.add(entry);
+        await _persistLibraryEntry(entry, writeIndex:false);
+        added = true;
+      }catch(_){ }
+    }
+    if(added){ await _writeLibraryIndex(); _refresh(); }
+  }
+}
+
+// ===== Asset naming & orientation helpers (global) =====
+String _deriveAssetTitle(String lowerName){
+  if(lowerName.contains('lion')) return 'Lion';
+  if(lowerName.contains('umbrella') || lowerName.contains('umberalla')) return 'Umbrella';
+  if(lowerName.contains('eye')) return 'Eye';
+  if(lowerName.contains('lips')) return 'Lips';
+  return lowerName.split('.').first;
+}
+bool _isPortraitAsset(String lowerName){
+  return lowerName.contains('lion') || lowerName.contains('umbrella') || lowerName.contains('umberalla');
 }
