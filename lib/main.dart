@@ -114,7 +114,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _showDeviceList = false; // show device list while connected
   Uint8List? _processedPngBytes; // cache processed PNG
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
-  Timer? _autoProcessTimer; // debounce auto processing
+  // Auto process timer removed (manual Show workflow)
   int _processGen = 0; // increments each processing request
   bool _processing = false; // true while an image processing task is active
 
@@ -165,6 +165,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _smallBtn('My Library('+_library.length.toString()+')', _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); }, icon: Icons.collections),
       const SizedBox(width:6),
       _smallBtn('Back', (){ setState(()=> _showDeviceList = true); }),
+  const SizedBox(width:6),
+  _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
       const Spacer(),
     ]);
   }
@@ -207,12 +209,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children:[
-  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); _scheduleAutoProcess(); }),
+  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); }),
         const SizedBox(width:6),
-  _smallBtn('Add', _originalImage==null ? null : _addCurrentToLibrary),
+  _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
+        const SizedBox(width:6),
+  _smallBtn('Show', (_originalImage==null || _processing) ? null : _processImage),
         const SizedBox(width:6),
   _smallBtn(_isSending ? 'Sending' : 'Send', (_processedBytes==null || _isSending) ? null : _sendImageData),
-        const Spacer(),
+  const Spacer(),
         IconButton(
           tooltip: 'Reset View',
             onPressed: _originalImage==null ? null : _resetView,
@@ -329,7 +333,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       child: Row(children:[
         if (_originalImage != null) Expanded(child: _previewPanel('Original', Image.file(_originalImage!, fit: BoxFit.contain))),
         if (_originalImage != null && _processedImage != null) const VerticalDivider(width:1),
-        if (_processedImage != null && _processedPngBytes!=null) Expanded(child: _previewPanel('Processed', Builder(builder: (_){
+  if (_processedImage != null && _processedPngBytes!=null) Expanded(child: _previewPanel('In Frame', Builder(builder: (_){
           Widget w = Image.memory(_processedPngBytes!, fit: BoxFit.contain);
           if (_verticalFrame) { w = RotatedBox(quarterTurns: 3, child: w); } // rotate 270 (90+180) for correct portrait orientation
           return w; })) ),
@@ -344,7 +348,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return Column(children:[
       Row(mainAxisAlignment: MainAxisAlignment.center, children:[
         Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
-        if(title=='Processed' && _processing) ...[
+  if(title=='In Frame' && _processing) ...[
           const SizedBox(width:6), const SizedBox(width:12,height:12, child: CircularProgressIndicator(strokeWidth:2))
         ],
       ]),
@@ -369,14 +373,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             label: 'Dith',
             value: _ditherStrength,
             onChanged: (v)=> setState(()=> _ditherStrength=v),
-            onEnd: ()=> _processImage(),
+            onEnd: (){},
           ),
           _miniSlider(
             icon: Icons.auto_awesome,
             label: 'Color',
             value: _strongColorBoost,
             onChanged: (v)=> setState(()=> _strongColorBoost=v),
-            onEnd: ()=> _processImage(),
+            onEnd: (){},
           ),
         ],
       ),
@@ -405,10 +409,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
-  void _scheduleAutoProcess(){
-    _autoProcessTimer?.cancel();
-    _autoProcessTimer = Timer(const Duration(milliseconds:250), (){ if(mounted && _originalImage!=null){ _processImage(); } });
-  }
 
   @override
   void dispose(){
@@ -422,7 +422,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _viewInitialized = false; // recompute cover scale next build
       _viewRotation = 0.0;
     });
-  _scheduleAutoProcess();
+  // auto disabled
+  }
+
+  Future<void> _exitApp() async {
+    try{
+      if(_isSending){ /* cannot easily cancel mid-chunks here; rely on disconnect */ }
+      await _disconnectDevice();
+    } catch(_){ }
+    if(mounted){
+      // Close the app (works on Android); on iOS this is discouraged
+      SystemNavigator.pop();
+    }
   }
 
   // Request necessary permissions
@@ -463,8 +474,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     
     if (pickedFile != null) {
   setState(() { _originalImage = File(pickedFile.path); _processedImage = null; _processedBytes = null; _processedPngBytes=null; _transferProgress = 0; _uiOriginal = null; _viewInitialized = false; });
-      await _loadUiImage();
-  _scheduleAutoProcess();
+    await _loadUiImage();
+  // manual Show button now
       
       // Wait for user to adjust then press Process / Send
     }
@@ -1175,6 +1186,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           icon: const Icon(Icons.search),
           label: Text(_isScanning ? 'Scanning...' : 'Scan'),
         ),
+        const SizedBox(height:6),
+        ElevatedButton.icon(
+          onPressed: _exitApp,
+          icon: const Icon(Icons.exit_to_app),
+          label: const Text('Exit'),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.black87, foregroundColor: Colors.white),
+        ),
         if(_connectedDevice!=null) ...[
           const SizedBox(height:6),
           ElevatedButton.icon(
@@ -1279,10 +1297,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _viewRotation = _startRotation + d.rotation;
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
             });
-            // Debounced auto process while user manipulates view
-            _scheduleAutoProcess();
+            // manual Show (no auto)
           },
-          onScaleEnd: (d){ _scheduleAutoProcess(); },
+          onScaleEnd: (d){},
           child: ClipRect(
             child: Stack(children:[
               // Image (clipped to workspace bounds now)
@@ -1325,14 +1342,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                         icon: const Icon(Icons.add, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); }); _scheduleAutoProcess(); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); }); },
                         tooltip: 'Zoom In',
                       ),
                       IconButton(
                         icon: const Icon(Icons.remove, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); }); _scheduleAutoProcess(); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); }); },
                         tooltip: 'Zoom Out',
                       ),
                       IconButton(
