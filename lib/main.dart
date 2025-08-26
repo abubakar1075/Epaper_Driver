@@ -401,7 +401,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if (_originalImage != null && _processedImage != null) const VerticalDivider(width:1),
   if (_processedImage != null && _processedPngBytes!=null) Expanded(child: _previewPanel('In Frame', Builder(builder: (_){
           Widget w = Image.memory(_processedPngBytes!, fit: BoxFit.contain);
-          // For portrait we no longer rotate the preview; device rotation handled on send.
+          if(_verticalFrame){
+            // Rotate preview only (not underlying data) to show portrait framing
+            w = RotatedBox(quarterTurns: 3, child: w); // 270° gives expected orientation
+          }
           return w; })) ),
         // Compact sliders column
         const SizedBox(width:6),
