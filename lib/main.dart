@@ -85,6 +85,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   String _statusMessage = "Ready";
   int _transferProgress = 0;
   double _transferSpeed = 0;
+  bool _autoConnectTried = false; // ensure single auto-connect attempt per scan
 
   // Crop/transform state for interactive framing
   bool _viewInitialized = false;
@@ -861,6 +862,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     setState(() {
       _devicesList.clear();
       _isScanning = true;
+  _autoConnectTried = false;
     });
     
     _updateStatus("Scanning for BLE devices...");
@@ -886,6 +888,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _devicesList.add(result.device);
             });
           }
+          // Immediate auto-connect to first device whose name starts with EPD
+          if(!_autoConnectTried && _connectedDevice==null && !_isConnecting) {
+            final name = result.device.advName.toUpperCase();
+            if(name.startsWith('EPD')){
+              _autoConnectTried = true;
+              _updateStatus("Auto-connecting to ${result.device.advName}");
+              // Stop further scanning to speed up connect
+              try { FlutterBluePlus.stopScan(); } catch(_){ }
+              _connectToDevice(result.device);
+              break; // exit loop
+            }
+          }
         }
       }, onError: (e) {
         _updateStatus("Scan error: $e");
@@ -902,6 +916,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _updateStatus("No BLE devices found");
       } else {
         _updateStatus("Found ${_devicesList.length} BLE devices");
+        // Find devices whose name begins with 'EPD'
+        final epdDevices = _devicesList.where((d)=> d.advName.toUpperCase().startsWith('EPD')).toList();
+        if(epdDevices.length == 1 && _connectedDevice==null && !_isConnecting){
+          final target = epdDevices.first;
+          _updateStatus("Auto-connecting to ${target.advName}");
+          _connectToDevice(target);
+        }
       }
     } catch (e) {
       _updateStatus("Error scanning: $e");
@@ -1181,6 +1202,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+  const Text('After selecting Scan option please touch the bottom left corner of the frame to connect.', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
+  const SizedBox(height:8),
         ElevatedButton.icon(
           onPressed: _isScanning ? null : _scanForDevices,
           icon: const Icon(Icons.search),
