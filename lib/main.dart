@@ -1516,12 +1516,10 @@ class _LibraryEntry {
   const _LibraryEntry({required this.id, required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasVertical, required this.isDefaultAsset, required this.title});
 }
 
-// Default asset list (optional explicit filenames). If empty or names differ, we fall back to scanning AssetManifest.
+// Default asset list (landscape). Updated to new "cat" and "leaves" images (remove old portrait lion/umbrella).
 const List<String> kDefaultAssetImages = [
-  'FramePics/pic1.png',
-  'FramePics/pic2.png',
-  'FramePics/pic3.png',
-  'FramePics/pic4.png',
+  'FramePics/cat.png',
+  'FramePics/leaves.png',
 ];
 
 extension _LibraryPersistence on _EPaperImageSenderState {
@@ -1536,8 +1534,8 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       final firstLaunch = !await indexFile.exists();
       if(!firstLaunch){
         await _loadLibraryIndex(indexFile);
-        // Migration: ensure bundled assets exist even if library already created before feature added.
-        await _ensureDefaultAssetsPresent();
+        await _removeObsoletePortraitAssets(); // drop old lion/umbrella portrait defaults
+        await _ensureDefaultAssetsPresent(); // add new cat/leaves if missing
       }
       if(firstLaunch){
         final defaults = await _resolveDefaultAssetList();
@@ -1704,16 +1702,29 @@ extension _LibraryPersistence on _EPaperImageSenderState {
     }
     if(added){ await _writeLibraryIndex(); _refresh(); }
   }
+
+  // Remove obsolete default portrait assets (lion / umbrella) that previously caused rotation issues.
+  Future<void> _removeObsoletePortraitAssets() async {
+    final obsolete = _library.where((e)=> e.isDefaultAsset && (e.id.contains('lion') || e.id.contains('umbrella') || e.id.contains('umberalla'))).toList();
+    if(obsolete.isEmpty) return;
+    for(final e in obsolete){
+      _library.remove(e);
+      try{ await _deleteLibraryEntryFiles(e); }catch(_){ }
+    }
+    await _writeLibraryIndex();
+    _refresh();
+  }
 }
 
 // ===== Asset naming & orientation helpers (global) =====
 String _deriveAssetTitle(String lowerName){
-  if(lowerName.contains('lion')) return 'Lion';
-  if(lowerName.contains('umbrella') || lowerName.contains('umberalla')) return 'Umbrella';
+  if(lowerName.contains('cat')) return 'Cat';
+  if(lowerName.contains('leaves') || lowerName.contains('leaf')) return 'Leaves';
   if(lowerName.contains('eye')) return 'Eye';
   if(lowerName.contains('lips')) return 'Lips';
   return lowerName.split('.').first;
 }
 bool _isPortraitAsset(String lowerName){
-  return lowerName.contains('lion') || lowerName.contains('umbrella') || lowerName.contains('umberalla');
+  // All new default assets (cat, leaves) are landscape -> always false here.
+  return false;
 }
