@@ -1163,17 +1163,26 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try {
       _updateStatus("Preparing image data...");
       
-      // Device shows image upside down -> perform vertical flip (not full 180 rotate) before packing.
+      // Perform vertical flip (device correction) then horizontal flip to intentionally show a flipped image on the e-paper (net 180° rotation).
       final int w = IMAGE_WIDTH;
       final int h = IMAGE_HEIGHT;
       final Uint8List src = _processedBytes!; // raw codes length w*h
-      final Uint8List flipped = Uint8List(src.length);
+      // Vertical flip
+      final Uint8List vFlipped = Uint8List(src.length);
       for (int y = 0; y < h; y++) {
         final int srcOffset = y * w;
-        final int dstOffset = (h - 1 - y) * w; // vertical flip, keep x order
-        flipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
+        final int dstOffset = (h - 1 - y) * w;
+        vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
       }
-      Uint8List packedData = _packPixels(flipped);
+      // Horizontal flip on the vertically flipped buffer -> 180° rotation overall
+      final Uint8List vhFlipped = Uint8List(src.length);
+      for (int y = 0; y < h; y++) {
+        final int row = y * w;
+        for (int x = 0; x < w; x++) {
+          vhFlipped[row + (w - 1 - x)] = vFlipped[row + x];
+        }
+      }
+      Uint8List packedData = _packPixels(vhFlipped);
       _updateStatus("Packed data size: ${packedData.length} bytes");
       
       // First send the total size as a 4-byte value
@@ -1292,7 +1301,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         ElevatedButton.icon(
           onPressed: _isScanning ? null : _scanForDevices,
           icon: const Icon(Icons.search),
-          label: Text(_isScanning ? 'Scanning...' : 'Scan'),
+          label: Text(_isScanning ? 'Scanning...' : 'Scan and Connect'),
         ),
         const SizedBox(height:6),
         ElevatedButton.icon(
