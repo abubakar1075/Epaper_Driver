@@ -479,12 +479,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _deleteLibraryEntryFiles(entry);
   }
 
-  // Preview: show only Cropped (left); processing happens on Send
+  // Preview: show only "In Frame" (left); processing happens on Send
   Widget _buildPreviewAndSliders(){
     return SizedBox(
       height: 190,
       child: Row(children:[
-        if (_originalImage != null) Expanded(child: _previewPanel('Cropped', _croppedOriginalPreview())),
+  if (_originalImage != null) Expanded(child: _previewPanel('In Frame', _croppedOriginalPreview())),
       ]),
     );
   }
@@ -497,16 +497,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     // Draw the same transformed image, clipped to the frame area for smooth, GPU-accelerated preview
     return FittedBox(
       fit: BoxFit.contain,
-      child: SizedBox(
-        width: _frameWidth,
-        height: _frameHeight,
-        child: CustomPaint(
-          painter: _CroppedPreviewPainter(
-            image: _uiOriginal!,
-            scale: _viewScale,
-            rotation: _viewRotation,
-            translation: _viewTranslation,
-            frameOrigin: _frameOrigin,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.black, width: 10),
+        ),
+        child: SizedBox(
+          width: _frameWidth,
+          height: _frameHeight,
+          child: CustomPaint(
+            painter: _CroppedPreviewPainter(
+              image: _uiOriginal!,
+              scale: _viewScale,
+              rotation: _viewRotation,
+              translation: _viewTranslation,
+              frameOrigin: _frameOrigin,
+            ),
           ),
         ),
       ),
