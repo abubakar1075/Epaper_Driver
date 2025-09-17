@@ -1391,7 +1391,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         ElevatedButton.icon(
           onPressed: _isScanning ? null : (_bluetoothOn ? _scanForDevices : (){ _ensureBluetoothOnAtLaunch(); }),
           icon: const Icon(Icons.search),
-          label: Text(_isScanning ? 'Scanning...' : (_bluetoothOn ? 'Scan and Connect' : 'Turn on Bluetooth')),
+          label: Text(_isScanning ? 'Scanning...' : (_bluetoothOn ? 'Connect' : 'Turn on Bluetooth')),
         ),
         const SizedBox(height:6),
         ElevatedButton.icon(
