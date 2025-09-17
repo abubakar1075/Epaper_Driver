@@ -186,6 +186,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Bluetooth state tracking
   bool _bluetoothOn = true; // assume on; will update from adapter state
   StreamSubscription<BluetoothAdapterState>? _btStateSub;
+  // Top promo images from assets/FramePic
+  List<String> _topPromoAssets = const [];
   @override
   void initState(){
     super.initState();
@@ -202,6 +204,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     });
     // Prompt user to turn on Bluetooth at app start if needed
     WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
+    // Discover top promo images under FramePic/
+    _loadTopPromoAssets();
+  }
+
+  Future<void> _loadTopPromoAssets() async {
+    try{
+      final manifestJson = await rootBundle.loadString('AssetManifest.json');
+      final Map<String, dynamic> manifestMap = json.decode(manifestJson);
+      final all = manifestMap.keys.where((k)=> k.startsWith('FramePic/') && (k.endsWith('.png')||k.endsWith('.jpg')||k.endsWith('.jpeg'))).toList();
+      // Take up to two
+      final list = all.take(2).toList();
+      if(mounted){ setState(()=> _topPromoAssets = list); }
+    }catch(_){ /* ignore */ }
   }
 
   @override
@@ -228,7 +243,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       barrierDismissible: false,
       builder: (ctx){
         return AlertDialog(
-          title: const Text('Please Toch the corner of Fram and click On connect'),
+          title: const Text('Please Toch the corner of Frame and click On connect'),
           content: const SizedBox.shrink(),
           actions: [
             TextButton(
@@ -1353,7 +1368,25 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-  const Text('After selecting Scan option please touch the bottom left corner of the frame to connect.', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
+  if(_topPromoAssets.isNotEmpty) ...[
+    SizedBox(
+      height: 200, // give more area to avoid cropping
+      child: Row(children:[
+        for(final p in _topPromoAssets)
+          Expanded(child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal:6),
+            child: Container(
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), color: Colors.grey.shade200),
+              clipBehavior: Clip.antiAlias,
+              alignment: Alignment.center,
+              child: Image.asset(p, fit: BoxFit.contain), // show entire image without cropping
+            ),
+          )),
+      ]),
+    ),
+    const SizedBox(height:8),
+  ],
+  const Text('Please touch the corner of Frame and Click on Connect', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
   const SizedBox(height:8),
         ElevatedButton.icon(
           onPressed: _isScanning ? null : (_bluetoothOn ? _scanForDevices : (){ _ensureBluetoothOnAtLaunch(); }),
