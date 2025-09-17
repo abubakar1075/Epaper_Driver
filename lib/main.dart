@@ -6,7 +6,7 @@
 // 2. Pick an image from gallery.
 // 3. Pan / Zoom / Rotate to frame the exact display region (800x480).
 // 4. Convert to 6-color hardware palette with optional dithering.
-// 5. Manual "Show In Frame" processing (no auto background runs).
+// 5. Process image on demand before sending.
 // 6. Save processed images to an in-memory library & resend later.
 // 7. Send image over BLE in chunks with progress + speed.
 // -------------------------------------------------------------
@@ -143,7 +143,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
-  // Auto process timer removed (manual Show workflow)
+  // Manual processing triggered by user actions
   int _processGen = 0; // increments each processing request
   bool _processing = false; // true while an image processing task is active
 
@@ -339,8 +339,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); }),
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
-        const SizedBox(width:6),
-  _smallBtn('Show In Frame', (_originalImage==null || _processing) ? null : _processImage),
         const SizedBox(width:6),
   _smallBtn(_isSending ? 'Sending' : 'Send', (_processedBytes==null || _isSending) ? null : _sendImageData),
   const Spacer(),
@@ -561,17 +559,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     if(mounted){ setState(()=> _statusMessage = message); }
   }
 
-  // Pick an image from gallery
-  // Pick image from gallery and clear prior processed state
+  // Pick an image from gallery and clear prior processed state
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     
     if (pickedFile != null) {
   setState(() { _originalImage = File(pickedFile.path); _processedImage = null; _processedBytes = null; _processedPngBytes=null; _transferProgress = 0; _uiOriginal = null; _viewInitialized = false; });
     await _loadUiImage();
-  // manual Show button now
-      
-      // Wait for user to adjust then press Process / Send
+    // After selecting, adjust view then press Send
     }
   }
 
@@ -1453,7 +1448,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _viewRotation = _startRotation + d.rotation;
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
             });
-            // manual Show (no auto)
+            // Update view interactively
           },
           onScaleEnd: (d){},
           child: ClipRect(
