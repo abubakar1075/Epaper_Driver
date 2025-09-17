@@ -145,7 +145,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
   // Manual processing triggered by user actions
   int _processGen = 0; // increments each processing request
-  bool _processing = false; // true while an image processing task is active
+  // removed _processing boolean; we now process on-demand before send without UI spinner
 
   // =============================================================
   // UI HELPERS
@@ -336,11 +336,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children:[
-  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; }); }),
+  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; _processedImage=null; _processedBytes=null; _processedPngBytes=null; }); }),
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
         const SizedBox(width:6),
-  _smallBtn(_isSending ? 'Sending' : 'Send', (_processedBytes==null || _isSending) ? null : _sendImageData),
+  _smallBtn(_isSending ? 'Sending' : 'Send', (_originalImage==null || _isSending || _connectedDevice==null || _rxCharacteristic==null) ? null : _sendOrProcessThenSend),
   const Spacer(),
         IconButton(
           tooltip: 'Reset View',
@@ -371,6 +371,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     setState((){ _library.insert(0, entry); });
     _updateStatus('Added to library (total ${_library.length})');
     _persistLibraryEntry(entry);
+  }
+
+  // If not processed yet, process with current framing, then send
+  Future<void> _sendOrProcessThenSend() async {
+    if(_isSending) return;
+    if(_processedBytes==null){
+      await _processImage();
+    }
+    if(_processedBytes!=null){
+      await _sendImageData();
+    } else {
+      _updateStatus('Unable to process image before sending');
+    }
   }
 
   // Grid of saved processed images (tap to select, then Send / Delete)
@@ -466,20 +479,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _deleteLibraryEntryFiles(entry);
   }
 
-  // Dual preview: Cropped (left) vs In Frame (right)
+  // Preview: show only Cropped (left); processing happens on Send
   Widget _buildPreviewAndSliders(){
     return SizedBox(
       height: 190,
       child: Row(children:[
         if (_originalImage != null) Expanded(child: _previewPanel('Cropped', _croppedOriginalPreview())),
-        if (_originalImage != null && _processedImage != null) const VerticalDivider(width:1),
-  if (_processedImage != null && _processedPngBytes!=null) Expanded(child: _previewPanel('In Frame', Builder(builder: (_){
-          Widget w = Image.memory(_processedPngBytes!, fit: BoxFit.contain);
-          if(_verticalFrame){
-            // Rotate preview only (not underlying data) to show portrait framing
-            w = RotatedBox(quarterTurns: 3, child: w); // 270° gives expected orientation
-          }
-          return w; })) ),
       ]),
     );
   }
@@ -513,9 +518,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return Column(children:[
       Row(mainAxisAlignment: MainAxisAlignment.center, children:[
         Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
-  if(title=='In Frame' && _processing) ...[
-          const SizedBox(width:6), const SizedBox(width:12,height:12, child: CircularProgressIndicator(strokeWidth:2))
-        ],
       ]),
       const SizedBox(height:4),
       Expanded(child: ClipRRect(
@@ -536,6 +538,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     setState((){
       _viewInitialized = false; // recompute cover scale next build
       _viewRotation = 0.0;
+      // changing view invalidates processed cache
+      _processedImage = null; _processedBytes = null; _processedPngBytes = null;
     });
   // auto disabled
   }
@@ -615,14 +619,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Future<void> _processImage() async {
     if (_originalImage == null) return;
     final int myGen = ++_processGen;
-    if(mounted){ setState(()=> _processing = true); }
     _updateStatus("Processing image...");
     try {
       // Load the original image
       final Uint8List imageBytes = await _originalImage!.readAsBytes();
       img.Image? originalImage = img.decodeImage(imageBytes);
       if (originalImage == null) {
-        if(myGen == _processGen && mounted){ setState(()=> _processing = false); }
         _updateStatus("Failed to decode image");
         return;
       }
@@ -635,18 +637,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       Uint8List processedBytes = result.item2;  // raw color codes length = 800*480
       // (Do not rotate here; rotation applied before packing when sending)
       if(myGen == _processGen){
-        if(mounted){
-          setState(() {
-            _processedImage = convertedImage;
-            _processedBytes = processedBytes;
-            _processedPngBytes = Uint8List.fromList(img.encodePng(convertedImage));
-            _processing = false;
-          });
-        }
+        if(mounted){ setState(() {
+          _processedImage = convertedImage;
+          _processedBytes = processedBytes;
+          _processedPngBytes = Uint8List.fromList(img.encodePng(convertedImage));
+        }); }
         _updateStatus("Image processed successfully (${processedBytes.length} bytes)");
       }
     } catch (e) {
-      if(myGen == _processGen && mounted){ setState(()=> _processing = false); }
       _updateStatus("Error processing image: $e");
     }
   }
@@ -1474,6 +1472,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _viewScale = (_startScale * d.scale).clamp(_minScale, _maxScale);
               _viewRotation = _startRotation + d.rotation;
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
+              // any crop change invalidates processed cache
+              _processedImage=null; _processedBytes=null; _processedPngBytes=null;
             });
             // Cropped preview now uses GPU painter; no heavy work here
           },
@@ -1520,14 +1520,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                         icon: const Icon(Icons.add, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); }); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; }); },
                         tooltip: 'Zoom In',
                       ),
                       IconButton(
                         icon: const Icon(Icons.remove, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); }); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; }); },
                         tooltip: 'Zoom Out',
                       ),
                       IconButton(
