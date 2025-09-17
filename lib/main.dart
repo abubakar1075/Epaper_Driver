@@ -482,9 +482,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             w = RotatedBox(quarterTurns: 3, child: w); // 270° gives expected orientation
           }
           return w; })) ),
-        // Compact sliders column
-        const SizedBox(width:6),
-        _compactSliders(),
       ]),
     );
   }
@@ -506,55 +503,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     ]);
   }
 
-  // Right-side vertical sliders: Dithering strength & Color enhancement
-  Widget _compactSliders(){
-    return SizedBox(
-      width: 130,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Tune', style: TextStyle(fontSize:12,fontWeight: FontWeight.bold)),
-          const SizedBox(height:4),
-          _miniSlider(
-            icon: Icons.grain,
-            label: 'Dith',
-            value: _ditherStrength,
-            onChanged: (v)=> setState(()=> _ditherStrength=v),
-            onEnd: (){},
-          ),
-          _miniSlider(
-            icon: Icons.auto_awesome,
-            label: 'Color',
-            value: _strongColorBoost,
-            onChanged: (v)=> setState(()=> _strongColorBoost=v),
-            onEnd: (){},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniSlider({required IconData icon, required String label, required double value, required ValueChanged<double> onChanged, required VoidCallback onEnd}){
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children:[Icon(icon, size:14,color: Colors.black54), const SizedBox(width:4), Text(label, style: const TextStyle(fontSize:11))]),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(trackHeight: 4, thumbShape: const RoundSliderThumbShape(enabledThumbRadius:7)),
-            child: Slider(
-              value: value,
-              min: 0,
-              max: 1,
-              divisions: 20,
-              onChanged: onChanged,
-              onChangeEnd: (_)=> onEnd(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Tuning sliders removed from connected view (Dithering/Color)
 
 
   
