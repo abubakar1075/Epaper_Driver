@@ -109,6 +109,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   int _transferProgress = 0;
   double _transferSpeed = 0;
   bool _autoConnectTried = false; // ensure single auto-connect attempt per scan
+  // Periodic connection status for bottom bar
+  Timer? _connectionStatusTimer;
+  String _connectionStatusText = 'Not connected';
 
   // =============================================================
   // INTERACTIVE FRAMING (user gestures manipulate these)
@@ -206,6 +209,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
     // Discover top promo images under FramePic/
     _loadTopPromoAssets();
+    // Periodically update connection status text every second
+    _connectionStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      String next = 'Not connected';
+      try{
+        final dev = _connectedDevice;
+        if(dev!=null){
+          final state = await dev.connectionState.first;
+          if(state == BluetoothConnectionState.connected){ next = 'Connected'; }
+        }
+      }catch(_){ next = 'Not connected'; }
+      if(mounted && _connectionStatusText != next){ setState(()=> _connectionStatusText = next); }
+    });
   }
 
   Future<void> _loadTopPromoAssets() async {
@@ -222,6 +237,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   @override
   void dispose(){
     _btStateSub?.cancel();
+    _connectionStatusTimer?.cancel();
     _disconnectDevice();
     super.dispose();
   }
@@ -323,6 +339,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         ],
         const SizedBox(height: 4),
         _statusCard(),
+        const SizedBox(height: 6),
+        // Bottom connection status (updates every second)
+        SafeArea(
+          top: false,
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              _connectionStatusText,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: _connectionStatusText == 'Connected' ? Colors.green : Colors.red,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
