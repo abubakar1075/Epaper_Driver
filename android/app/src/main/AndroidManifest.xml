@@ -17,7 +17,7 @@
     <uses-feature android:name="android.hardware.bluetooth" android:required="true"/>
     
     <application
-        android:label="EPaper Image Sender"
+        android:label="eFrame"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
