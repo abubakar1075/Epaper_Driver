@@ -187,8 +187,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // For image processing
   final ImagePicker _picker = ImagePicker();
   // Bluetooth state tracking
-  bool _bluetoothOn = true; // assume on; will update from adapter state
   StreamSubscription<BluetoothAdapterState>? _btStateSub;
+  StreamSubscription<List<ScanResult>>? _scanSub;
   // Top promo images from assets/FramePic
   List<String> _topPromoAssets = const [];
   @override
@@ -199,7 +199,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     // Track Bluetooth adapter state
     _btStateSub = FlutterBluePlus.adapterState.listen((s){
       final isOn = (s == BluetoothAdapterState.on);
-      if(mounted){ setState(()=> _bluetoothOn = isOn); }
       // If Bluetooth just turned ON and we are not connected, kick off auto scan/connect
       if(isOn && _connectedDevice==null && !_isScanning){
         _scanForDevices();
@@ -237,6 +236,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   @override
   void dispose(){
     _btStateSub?.cancel();
+    _scanSub?.cancel(); _scanSub = null;
     _connectionStatusTimer?.cancel();
     _disconnectDevice();
     super.dispose();
@@ -1036,8 +1036,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _isScanning = true;
   _autoConnectTried = false;
     });
-    
-    _updateStatus("Scanning for BLE devices...");
+    _updateStatus("finding eframe");
     
     try {
       // Check if Bluetooth is on
@@ -1053,19 +1052,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
       
       // Listen for scan results
-      FlutterBluePlus.scanResults.listen((results) {
+      // Cancel any previous listener to avoid duplicates
+      await _scanSub?.cancel();
+      _scanSub = FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult result in results) {
-          if (result.device.advName.isNotEmpty && !_devicesList.contains(result.device)) {
-            setState(() {
-              _devicesList.add(result.device);
-            });
+          final advName = result.advertisementData.advName;
+          final devName = result.device.advName;
+          final name = advName.isNotEmpty ? advName : devName;
+          if (!_devicesList.contains(result.device)) {
+            setState(() { _devicesList.add(result.device); });
           }
           // Immediate auto-connect to first device whose name starts with EPD
           if(!_autoConnectTried && _connectedDevice==null && !_isConnecting) {
-            final name = result.device.advName.toUpperCase();
-            if(name.startsWith('EPD')){
+            final upper = name.toUpperCase();
+            if(upper.startsWith('EPD')){
               _autoConnectTried = true;
-              _updateStatus("Auto-connecting to ${result.device.advName}");
+              _updateStatus("Auto-connecting to ${name}");
               // Stop further scanning to speed up connect
               try { FlutterBluePlus.stopScan(); } catch(_){ }
               _connectToDevice(result.device);
@@ -1083,6 +1085,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       setState(() {
         _isScanning = false;
       });
+      await _scanSub?.cancel(); _scanSub = null;
       
       if (_devicesList.isEmpty) {
         _updateStatus("No BLE devices found");
@@ -1101,6 +1104,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       setState(() {
         _isScanning = false;
       });
+      await _scanSub?.cancel(); _scanSub = null;
     }
   }
 
@@ -1380,6 +1384,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   );
 
   Widget _buildDisconnected(){
+    // Auto-start scanning while the first window is visible
+    if(!_isScanning && !_isConnecting && _connectedDevice==null){
+      // Fire-and-forget; UI will update from scan stream
+      _scanForDevices();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1403,11 +1412,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   ],
   const Text('Please touch the corner of Frame and Click on Connect', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
   const SizedBox(height:8),
-        ElevatedButton.icon(
-          onPressed: _isScanning ? null : (_bluetoothOn ? _scanForDevices : (){ _ensureBluetoothOnAtLaunch(); }),
-          icon: const Icon(Icons.search),
-          label: Text(_isScanning ? 'Scanning...' : (_bluetoothOn ? 'Connect' : 'Turn on Bluetooth')),
-        ),
+        // Connect button hidden; auto-scan/auto-connect runs automatically
+        const SizedBox.shrink(),
         const SizedBox(height:6),
         ElevatedButton.icon(
           onPressed: _exitApp,
