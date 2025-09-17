@@ -466,12 +466,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _deleteLibraryEntryFiles(entry);
   }
 
-  // Dual preview (Original vs In Frame) + compact sliders column
+  // Dual preview: Cropped (left) vs In Frame (right)
   Widget _buildPreviewAndSliders(){
     return SizedBox(
       height: 190,
       child: Row(children:[
-        if (_originalImage != null) Expanded(child: _previewPanel('Original', Image.file(_originalImage!, fit: BoxFit.contain))),
+        if (_originalImage != null) Expanded(child: _previewPanel('Cropped', _croppedOriginalPreview())),
         if (_originalImage != null && _processedImage != null) const VerticalDivider(width:1),
   if (_processedImage != null && _processedPngBytes!=null) Expanded(child: _previewPanel('In Frame', Builder(builder: (_){
           Widget w = Image.memory(_processedPngBytes!, fit: BoxFit.contain);
@@ -481,6 +481,30 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           }
           return w; })) ),
       ]),
+    );
+  }
+
+  // Build a preview representing only the area inside the back square (frame)
+  Widget _croppedOriginalPreview(){
+    if (_uiOriginal == null || _frameWidth==0 || _frameHeight==0) {
+      return const Center(child: Text('No preview'));
+    }
+    // Draw the same transformed image, clipped to the frame area for smooth, GPU-accelerated preview
+    return FittedBox(
+      fit: BoxFit.contain,
+      child: SizedBox(
+        width: _frameWidth,
+        height: _frameHeight,
+        child: CustomPaint(
+          painter: _CroppedPreviewPainter(
+            image: _uiOriginal!,
+            scale: _viewScale,
+            rotation: _viewRotation,
+            translation: _viewTranslation,
+            frameOrigin: _frameOrigin,
+          ),
+        ),
+      ),
     );
   }
 
@@ -627,8 +651,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }
   }
 
-  // Sample original image into working 800x480 (or rotated) using inverse transform (bilinear sampling)
-  img.Image _generateCroppedBaseImage(img.Image source) {
+  // Sample original image into working 800x480 (or 480x800) using inverse transform (bilinear sampling)
+  // rotatePortrait: when true (default), portrait crops are rotated to landscape (used for processing/sending)
+  // when false, portrait crops are kept as portrait (used for UI preview)
+  img.Image _generateCroppedBaseImage(img.Image source, {bool rotatePortrait = true}) {
     if (_uiOriginal == null || _frameWidth == 0 || _frameHeight == 0) {
       return _fitImage(source);
     }
@@ -670,7 +696,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       }
     }
     if (_verticalFrame) {
-      return img.copyRotate(working, angle: 90);
+      return rotatePortrait ? img.copyRotate(working, angle: 90) : working;
     }
     return working;
   }
@@ -1437,6 +1463,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             (workspaceH - ih*coverScale)/2,
           );
           _viewInitialized = true;
+          // Cropped preview now paints directly; no PNG cache needed
         }
         return GestureDetector(
           onDoubleTap: _resetView,
@@ -1448,7 +1475,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _viewRotation = _startRotation + d.rotation;
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
             });
-            // Update view interactively
+            // Cropped preview now uses GPU painter; no heavy work here
           },
           onScaleEnd: (d){},
           child: ClipRect(
@@ -1537,6 +1564,28 @@ class _WorkspacePainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant _WorkspacePainter old)=> old.image!=image || old.scale!=scale || old.rotation!=rotation || old.translation!=translation;
+}
+
+// Cropped preview painter: draws the transformed image clipped to the frame rectangle
+class _CroppedPreviewPainter extends CustomPainter {
+  final ui.Image image; final double scale; final double rotation; final Offset translation; final Offset frameOrigin;
+  const _CroppedPreviewPainter({required this.image, required this.scale, required this.rotation, required this.translation, required this.frameOrigin});
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    // Clip to the preview canvas (which we sized to frameWidth x frameHeight)
+    canvas.clipRect(Offset.zero & size);
+    // Apply inverse of frame origin to align with workspace coords
+    canvas.translate(-frameOrigin.dx, -frameOrigin.dy);
+    // Apply same transforms as workspace painter
+    canvas.translate(translation.dx, translation.dy);
+    canvas.rotate(rotation);
+    canvas.scale(scale, scale);
+    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,image.width.toDouble(), image.height.toDouble()), image: image, fit: BoxFit.contain, alignment: Alignment.topLeft);
+    canvas.restore();
+  }
+  @override
+  bool shouldRepaint(covariant _CroppedPreviewPainter old)=> old.image!=image || old.scale!=scale || old.rotation!=rotation || old.translation!=translation || old.frameOrigin!=frameOrigin;
 }
 
 // Helper class for color mapping
