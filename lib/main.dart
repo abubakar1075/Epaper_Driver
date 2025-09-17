@@ -183,11 +183,72 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   
   // For image processing
   final ImagePicker _picker = ImagePicker();
+  // Bluetooth state tracking
+  bool _bluetoothOn = true; // assume on; will update from adapter state
+  StreamSubscription<BluetoothAdapterState>? _btStateSub;
   @override
   void initState(){
     super.initState();
     _checkPermissions();
     _initPersistentLibrary();
+    // Track Bluetooth adapter state
+    _btStateSub = FlutterBluePlus.adapterState.listen((s){
+      final isOn = (s == BluetoothAdapterState.on);
+      if(mounted){ setState(()=> _bluetoothOn = isOn); }
+      // If Bluetooth just turned ON and we are not connected, kick off auto scan/connect
+      if(isOn && _connectedDevice==null && !_isScanning){
+        _scanForDevices();
+      }
+    });
+    // Prompt user to turn on Bluetooth at app start if needed
+    WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
+  }
+
+  @override
+  void dispose(){
+    _btStateSub?.cancel();
+    _disconnectDevice();
+    super.dispose();
+  }
+
+  // Ensure Bluetooth is on; if not, show a simple prompt to turn it on.
+  Future<void> _ensureBluetoothOnAtLaunch() async {
+    BluetoothAdapterState state;
+    try {
+      state = await FlutterBluePlus.adapterState.first;
+    } catch (_) {
+      // If we can't read state, just return silently
+      return;
+    }
+    if (state == BluetoothAdapterState.on) return;
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx){
+        return AlertDialog(
+          title: const Text('Please Toch the corner of Fram and click On connect'),
+          content: const SizedBox.shrink(),
+          actions: [
+            TextButton(
+              onPressed: (){ Navigator.of(ctx).pop(); },
+              child: const Text('Close'),
+            ),
+            if (Platform.isAndroid) FilledButton(
+              onPressed: () async {
+                try { await FlutterBluePlus.turnOn(); } catch(_){ }
+                // Give the system a moment; when state stream reports ON we auto-scan. Also allow immediate attempt.
+                await Future.delayed(const Duration(milliseconds: 300));
+                if(mounted && _connectedDevice==null && !_isScanning){ _scanForDevices(); }
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              },
+              child: const Text('Connect'),
+            ),
+          ],
+        );
+      }
+    );
   }
 
   // Wrapper for triggering rebuild from extension helpers
@@ -481,11 +542,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
 
-  @override
-  void dispose(){
-    _disconnectDevice();
-    super.dispose();
-  }
+  
 
   // Reset pan/zoom/rotation to initial cover fit
   void _resetView(){
@@ -1299,9 +1356,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   const Text('After selecting Scan option please touch the bottom left corner of the frame to connect.', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
   const SizedBox(height:8),
         ElevatedButton.icon(
-          onPressed: _isScanning ? null : _scanForDevices,
+          onPressed: _isScanning ? null : (_bluetoothOn ? _scanForDevices : (){ _ensureBluetoothOnAtLaunch(); }),
           icon: const Icon(Icons.search),
-          label: Text(_isScanning ? 'Scanning...' : 'Scan and Connect'),
+          label: Text(_isScanning ? 'Scanning...' : (_bluetoothOn ? 'Scan and Connect' : 'Turn on Bluetooth')),
         ),
         const SizedBox(height:6),
         ElevatedButton.icon(
