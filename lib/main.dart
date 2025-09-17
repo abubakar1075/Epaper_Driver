@@ -112,6 +112,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Periodic connection status for bottom bar
   Timer? _connectionStatusTimer;
   String _connectionStatusText = 'Not connected';
+  // Stay on the second screen even if temporarily disconnected (for background auto-reconnect)
+  bool _stayOnSecondScreen = false;
 
   // =============================================================
   // INTERACTIVE FRAMING (user gestures manipulate these)
@@ -189,6 +191,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Bluetooth state tracking
   StreamSubscription<BluetoothAdapterState>? _btStateSub;
   StreamSubscription<List<ScanResult>>? _scanSub;
+  StreamSubscription<BluetoothConnectionState>? _connStateSub;
+  DateTime _lastReconnectAttempt = DateTime.fromMillisecondsSinceEpoch(0);
   // Top promo images from assets/FramePic
   List<String> _topPromoAssets = const [];
   @override
@@ -219,6 +223,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         }
       }catch(_){ next = 'Not connected'; }
       if(mounted && _connectionStatusText != next){ setState(()=> _connectionStatusText = next); }
+      // Auto-reconnect loop while not connected
+      if(mounted && next != 'Connected' && !_isScanning && !_isConnecting){
+        final now = DateTime.now();
+        if(now.difference(_lastReconnectAttempt).inSeconds >= 8){
+          _lastReconnectAttempt = now;
+          _scanForDevices();
+        }
+      }
     });
   }
 
@@ -237,6 +249,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   void dispose(){
     _btStateSub?.cancel();
     _scanSub?.cancel(); _scanSub = null;
+    _connStateSub?.cancel(); _connStateSub = null;
     _connectionStatusTimer?.cancel();
     _disconnectDevice();
     super.dispose();
@@ -306,7 +319,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         ),
       ),
       const SizedBox(width:6),
-      _smallBtn('Back', (){ setState(()=> _showDeviceList = true); }),
+      _smallBtn('Back', (){ setState((){ _showDeviceList = true; _stayOnSecondScreen = false; }); }),
   const SizedBox(width:6),
   _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
       const Spacer(),
@@ -373,7 +386,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
         const SizedBox(width:6),
-  _smallBtn(_isSending ? 'Sending' : 'Send', (_originalImage==null || _isSending || _connectedDevice==null || _rxCharacteristic==null) ? null : _sendOrProcessThenSend),
+  _smallBtn(_isSending ? 'Sending' : 'Send', (_originalImage==null || _isSending) ? null : _sendOrProcessThenSend),
   const Spacer(),
         IconButton(
           tooltip: 'Reset View',
@@ -409,6 +422,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // If not processed yet, process with current framing, then send
   Future<void> _sendOrProcessThenSend() async {
     if(_isSending) return;
+    // If disconnected, show message and exit
+    if(_connectedDevice==null || _rxCharacteristic==null){
+      if(!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx){
+          return AlertDialog(
+            title: const Text('Please Touch the frame'),
+            content: const SizedBox.shrink(),
+            actions: [
+              TextButton(onPressed: (){ Navigator.of(ctx).pop(); }, child: const Text('Close')),
+            ],
+          );
+        }
+      );
+      return;
+    }
     if(_processedBytes==null){
       await _processImage();
     }
@@ -1169,6 +1199,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _rxCharacteristic = rxChar;
         _isConnecting = false;
   _showDeviceList = false;
+        _stayOnSecondScreen = true; // remain on second screen going forward
+      });
+      // Listen for future connection state changes and auto-reconnect
+      await _connStateSub?.cancel();
+      _connStateSub = device.connectionState.listen((s) async {
+        if(s == BluetoothConnectionState.disconnected){
+          if(mounted){
+            setState((){
+              _connectedDevice = null;
+              _rxCharacteristic = null;
+              // If we are staying on second screen, leave _showDeviceList=false so UI remains
+              if(!_stayOnSecondScreen){ _showDeviceList = true; }
+            });
+            _updateStatus('Device disconnected. Reconnecting...');
+          }
+          if(!_isScanning && !_isConnecting){ _scanForDevices(); }
+        }
       });
       
       _updateStatus("Connected to ${device.advName}");
@@ -1380,7 +1427,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('EPaper Image Sender'), backgroundColor: Theme.of(context).colorScheme.inversePrimary),
-    body: Padding(padding: const EdgeInsets.all(12), child: (_connectedDevice==null || _showDeviceList) ? _buildDisconnected() : _buildConnected()),
+    body: Padding(padding: const EdgeInsets.all(12), child: (((_connectedDevice==null) && !_stayOnSecondScreen) || _showDeviceList) ? _buildDisconnected() : _buildConnected()),
   );
 
   Widget _buildDisconnected(){
