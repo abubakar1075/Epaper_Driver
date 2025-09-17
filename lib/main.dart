@@ -497,24 +497,33 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     // Draw the same transformed image, clipped to the frame area for smooth, GPU-accelerated preview
     return FittedBox(
       fit: BoxFit.contain,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.black, width: 10),
-        ),
-        child: SizedBox(
-          width: _frameWidth,
-          height: _frameHeight,
-          child: CustomPaint(
-            painter: _CroppedPreviewPainter(
-              image: _uiOriginal!,
-              scale: _viewScale,
-              rotation: _viewRotation,
-              translation: _viewTranslation,
-              frameOrigin: _frameOrigin,
+      child: Builder(builder: (context){
+        const double blackBorder = 10;
+        const double whiteBorder = blackBorder * 2; // twice the black border
+        return Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.black, width: blackBorder),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.white, width: whiteBorder),
+            ),
+            child: SizedBox(
+              width: _frameWidth,
+              height: _frameHeight,
+              child: CustomPaint(
+                painter: _CroppedPreviewPainter(
+                  image: _uiOriginal!,
+                  scale: _viewScale,
+                  rotation: _viewRotation,
+                  translation: _viewTranslation,
+                  frameOrigin: _frameOrigin,
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
 
