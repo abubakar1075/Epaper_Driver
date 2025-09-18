@@ -417,23 +417,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         ],
         const SizedBox(height: 4),
         _statusCard(),
-        const SizedBox(height: 6),
-        // Bottom connection status (updates every second)
-        SafeArea(
-          top: false,
-          child: Container(
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              _connectionStatusText,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: _connectionStatusText == 'Connected' ? Colors.green : Colors.red,
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
