@@ -406,9 +406,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if (_originalImage != null) _buildCropFrame() else Expanded(
           child: Center(
             child: _processedPngBytes != null
-                ? Image.memory(_processedPngBytes!, fit: BoxFit.contain)
+                ? (_verticalFrame
+                    ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+                    : Image.memory(_processedPngBytes!, fit: BoxFit.contain))
                 : (_library.isNotEmpty
-                    ? Image.memory(_library.first.pngBytes, fit: BoxFit.contain)
+                    ? ( (_library.first.wasVertical)
+                        ? RotatedBox(quarterTurns: 3, child: Image.memory(_library.first.pngBytes, fit: BoxFit.contain))
+                        : Image.memory(_library.first.pngBytes, fit: BoxFit.contain))
                     : Text('Pick an image', style: Theme.of(context).textTheme.titleMedium)),
           ),
         ),
@@ -541,7 +545,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     child: Stack(children:[
                       Positioned.fill(child: Padding(
                         padding: const EdgeInsets.all(3),
-                        child: Image.memory(e.pngBytes, fit: BoxFit.cover),
+                        child: e.wasVertical
+                            ? RotatedBox(quarterTurns: 3, child: Image.memory(e.pngBytes, fit: BoxFit.cover))
+                            : Image.memory(e.pngBytes, fit: BoxFit.cover),
                       )),
                       Positioned(
                         left:4, top:4,
