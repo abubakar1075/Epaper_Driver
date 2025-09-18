@@ -116,6 +116,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _stayOnSecondScreen = false;
   // Header/logo asset (FramePic/eframe.*) to show in the AppBar
   String? _headerAsset;
+  double? _headerAspectRatio; // width / height for dynamic AppBar height
 
   // =============================================================
   // INTERACTIVE FRAMING (user gestures manipulate these)
@@ -281,8 +282,26 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if(nameNoExt == 'eframe'){ chosen = k; break; }
         if(chosen==null && nameNoExt.contains('eframe')){ chosen = k; }
       }
-      if(mounted){ setState(()=> _headerAsset = chosen); }
+      if(mounted){
+        setState(()=> _headerAsset = chosen);
+        if(chosen!=null){ _resolveHeaderAspectRatio(chosen); }
+      }
     }catch(_){ /* ignore */ }
+  }
+
+  void _resolveHeaderAspectRatio(String asset){
+    final imgProv = AssetImage(asset);
+    final stream = imgProv.resolve(const ImageConfiguration());
+    ImageStreamListener? listener;
+    listener = ImageStreamListener((ImageInfo info, bool sync){
+      final w = info.image.width.toDouble();
+      final h = info.image.height.toDouble();
+      if(h>0 && mounted){ setState(()=> _headerAspectRatio = w/h); }
+      stream.removeListener(listener!);
+    }, onError: (dynamic _, __){
+      try{ stream.removeListener(listener!); }catch(_){ }
+    });
+    stream.addListener(listener);
   }
 
   @override
@@ -1467,11 +1486,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      centerTitle: true,
-      title: (_headerAsset!=null)
-          ? Image.asset(_headerAsset!, height: 28, fit: BoxFit.contain)
-          : const SizedBox.shrink(),
+      automaticallyImplyLeading: false,
+      title: const SizedBox.shrink(),
+      toolbarHeight: _headerAspectRatio!=null ? MediaQuery.of(context).size.width / _headerAspectRatio! : 88,
       backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      flexibleSpace: (_headerAsset!=null)
+          ? SafeArea(
+              bottom: false,
+              child: SizedBox.expand(
+                child: Image.asset(
+                  _headerAsset!,
+                  fit: BoxFit.fitWidth,
+                  alignment: Alignment.center,
+                ),
+              ),
+            )
+          : null,
     ),
     body: Padding(padding: const EdgeInsets.all(12), child: (((_connectedDevice==null) && !_stayOnSecondScreen) || _showDeviceList) ? _buildDisconnected() : _buildConnected()),
   );
