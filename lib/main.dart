@@ -359,30 +359,36 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   // Top bar visible while connected (image, library, navigation)
   Widget _connectedTopBar(){
-    return Row(children:[
-      _smallBtn('Image', _pickImage, icon: Icons.photo_library),
-      const SizedBox(width:6),
-      SizedBox(
-        height: 34,
-        child: ElevatedButton.icon(
-          style: _smallBtnStyle.copyWith(
-            backgroundColor: WidgetStateProperty.resolveWith((states){
-              if(_library.isEmpty || states.contains(WidgetState.disabled)) return Colors.grey.shade400;
-              return Colors.green.shade600;
-            }),
-            foregroundColor: WidgetStateProperty.all(Colors.white),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children:[
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: _pickImage,
+              icon: const Icon(Icons.photo_library, size: 18),
+              label: const Text('Gallary', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
           ),
-          onPressed: _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); },
-          icon: const Icon(Icons.collections, size:14),
-          label: Text('My Library('+_library.length.toString()+')'),
         ),
-      ),
-      const SizedBox(width:6),
-      _smallBtn('Back', (){ setState((){ _showDeviceList = true; _stayOnSecondScreen = false; }); }),
-  const SizedBox(width:6),
-  _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
-      const Spacer(),
-    ]);
+        const SizedBox(width: 8),
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _library.isEmpty ? null : Colors.green.shade600,
+                foregroundColor: _library.isEmpty ? null : Colors.white,
+              ),
+              onPressed: _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); },
+              icon: const Icon(Icons.collections, size: 18),
+              label: Text('My collection(${_library.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 
   Widget _buildConnected(){
@@ -440,12 +446,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         color: Colors.grey[200],
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(children:[
+  child: Row(children:[
   _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; _processedImage=null; _processedBytes=null; _processedPngBytes=null; }); }),
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
         const SizedBox(width:6),
   _smallBtn(_isSending ? 'Sending' : 'Send', (_originalImage==null || _isSending) ? null : _sendOrProcessThenSend),
+    const SizedBox(width:6),
+    _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
   const Spacer(),
         IconButton(
           tooltip: 'Reset View',
@@ -1533,7 +1541,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     ),
     const SizedBox(height:8),
   ],
-  const Text('Please touch the corner of Frame and Click on Connect', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
+  const Text('Please touch the corner of Frame', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
   const SizedBox(height:8),
         // Connect button hidden; auto-scan/auto-connect runs automatically
         const SizedBox.shrink(),
