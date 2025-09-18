@@ -362,6 +362,70 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
+  // Resolve the appropriate finger image for the orientation with robust fallbacks.
+  Future<String?> _resolveFingerAssetForOrientation(bool portrait) async {
+    try{
+      final manifestJson = await rootBundle.loadString('AssetManifest.json');
+      final Map<String, dynamic> manifestMap = json.decode(manifestJson);
+      // list of candidate image assets under FramePic(s)/
+      final keys = manifestMap.keys.where((k){
+        if(!(k.startsWith('FramePic/') || k.startsWith('FramePics/'))) return false;
+        final kl = k.toLowerCase();
+        return kl.endsWith('.png') || kl.endsWith('.jpg') || kl.endsWith('.jpeg');
+      }).toList();
+      String targetExact = portrait ? 'framefinger' : 'framefingerh';
+      // 1) Exact match first
+      for(final k in keys){
+        final base = k.split('/').last.toLowerCase();
+        final noExt = base.contains('.') ? base.substring(0, base.lastIndexOf('.')) : base;
+        if(noExt == targetExact){ return k; }
+      }
+      // 2) Heuristic: prefer names containing 'frame' and 'finger'
+      List<String> candidates = keys.where((k){
+        final b = k.split('/').last.toLowerCase();
+        return b.contains('finger');
+      }).toList();
+      // Prefer non-H for portrait and H for landscape when available
+      List<String> preferred;
+      if(portrait){
+        final nonH = candidates.where((k){
+          final noExt = k.split('/').last.toLowerCase();
+          final name = noExt.contains('.') ? noExt.substring(0, noExt.lastIndexOf('.')) : noExt;
+          return !name.endsWith('h');
+        }).toList();
+        preferred = nonH.isNotEmpty ? nonH : candidates;
+      }else{
+        final onlyH = candidates.where((k){
+          final noExt = k.split('/').last.toLowerCase();
+          final name = noExt.contains('.') ? noExt.substring(0, noExt.lastIndexOf('.')) : noExt;
+          return name.endsWith('h');
+        }).toList();
+        preferred = onlyH.isNotEmpty ? onlyH : candidates;
+      }
+      // Score portrait vs landscape by presence of trailing 'h'
+      String? best;
+      int bestScore = -9999;
+      for(final k in preferred){
+        final b = k.split('/').last.toLowerCase();
+        int score = 0;
+        if(b.contains('frame')) score += 3;
+        if(b.startsWith('frame')) score += 2;
+        if(b.contains('finger')) score += 2;
+        final noExt = b.contains('.') ? b.substring(0, b.lastIndexOf('.')) : b;
+        final endsWithH = noExt.endsWith('h');
+        if(portrait){
+          // prefer NOT having trailing 'h' (reserve that for horizontal)
+          score += endsWithH ? -3 : 2;
+        }else{
+          // prefer having trailing 'h' for horizontal
+          score += endsWithH ? 3 : -1;
+        }
+        if(score > bestScore){ bestScore = score; best = k; }
+      }
+      return best;
+    }catch(_){ return null; }
+  }
+
   // Wrapper for triggering rebuild from extension helpers
   void _refresh(){ if(mounted){ setState(()=>{}); } }
 
@@ -715,12 +779,27 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     // If disconnected, show message and exit
     if(_connectedDevice==null || _rxCharacteristic==null){
       if(!mounted) return;
+      // Pick the correct finger image based on current orientation
+      final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
       await showDialog(
         context: context,
         builder: (ctx){
           return AlertDialog(
             title: const Text('Please Touch the frame'),
-            content: const SizedBox.shrink(),
+            content: fingerAsset==null
+              ? const SizedBox.shrink()
+              : SizedBox(
+                  width: 320,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 16/9,
+                        child: Image.asset(fingerAsset, fit: BoxFit.contain),
+                      ),
+                    ],
+                  ),
+                ),
             actions: [
               TextButton(onPressed: (){ Navigator.of(ctx).pop(); }, child: const Text('Close')),
             ],
