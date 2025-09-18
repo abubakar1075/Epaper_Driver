@@ -476,8 +476,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
         const SizedBox(width:6),
   _smallBtn(
-    _isSending ? 'Sending' : 'Send',
-    (_isSending || _connectedDevice==null || _rxCharacteristic==null) ? null : _sendOrProcessThenSend,
+    'Send',
+    _sendOrProcessThenSend,
   icon: Icons.send),
     const SizedBox(width:6),
     _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
