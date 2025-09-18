@@ -114,6 +114,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   String _connectionStatusText = 'Not connected';
   // Stay on the second screen even if temporarily disconnected (for background auto-reconnect)
   bool _stayOnSecondScreen = false;
+  // Header/logo asset (FramePic/eframe.*) to show in the AppBar
+  String? _headerAsset;
 
   // =============================================================
   // INTERACTIVE FRAMING (user gestures manipulate these)
@@ -212,6 +214,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
     // Discover top promo images under FramePic/
     _loadTopPromoAssets();
+  // Load header/logo asset named eframe in FramePic/ or FramePics/
+  _loadHeaderAsset();
     // Periodically update connection status text every second
     _connectionStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       String next = 'Not connected';
@@ -238,10 +242,46 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try{
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifestMap = json.decode(manifestJson);
-      final all = manifestMap.keys.where((k)=> k.startsWith('FramePic/') && (k.endsWith('.png')||k.endsWith('.jpg')||k.endsWith('.jpeg'))).toList();
+      // Collect images from both FramePic/ and FramePics/
+      final all = manifestMap.keys.where((k)=>
+        (k.startsWith('FramePic/') || k.startsWith('FramePics/')) &&
+        (k.toLowerCase().endsWith('.png') || k.toLowerCase().endsWith('.jpg') || k.toLowerCase().endsWith('.jpeg'))
+      ).toList();
+      // Exclude the header/logo 'eframe' from promo strip
+      final filtered = all.where((k){
+        final base = k.split('/').last.toLowerCase();
+        final noExt = base.contains('.') ? base.substring(0, base.lastIndexOf('.')) : base;
+        return noExt != 'eframe';
+      }).toList();
+      // Prefer images with 'finger' (e.g., frameFinger.png) first
+      filtered.sort((a,b){
+        int pri(String s){
+          final base = s.split('/').last.toLowerCase();
+          return base.contains('finger') ? 0 : 1;
+        }
+        final pa = pri(a); final pb = pri(b);
+        if(pa!=pb) return pa - pb;
+        return a.compareTo(b);
+      });
       // Take up to two
-      final list = all.take(2).toList();
+      final list = filtered.take(2).toList();
       if(mounted){ setState(()=> _topPromoAssets = list); }
+    }catch(_){ /* ignore */ }
+  }
+
+  Future<void> _loadHeaderAsset() async {
+    try{
+      final manifestJson = await rootBundle.loadString('AssetManifest.json');
+      final Map<String, dynamic> manifestMap = json.decode(manifestJson);
+      final keys = manifestMap.keys.where((k)=> (k.startsWith('FramePic/') || k.startsWith('FramePics/')) ).toList();
+      String? chosen;
+      for(final k in keys){
+        final base = k.split('/').last.toLowerCase();
+        final nameNoExt = base.contains('.') ? base.substring(0, base.lastIndexOf('.')) : base;
+        if(nameNoExt == 'eframe'){ chosen = k; break; }
+        if(chosen==null && nameNoExt.contains('eframe')){ chosen = k; }
+      }
+      if(mounted){ setState(()=> _headerAsset = chosen); }
     }catch(_){ /* ignore */ }
   }
 
@@ -1426,7 +1466,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('EPaper Image Sender'), backgroundColor: Theme.of(context).colorScheme.inversePrimary),
+    appBar: AppBar(
+      centerTitle: true,
+      title: (_headerAsset!=null)
+          ? Image.asset(_headerAsset!, height: 28, fit: BoxFit.contain)
+          : const SizedBox.shrink(),
+      backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+    ),
     body: Padding(padding: const EdgeInsets.all(12), child: (((_connectedDevice==null) && !_stayOnSecondScreen) || _showDeviceList) ? _buildDisconnected() : _buildConnected()),
   );
 
