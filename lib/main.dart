@@ -163,7 +163,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _aiIsGenerating = false;
   Uint8List? _aiPngBytes;
   String? _aiError;
-  bool _aiPortrait = false; // false = landscape (800x480), true = portrait (480x800)
   final ButtonStyle _smallBtnStyle = ElevatedButton.styleFrom(
     minimumSize: const Size(60,34),
     padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
@@ -591,9 +590,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             label: Text(_aiIsGenerating ? 'Generating...' : 'Generate'),
           ),
           const SizedBox(width: 8),
-          // Orientation toggle next
-          _smallBtn(_aiPortrait ? 'Portrait' : 'Landscape', _aiIsGenerating ? null : (){ setState(()=> _aiPortrait = !_aiPortrait); }, icon: Icons.screen_rotation),
-          const SizedBox(width: 8),
           // Use in Editor next
           _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage, icon: Icons.open_in_new),
           const Spacer(),
@@ -648,8 +644,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       final safePrompt = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
       final encoded = Uri.encodeComponent(safePrompt);
       final seed = (safePrompt.hashCode & 0x7fffffff).toString();
-      final genW = _aiPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH;  // 480 if portrait
-      final genH = _aiPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT;  // 800 if portrait
+      // Use editor orientation (_verticalFrame) instead of a separate AI toggle
+      final genW = _verticalFrame ? IMAGE_HEIGHT : IMAGE_WIDTH;  // 480 if portrait
+      final genH = _verticalFrame ? IMAGE_WIDTH : IMAGE_HEIGHT;  // 800 if portrait
       final candidates = <Uri>[
         Uri.parse('https://image.pollinations.ai/prompt/$encoded?width=$genW&height=$genH&seed=$seed&nologo=true'),
         Uri.parse('https://image.pollinations.ai/prompt/$encoded?size=${genW}x${genH}&seed=$seed&nologo=true'),
@@ -709,8 +706,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       if(!prompt.startsWith(aiPrefix)){
         prompt = (aiPrefix + prompt).trim();
       }
-      final int w = _aiPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH;
-      final int h = _aiPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT;
+      // Use editor orientation for canvas size
+      final int w = _verticalFrame ? IMAGE_HEIGHT : IMAGE_WIDTH;
+      final int h = _verticalFrame ? IMAGE_WIDTH : IMAGE_HEIGHT;
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0,0,w.toDouble(),h.toDouble()));
       final hash = prompt.hashCode;
@@ -763,7 +761,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _processedPngBytes = null;
         _uiOriginal = null;
         _viewInitialized = false;
-        _verticalFrame = _aiPortrait; // match editor orientation to generated image
         _showAi = false;
       });
       await _loadUiImage();
