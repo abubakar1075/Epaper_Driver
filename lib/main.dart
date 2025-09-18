@@ -404,7 +404,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _connectedTopBar(),
         const SizedBox(height: 8),
         if (_originalImage != null) _buildCropFrame() else Expanded(
-          child: Center(child: Text('Pick an image', style: Theme.of(context).textTheme.titleMedium)),
+          child: Center(
+            child: _processedPngBytes != null
+                ? Image.memory(_processedPngBytes!, fit: BoxFit.contain)
+                : (_library.isNotEmpty
+                    ? Image.memory(_library.first.pngBytes, fit: BoxFit.contain)
+                    : Text('Pick an image', style: Theme.of(context).textTheme.titleMedium)),
+          ),
         ),
         const SizedBox(height: 6),
         _buildActionBar(),
@@ -574,11 +580,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final idx = _selectedLibraryIndex; if(idx==null) return;
     final entry = _library[idx];
     setState((){
+      // Clear any previously selected gallery image to prefer the library image on the main screen
+      _originalImage = null;
+      _uiOriginal = null;
       _processedImage = entry.image.clone();
       _processedBytes = Uint8List.fromList(entry.rawCodes); // raw codes length w*h
       _showLibrary = false; // return to main view for progress indicators
       _processedPngBytes = entry.pngBytes;
       _verticalFrame = entry.wasVertical;
+      _viewInitialized = false; // force frame recompute next build
     });
     _sendImageData();
   }
