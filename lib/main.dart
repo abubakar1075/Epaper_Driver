@@ -443,7 +443,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         ),
   const SizedBox(height: 6),
     _buildActionBar(),
-    const SizedBox(height: 0),
+    const SizedBox(height: 10),
         // Reduce available height slightly during sending to avoid overflow of progress bar
         Padding(
           padding: EdgeInsets.only(bottom: _isSending ? 10 : 0),
