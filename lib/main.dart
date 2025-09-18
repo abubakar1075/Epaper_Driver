@@ -512,7 +512,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       ),
   child: Row(children:[
   _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){
-    setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; _processedImage=null; _processedBytes=null; _processedPngBytes=null; });
+    setState((){ _verticalFrame = !_verticalFrame; _processedImage=null; _processedBytes=null; _processedPngBytes=null; });
+    // Recompute view immediately so preview updates without lag
+    _recomputeViewForCurrentFrame(context);
   }, icon: Icons.screen_rotation),
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
@@ -525,6 +527,49 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
       ]),
     );
+  }
+
+  // Recompute frame geometry and cover-fit view instantly for current layout sizes
+  void _recomputeViewForCurrentFrame(BuildContext context){
+    final imgObj = _uiOriginal; if(imgObj==null) return;
+    // These match sizes used in crop frame and preview
+    final double workspaceW = MediaQuery.of(context).size.width - 24; // body horizontal padding is 12 each side
+    final double workspaceH = _isSending ? 290 : 300; // crop frame height
+    // Compute frame size same as _buildCropFrame
+    double frameW = workspaceW * 0.5;
+    double frameH;
+    if (_verticalFrame) {
+      frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
+    } else {
+      frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
+    }
+    if (frameH > workspaceH) {
+      frameH = workspaceH * 0.5;
+      if (_verticalFrame) {
+        frameW = frameH * (IMAGE_HEIGHT / IMAGE_WIDTH);
+      } else {
+        frameW = frameH * (IMAGE_WIDTH / IMAGE_HEIGHT);
+      }
+    }
+    final Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
+    // Compute cover scale and center translation
+    final iw = imgObj.width.toDouble();
+    final ih = imgObj.height.toDouble();
+    final coverScale = math.max(frameW / iw, frameH / ih);
+    setState((){
+      _frameWidth = frameW;
+      _frameHeight = frameH;
+      _frameOrigin = origin;
+      _viewScale = coverScale;
+      _minScale = (coverScale * 0.01).clamp(0.005, double.infinity);
+      _maxScale = coverScale * 80;
+      _viewRotation = 0.0; // keep upright when switching orientation
+      _viewTranslation = Offset(
+        (workspaceW - iw*coverScale)/2,
+        (workspaceH - ih*coverScale)/2,
+      );
+      _viewInitialized = true;
+    });
   }
 
   // ========================= AI IMAGES VIEW =========================
@@ -928,16 +973,42 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return SizedBox(
       height: _isSending ? 190 : 210,
       child: Row(children:[
-  if (_originalImage != null) Expanded(child: _previewPanel('In Frame', _croppedOriginalPreview())),
+  if (_originalImage != null)
+    Expanded(
+      child: Builder(
+        builder: (context){
+          // Compute the same frame geometry used by the crop workspace so the preview updates instantly
+          final double workspaceW = MediaQuery.of(context).size.width - 24; // body padding is 12 on both sides
+          final double workspaceH = _isSending ? 290 : 300; // same as _buildCropFrame height
+          double frameW = workspaceW * 0.5;
+          double frameH;
+          if (_verticalFrame) {
+            frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
+          } else {
+            frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
+          }
+          if (frameH > workspaceH) {
+            frameH = workspaceH * 0.5;
+            if (_verticalFrame) {
+              frameW = frameH * (IMAGE_HEIGHT / IMAGE_WIDTH);
+            } else {
+              frameW = frameH * (IMAGE_WIDTH / IMAGE_HEIGHT);
+            }
+          }
+          final Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
+          return _previewPanel('In Frame', _croppedOriginalPreviewSized(frameW, frameH, origin));
+        },
+      ),
+    ),
       ]),
     );
   }
 
   // Build a preview representing only the area inside the back square (frame)
-  Widget _croppedOriginalPreview(){
+  Widget _croppedOriginalPreviewSized(double frameW, double frameH, Offset frameOrigin){
     // Render immediately; avoid showing any placeholder during quick orientation toggles.
     // Frame dimensions are recomputed in _buildCropFrame on every build.
-    if (_uiOriginal == null || _frameWidth==0 || _frameHeight==0) {
+    if (_uiOriginal == null || frameW==0 || frameH==0) {
       return const SizedBox.shrink();
     }
     // Draw the same transformed image, clipped to the frame area for smooth, GPU-accelerated preview
@@ -955,15 +1026,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               border: Border.all(color: Colors.white, width: whiteBorder),
             ),
             child: SizedBox(
-              width: _frameWidth,
-              height: _frameHeight,
+              width: frameW,
+              height: frameH,
               child: CustomPaint(
                 painter: _CroppedPreviewPainter(
                   image: _uiOriginal!,
                   scale: _viewScale,
                   rotation: _viewRotation,
                   translation: _viewTranslation,
-                  frameOrigin: _frameOrigin,
+                  frameOrigin: frameOrigin,
                 ),
               ),
             ),
