@@ -113,7 +113,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Timer? _connectionStatusTimer;
   String _connectionStatusText = 'Not connected';
   // Stay on the second screen even if temporarily disconnected (for background auto-reconnect)
-  bool _stayOnSecondScreen = false;
+  // First window removed; app always starts on connected UI.
   // Header/logo asset (FramePic/eframe.*) to show in the AppBar
   String? _headerAsset;
   double? _headerAspectRatio; // width / height for dynamic AppBar height
@@ -147,7 +147,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   final List<_LibraryEntry> _library = [];
   int? _selectedLibraryIndex; // selected index in library view
   bool _showLibrary = false; // toggle to show library screen when connected
-  bool _showDeviceList = false; // show device list while connected
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -203,8 +202,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<BluetoothConnectionState>? _connStateSub;
   DateTime _lastReconnectAttempt = DateTime.fromMillisecondsSinceEpoch(0);
-  // Top promo images from assets/FramePic
-  List<String> _topPromoAssets = const [];
+  // First window removed: no promo strip state
   @override
   void initState(){
     super.initState();
@@ -220,8 +218,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     });
     // Prompt user to turn on Bluetooth at app start if needed
     WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
-    // Discover top promo images under FramePic/
-    _loadTopPromoAssets();
   // Load header/logo asset named eframe in FramePic/ or FramePics/
   _loadHeaderAsset();
     // Periodically update connection status text every second
@@ -246,36 +242,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     });
   }
 
-  Future<void> _loadTopPromoAssets() async {
-    try{
-      final manifestJson = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> manifestMap = json.decode(manifestJson);
-      // Collect images from both FramePic/ and FramePics/
-      final all = manifestMap.keys.where((k)=>
-        (k.startsWith('FramePic/') || k.startsWith('FramePics/')) &&
-        (k.toLowerCase().endsWith('.png') || k.toLowerCase().endsWith('.jpg') || k.toLowerCase().endsWith('.jpeg'))
-      ).toList();
-      // Exclude the header/logo 'eframe' from promo strip
-      final filtered = all.where((k){
-        final base = k.split('/').last.toLowerCase();
-        final noExt = base.contains('.') ? base.substring(0, base.lastIndexOf('.')) : base;
-        return noExt != 'eframe';
-      }).toList();
-      // Prefer images with 'finger' (e.g., frameFinger.png) first
-      filtered.sort((a,b){
-        int pri(String s){
-          final base = s.split('/').last.toLowerCase();
-          return base.contains('finger') ? 0 : 1;
-        }
-        final pa = pri(a); final pb = pri(b);
-        if(pa!=pb) return pa - pb;
-        return a.compareTo(b);
-      });
-      // Take up to two
-      final list = filtered.take(2).toList();
-      if(mounted){ setState(()=> _topPromoAssets = list); }
-    }catch(_){ /* ignore */ }
-  }
+  // First window removed: no promo strip loader
 
   Future<void> _loadHeaderAsset() async {
     try{
@@ -480,9 +447,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }
     if(_showLibrary){
       return _buildLibraryView();
-    }
-    if(_showDeviceList){
-      return _buildDisconnected();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1627,8 +1591,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _connectedDevice = device;
         _rxCharacteristic = rxChar;
         _isConnecting = false;
-  _showDeviceList = false;
-        _stayOnSecondScreen = true; // remain on second screen going forward
+  // Remain on the connected UI; first window was removed
       });
       // Listen for future connection state changes and auto-reconnect
       await _connStateSub?.cancel();
@@ -1638,8 +1601,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             setState((){
               _connectedDevice = null;
               _rxCharacteristic = null;
-              // If we are staying on second screen, leave _showDeviceList=false so UI remains
-              if(!_stayOnSecondScreen){ _showDeviceList = true; }
+              // Keep showing the second screen UI; auto-reconnect runs in background
             });
             _updateStatus('Device disconnected. Reconnecting...');
           }
@@ -1665,7 +1627,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       setState(() {
         _connectedDevice = null;
         _rxCharacteristic = null;
-  _showDeviceList = true;
       });
       _updateStatus("Disconnected");
     } catch (e) {
@@ -1873,87 +1834,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             )
           : null,
     ),
-    body: Padding(padding: const EdgeInsets.all(12), child: (((_connectedDevice==null) && !_stayOnSecondScreen) || _showDeviceList) ? _buildDisconnected() : _buildConnected()),
+    body: Padding(padding: const EdgeInsets.all(12), child: _buildConnected()),
   );
 
-  Widget _buildDisconnected(){
-    // Auto-start scanning while the first window is visible
-    if(!_isScanning && !_isConnecting && _connectedDevice==null){
-      // Fire-and-forget; UI will update from scan stream
-      _scanForDevices();
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-  if(_topPromoAssets.isNotEmpty) ...[
-    SizedBox(
-      height: 200, // give more area to avoid cropping
-      child: Row(children:[
-        for(final p in _topPromoAssets)
-          Expanded(child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal:6),
-            child: Container(
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), color: Colors.grey.shade200),
-              clipBehavior: Clip.antiAlias,
-              alignment: Alignment.center,
-              child: Image.asset(p, fit: BoxFit.contain), // show entire image without cropping
-            ),
-          )),
-      ]),
-    ),
-    const SizedBox(height:8),
-  ],
-  const Text('Please touch the corner of Frame', style: TextStyle(fontSize:12,fontStyle: FontStyle.italic)),
-  const SizedBox(height:8),
-        // Connect button hidden; auto-scan/auto-connect runs automatically
-        const SizedBox.shrink(),
-        const SizedBox(height:6),
-        ElevatedButton.icon(
-          onPressed: _exitApp,
-          icon: const Icon(Icons.exit_to_app),
-          label: const Text('Exit'),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.black87, foregroundColor: Colors.white),
-        ),
-        if(_connectedDevice!=null) ...[
-          const SizedBox(height:6),
-          ElevatedButton.icon(
-            onPressed: _disconnectDevice,
-            icon: const Icon(Icons.bluetooth_disabled),
-            label: const Text('Disconnect'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-          ),
-        ],
-        const SizedBox(height:8),
-        Expanded(
-          child: (!_devicesList.any((d)=> d.advName.isNotEmpty))
-              ? Center(
-                  child: Text(
-                    _isScanning ? 'Scanning for devices...' : 'No devices found',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                )
-              : SingleChildScrollView(
-                  child: Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Text(
-                        _devicesList
-                            .where((d) => d.advName.isNotEmpty)
-                            .map((d) => d.advName)
-                            .toSet()
-                            .join('\n'),
-                        style: const TextStyle(fontSize: 12, height: 1.3),
-                      ),
-                    ),
-                  ),
-                ),
-        ),
-        const SizedBox(height:8),
-        _statusCard(),
-      ],
-    );
-  }
+  // First window removed; no _buildDisconnected() screen.
 
   Widget _statusCard() => Container(
     padding: const EdgeInsets.all(8),
