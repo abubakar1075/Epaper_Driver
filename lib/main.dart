@@ -430,7 +430,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         borderRadius: BorderRadius.circular(8),
       ),
   child: Row(children:[
-  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){ setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; _processedImage=null; _processedBytes=null; _processedPngBytes=null; }); }),
+  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){
+    setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; _processedImage=null; _processedBytes=null; _processedPngBytes=null; });
+  }),
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
         const SizedBox(width:6),
@@ -604,8 +606,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   // Build a preview representing only the area inside the back square (frame)
   Widget _croppedOriginalPreview(){
+    // Render immediately; avoid showing any placeholder during quick orientation toggles.
+    // Frame dimensions are recomputed in _buildCropFrame on every build.
     if (_uiOriginal == null || _frameWidth==0 || _frameHeight==0) {
-      return const Center(child: Text('No preview'));
+      return const SizedBox.shrink();
     }
     // Draw the same transformed image, clipped to the frame area for smooth, GPU-accelerated preview
     return FittedBox(
