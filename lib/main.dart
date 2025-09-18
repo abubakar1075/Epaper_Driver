@@ -1602,11 +1602,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       color: Colors.grey[200],
       borderRadius: BorderRadius.circular(8),
     ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text('Status', style: Theme.of(context).textTheme.titleMedium),
-        Text(_statusMessage),
+        Text(
+          'Status: ',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        Expanded(
+          child: Text(
+            _statusMessage,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     ),
   );
