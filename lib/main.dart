@@ -425,7 +425,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _connectedTopBar(),
         const SizedBox(height: 8),
         if (_originalImage != null) _buildCropFrame() else Expanded(
-          child: Center(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: _isSending ? 6 : 0),
+            child: Center(
             child: _processedPngBytes != null
                 ? (_verticalFrame
                     ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
@@ -435,18 +437,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                         ? RotatedBox(quarterTurns: 3, child: Image.memory(_library.first.pngBytes, fit: BoxFit.contain))
                         : Image.memory(_library.first.pngBytes, fit: BoxFit.contain))
                     : Text('Pick an image', style: Theme.of(context).textTheme.titleMedium)),
+            ),
           ),
         ),
-        const SizedBox(height: 6),
+  const SizedBox(height: 6),
         _buildActionBar(),
-        const SizedBox(height: 6),
-        _buildPreviewAndSliders(),
+  SizedBox(height: _isSending ? 2 : 6),
+        // Reduce available height slightly during sending to avoid overflow of progress bar
+        Padding(
+          padding: EdgeInsets.only(bottom: _isSending ? 10 : 0),
+          child: _buildPreviewAndSliders(),
+        ),
         if (_isSending) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           LinearProgressIndicator(value: _transferProgress/100),
           Text('${_transferProgress}%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
         ],
-        const SizedBox(height: 4),
+        SizedBox(height: _isSending ? 0 : 4),
         _statusCard(),
       ],
     );
@@ -818,7 +825,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Preview: show only "In Frame" (left); processing happens on Send
   Widget _buildPreviewAndSliders(){
     return SizedBox(
-      height: 190,
+      height: _isSending ? 170 : 190,
       child: Row(children:[
   if (_originalImage != null) Expanded(child: _previewPanel('In Frame', _croppedOriginalPreview())),
       ]),
@@ -1827,7 +1834,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   Widget _buildCropFrame() {
     return SizedBox(
-      height: 320, // workspace height
+      height: _isSending ? 310 : 320, // slightly smaller during sending to avoid overflow
       child: LayoutBuilder(builder: (context, constraints) {
         final workspaceW = constraints.maxWidth;
         final workspaceH = constraints.maxHeight;
