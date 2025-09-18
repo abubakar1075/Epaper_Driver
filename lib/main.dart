@@ -169,6 +169,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
     textStyle: const TextStyle(fontSize:11, fontWeight: FontWeight.w500),
   );
+  // Auto-send support: when user taps Send while disconnected and the popup is visible,
+  // automatically dismiss it and send once the device connects.
+  BuildContext? _activeDialogContext;
 
   Widget _smallBtn(String label, VoidCallback? onPressed, {IconData? icon}){
     if(icon!=null){
@@ -287,6 +290,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _aiPromptController.dispose();
     _disconnectDevice();
     super.dispose();
+  }
+
+  void _dismissActiveDialog(){
+    try{
+      final ctx = _activeDialogContext;
+      if(ctx!=null){
+        Navigator.of(ctx, rootNavigator: true).pop();
+      }
+    }catch(_){ } finally {
+      _activeDialogContext = null;
+    }
   }
 
   // Ensure Bluetooth is on; if not, show a simple prompt to turn it on.
@@ -748,6 +762,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       await showDialog(
         context: context,
         builder: (ctx){
+          _activeDialogContext = ctx;
           return AlertDialog(
             title: const Text('Please Touch the frame'),
             content: fingerAsset==null
@@ -770,8 +785,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           );
         }
       );
+      // Dialog closed; clear handle if still set
+      _activeDialogContext = null;
       return;
     }
+    // Connected path: ensure we don't mistakenly treat as pending
+    _activeDialogContext = null;
     // If we already have processed bytes, send directly
     if(_processedBytes!=null){ await _sendImageData(); return; }
     // If we have an original image selected, process then send
@@ -1593,6 +1612,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _isConnecting = false;
   // Remain on the connected UI; first window was removed
       });
+      // If the popup was visible (user tapped Send while disconnected), close it and send now
+      if(_activeDialogContext != null){
+        _dismissActiveDialog();
+        await Future.delayed(const Duration(milliseconds: 100));
+        // Trigger send; it will process if needed
+        unawaited(_sendOrProcessThenSend());
+      }
       // Listen for future connection state changes and auto-reconnect
       await _connStateSub?.cancel();
       _connStateSub = device.connectionState.listen((s) async {
@@ -1605,6 +1631,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             });
             _updateStatus('Device disconnected. Reconnecting...');
           }
+          // Keep pending send true so it resumes on reconnect
           if(!_isScanning && !_isConnecting){ _scanForDevices(); }
         }
       });
