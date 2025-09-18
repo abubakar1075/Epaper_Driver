@@ -471,21 +471,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   child: Row(children:[
   _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){
     setState((){ _verticalFrame = !_verticalFrame; _viewInitialized=false; _processedImage=null; _processedBytes=null; _processedPngBytes=null; });
-  }),
+  }, icon: Icons.screen_rotation),
         const SizedBox(width:6),
-  _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
+  _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
         const SizedBox(width:6),
   _smallBtn(
     _isSending ? 'Sending' : 'Send',
     (_isSending || _connectedDevice==null || _rxCharacteristic==null) ? null : _sendOrProcessThenSend,
-  ),
+  icon: Icons.send),
     const SizedBox(width:6),
     _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
-  const Spacer(),
-        IconButton(
-          tooltip: 'Reset View',
-            onPressed: _originalImage==null ? null : _resetView,
-            icon: const Icon(Icons.center_focus_strong, size:20)),
       ]),
     );
   }
@@ -497,7 +492,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       children: [
         Row(children:[
           // Generate first, with green color
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: _aiIsGenerating ? null : _generateAiImage,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green.shade600,
@@ -505,17 +500,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
-            child: Text(_aiIsGenerating ? 'Generating...' : 'Generate'),
+            icon: const Icon(Icons.auto_awesome, size: 18),
+            label: Text(_aiIsGenerating ? 'Generating...' : 'Generate'),
           ),
           const SizedBox(width: 8),
           // Orientation toggle next
-          _smallBtn(_aiPortrait ? 'Portrait' : 'Landscape', _aiIsGenerating ? null : (){ setState(()=> _aiPortrait = !_aiPortrait); }),
+          _smallBtn(_aiPortrait ? 'Portrait' : 'Landscape', _aiIsGenerating ? null : (){ setState(()=> _aiPortrait = !_aiPortrait); }, icon: Icons.screen_rotation),
           const SizedBox(width: 8),
           // Use in Editor next
-          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage),
+          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage, icon: Icons.open_in_new),
           const Spacer(),
           // Back last, aligned right
-          _smallBtn('Back', (){ setState((){ _showAi = false; }); }),
+          _smallBtn('Back', (){ setState((){ _showAi = false; }); }, icon: Icons.arrow_back),
         ]),
         const SizedBox(height: 8),
         TextField(
@@ -772,11 +768,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(children:[
-          _smallBtn('Back', ()=> setState(()=> _showLibrary=false)),
+          _smallBtn('Back', ()=> setState(()=> _showLibrary=false), icon: Icons.arrow_back),
           const SizedBox(width:6),
-          _smallBtn(_isSending? 'Sending' : 'Send', (_selectedLibraryIndex==null || _isSending) ? null : _sendSelectedLibraryItem),
+          _smallBtn(_isSending? 'Sending' : 'Send', (_selectedLibraryIndex==null || _isSending) ? null : _sendSelectedLibraryItem, icon: Icons.send),
           const SizedBox(width:6),
-            _smallBtn('Delete', (_selectedLibraryIndex==null || _isSending) ? null : _deleteSelectedLibraryItem),
+            _smallBtn('Delete', (_selectedLibraryIndex==null || _isSending) ? null : _deleteSelectedLibraryItem, icon: Icons.delete),
           const SizedBox(width:8),
           Expanded(child: Text('Library (${_library.length})', style: const TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
         ]),
@@ -918,8 +914,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Reusable titled preview container (adds spinner for processing state)
   Widget _previewPanel(String title, Widget child){
     return Column(children:[
-      Row(mainAxisAlignment: MainAxisAlignment.center, children:[
-        Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
+      Row(children:[
+        const SizedBox(width: 32), // balance space on the left
+        Expanded(
+          child: Center(
+            child: Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
+          ),
+        ),
+        // Refresh button on the right border to reset view
+        IconButton(
+          onPressed: _resetView,
+          tooltip: 'Reset View',
+          icon: const Icon(Icons.refresh, size: 18),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
       ]),
       const SizedBox(height:4),
       Expanded(child: ClipRRect(
