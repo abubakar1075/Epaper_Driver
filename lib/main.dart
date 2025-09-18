@@ -442,8 +442,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           ),
         ),
   const SizedBox(height: 6),
-        _buildActionBar(),
-  SizedBox(height: _isSending ? 2 : 6),
+    _buildActionBar(),
+    const SizedBox(height: 0),
         // Reduce available height slightly during sending to avoid overflow of progress bar
         Padding(
           padding: EdgeInsets.only(bottom: _isSending ? 10 : 0),
@@ -463,7 +463,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Main action bar (orientation toggle, add to library, process, send, reset)
   Widget _buildActionBar(){
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
+      padding: const EdgeInsets.symmetric(horizontal:8, vertical:2),
       decoration: BoxDecoration(
         color: Colors.grey[200],
         borderRadius: BorderRadius.circular(8),
@@ -864,7 +864,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Preview: show only "In Frame" (left); processing happens on Send
   Widget _buildPreviewAndSliders(){
     return SizedBox(
-      height: _isSending ? 170 : 190,
+      height: _isSending ? 190 : 210,
       child: Row(children:[
   if (_originalImage != null) Expanded(child: _previewPanel('In Frame', _croppedOriginalPreview())),
       ]),
@@ -882,7 +882,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return FittedBox(
       fit: BoxFit.contain,
       child: Builder(builder: (context){
-        const double blackBorder = 10;
+        const double blackBorder = 12; // slightly thicker border
         const double whiteBorder = blackBorder * 2; // twice the black border
         return Container(
           decoration: BoxDecoration(
@@ -914,26 +914,42 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Reusable titled preview container (adds spinner for processing state)
   Widget _previewPanel(String title, Widget child){
     return Column(children:[
-      Row(children:[
-        const SizedBox(width: 32), // balance space on the left
-        Expanded(
-          child: Center(
-            child: Text(title, style: const TextStyle(fontSize:12,fontWeight: FontWeight.w600)),
-          ),
-        ),
-        // Refresh button on the right border to reset view
-        IconButton(
-          onPressed: _resetView,
-          tooltip: 'Reset View',
-          icon: const Icon(Icons.refresh, size: 18),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        ),
-      ]),
-      const SizedBox(height:4),
+      // Remove header row to eliminate vertical gap; overlay controls on the image instead
       Expanded(child: ClipRRect(
         borderRadius: BorderRadius.circular(6),
-        child: Container(color: Colors.white, child: child),
+        child: Container(
+          color: Colors.white,
+          child: Stack(
+            children: [
+              Positioned.fill(child: child),
+              // Small title badge top-left
+              Positioned(
+                top: 4,
+                left: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+              ),
+              // Refresh button top-right
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IconButton(
+                  onPressed: _resetView,
+                  tooltip: 'Reset View',
+                  icon: const Icon(Icons.refresh, size: 18),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
+              ),
+            ],
+          ),
+        ),
       )),
     ]);
   }
@@ -1886,7 +1902,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   Widget _buildCropFrame() {
     return SizedBox(
-      height: _isSending ? 310 : 320, // slightly smaller during sending to avoid overflow
+      height: _isSending ? 290 : 300, // reduced heights to avoid bottom overflow
       child: LayoutBuilder(builder: (context, constraints) {
         final workspaceW = constraints.maxWidth;
         final workspaceH = constraints.maxHeight;
