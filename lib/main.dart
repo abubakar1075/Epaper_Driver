@@ -644,7 +644,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final prompt = _aiPromptController.text.trim();
     try{
       // Attempt free text-to-image via Pollinations (no API key) with multiple URL variants.
-      const String aiPrefix = 'Paiting colourful (black,white,red,yellow,blue,green) ';
+      const String aiPrefix = 'colourful painiting use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6 for';
       final safePrompt = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
       final encoded = Uri.encodeComponent(safePrompt);
       final seed = (safePrompt.hashCode & 0x7fffffff).toString();
