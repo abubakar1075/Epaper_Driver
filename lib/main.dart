@@ -158,6 +158,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // =============================================================
   // UI HELPERS
   // =============================================================
+  // Simple on-device "AI Images" generator (prompt -> synthesized PNG)
+  bool _showAi = false;
+  final TextEditingController _aiPromptController = TextEditingController(text: 'eframe art');
+  bool _aiIsGenerating = false;
+  Uint8List? _aiPngBytes;
+  String? _aiError;
   final ButtonStyle _smallBtnStyle = ElevatedButton.styleFrom(
     minimumSize: const Size(60,34),
     padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
@@ -310,6 +316,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _scanSub?.cancel(); _scanSub = null;
     _connStateSub?.cancel(); _connStateSub = null;
     _connectionStatusTimer?.cancel();
+    _aiPromptController.dispose();
     _disconnectDevice();
     super.dispose();
   }
@@ -387,11 +394,25 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             ),
           ),
         ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: (){ setState((){ _showAi = true; _aiError = null; }); },
+              icon: const Icon(Icons.auto_awesome, size: 18),
+              label: const Text('AI image generator', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ),
       ]),
     );
   }
 
   Widget _buildConnected(){
+    if(_showAi){
+      return _buildAiView();
+    }
     if(_showLibrary){
       return _buildLibraryView();
     }
@@ -456,6 +477,182 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             icon: const Icon(Icons.center_focus_strong, size:20)),
       ]),
     );
+  }
+
+  // ========================= AI IMAGES VIEW =========================
+  Widget _buildAiView(){
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children:[
+          _smallBtn('Back', (){ setState((){ _showAi = false; }); }),
+          const SizedBox(width: 6),
+          _smallBtn(_aiIsGenerating ? 'Generating...' : 'Generate', _aiIsGenerating ? null : _generateAiImage),
+          const SizedBox(width: 6),
+          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage),
+          const SizedBox(width: 8),
+          Expanded(child: Text('AI image generator', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _aiPromptController,
+          decoration: const InputDecoration(
+            labelText: 'Describe an image',
+            hintText: 'e.g., A serene mountain with sunrise',
+            border: OutlineInputBorder(),
+          ),
+          minLines: 1,
+          maxLines: 3,
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Uses a free online generator and needs internet. Generation may take a few seconds.',
+          style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black54),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Center(
+              child: _aiIsGenerating
+                ? const CircularProgressIndicator()
+                : (_aiPngBytes==null
+                    ? Text(_aiError ?? 'Enter a prompt and tap Generate', style: Theme.of(context).textTheme.titleMedium)
+                    : Image.memory(_aiPngBytes!, fit: BoxFit.contain)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        _statusCard(),
+      ],
+    );
+  }
+
+  Future<void> _generateAiImage() async {
+    setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
+    final prompt = _aiPromptController.text.trim();
+    try{
+      // Attempt free text-to-image via Pollinations (no API key) with multiple URL variants.
+      final safePrompt = prompt.isEmpty ? 'abstract colorful art' : prompt;
+      final encoded = Uri.encodeComponent(safePrompt);
+      final seed = (safePrompt.hashCode & 0x7fffffff).toString();
+      final candidates = <Uri>[
+        Uri.parse('https://image.pollinations.ai/prompt/$encoded?width=$IMAGE_WIDTH&height=$IMAGE_HEIGHT&seed=$seed&nologo=true'),
+        Uri.parse('https://image.pollinations.ai/prompt/$encoded?size=${IMAGE_WIDTH}x${IMAGE_HEIGHT}&seed=$seed&nologo=true'),
+      ];
+      for(final url in candidates){
+        final ok = await _tryFetchImage(url).timeout(const Duration(seconds: 20), onTimeout: () => false);
+        if(ok){ return; }
+      }
+      // If all remote attempts fail, fall back to local synthesis
+      await _generateAiImageLocally(safePrompt);
+    } catch (e){
+      // Fallback to local synthesis on any error
+      await _generateAiImageLocally(prompt.isEmpty ? 'abstract colorful art' : prompt);
+    } finally {
+      if(mounted){ setState(()=> _aiIsGenerating = false); }
+    }
+  }
+
+  Future<bool> _tryFetchImage(Uri url) async {
+    HttpClient? client;
+    try{
+      client = HttpClient()
+        ..userAgent = 'eframe-app'
+        ..badCertificateCallback = (cert, host, port) => false;
+      final req = await client.getUrl(url);
+      req.followRedirects = true;
+      req.headers.set(HttpHeaders.acceptHeader, 'image/*');
+      final resp = await req.close();
+      if (resp.statusCode != 200) { return false; }
+      // Collect bytes
+      final bytesBuilder = BytesBuilder();
+      await for (final chunk in resp) { bytesBuilder.add(chunk); }
+      final bytes = bytesBuilder.takeBytes();
+      if (bytes.isEmpty) { return false; }
+      // Try decode to verify it's an image
+      try{
+        final codec = await ui.instantiateImageCodec(bytes);
+        final frame = await codec.getNextFrame();
+        frame.image.dispose();
+      }catch(_){ return false; }
+      if(mounted){ setState(()=> _aiPngBytes = bytes); }
+      _updateStatus('AI image generated');
+      return true;
+    } catch(_){
+      return false;
+    } finally {
+      try{ client?.close(force: true); }catch(_){ }
+    }
+  }
+
+  Future<void> _generateAiImageLocally(String prompt) async {
+    try{
+      const int w = IMAGE_WIDTH;
+      const int h = IMAGE_HEIGHT;
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder, Rect.fromLTWH(0,0,w.toDouble(),h.toDouble()));
+      final hash = prompt.hashCode;
+      Color c1 = HSVColor.fromAHSV(1.0, (hash & 0xFF).toDouble() % 360, 0.5, 0.95).toColor();
+      Color c2 = HSVColor.fromAHSV(1.0, ((hash>>8) & 0xFF).toDouble() % 360, 0.7, 0.7).toColor();
+      final paint = Paint()
+        ..shader = ui.Gradient.linear(const Offset(0,0), Offset(w.toDouble(), h.toDouble()), [c1, c2]);
+      canvas.drawRect(Rect.fromLTWH(0,0,w.toDouble(),h.toDouble()), paint);
+      final words = prompt.isEmpty ? ['eframe','art'] : prompt.split(RegExp(r'\s+')).take(5).toList();
+      final rng = math.Random(hash);
+      for(int i=0;i<words.length;i++){
+        final px = rng.nextDouble()*w;
+        final py = rng.nextDouble()*h;
+        final sz = 30.0 + rng.nextDouble()*120.0;
+        final p = Paint()..color = HSVColor.fromAHSV(0.8, (rng.nextInt(360)).toDouble(), 0.6, 0.9).toColor();
+        canvas.drawCircle(Offset(px,py), sz, p);
+      }
+      final textPainter = TextPainter(
+        text: TextSpan(text: prompt.isEmpty ? 'eframe' : prompt, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+        maxLines: 2,
+        ellipsis: '…',
+      );
+      textPainter.layout(maxWidth: w*0.9);
+      textPainter.paint(canvas, Offset((w - textPainter.width)/2, (h - textPainter.height)/2));
+      final picture = recorder.endRecording();
+      final uiImage = await picture.toImage(w, h);
+      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
+      final png = byteData!.buffer.asUint8List();
+      if(mounted){ setState(()=> _aiPngBytes = png); }
+      _updateStatus('Generated locally');
+    } catch (e) {
+      if(mounted){ setState(()=> _aiError = 'Failed to generate: $e'); }
+      _updateStatus('AI generation error');
+    }
+  }
+
+  Future<void> _useAiImage() async {
+    if(_aiPngBytes==null) return;
+    try{
+      // Write PNG to a temp file and use as original image to allow full editing pipeline
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/ai_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(_aiPngBytes!);
+      setState((){
+        _originalImage = file;
+        _processedImage = null;
+        _processedBytes = null;
+        _processedPngBytes = null;
+        _uiOriginal = null;
+        _viewInitialized = false;
+        _showAi = false;
+      });
+      await _loadUiImage();
+      _updateStatus('AI image loaded into editor');
+    }catch(_){
+      _updateStatus('Failed to load AI image');
+    }
   }
 
   // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
