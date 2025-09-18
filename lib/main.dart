@@ -475,7 +475,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary),
         const SizedBox(width:6),
-  _smallBtn(_isSending ? 'Sending' : 'Send', (_originalImage==null || _isSending) ? null : _sendOrProcessThenSend),
+  _smallBtn(
+    _isSending ? 'Sending' : 'Send',
+    (_isSending || _connectedDevice==null || _rxCharacteristic==null) ? null : _sendOrProcessThenSend,
+  ),
     const SizedBox(width:6),
     _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
   const Spacer(),
@@ -719,14 +722,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       );
       return;
     }
-    if(_processedBytes==null){
+    // If we already have processed bytes, send directly
+    if(_processedBytes!=null){ await _sendImageData(); return; }
+    // If we have an original image selected, process then send
+    if(_originalImage!=null){
       await _processImage();
+      if(_processedBytes!=null){ await _sendImageData(); return; }
     }
-    if(_processedBytes!=null){
+    // If we have a processed PNG preview, derive raw codes and send
+    if(_processedPngBytes!=null){
+      final decoded = img.decodeImage(_processedPngBytes!);
+      if(decoded!=null){
+        final q = _quantizeTo6ColorAndCreateRawBytes(decoded);
+        setState((){ _processedImage = q.item1; _processedBytes = Uint8List.fromList(q.item2); });
+        await _sendImageData();
+        return;
+      }
+    }
+    // As a last resort, use the first library item if available
+    if(_library.isNotEmpty){
+      final e = _library.first;
+      setState((){
+        _processedImage = e.image.clone();
+        _processedBytes = Uint8List.fromList(e.rawCodes);
+        _processedPngBytes = e.pngBytes;
+        _verticalFrame = e.wasVertical;
+        _viewInitialized = false;
+      });
       await _sendImageData();
-    } else {
-      _updateStatus('Unable to process image before sending');
+      return;
     }
+    _updateStatus('No image to send. Pick, generate, or use Library.');
   }
 
   // Grid of saved processed images (tap to select, then Send / Delete)
