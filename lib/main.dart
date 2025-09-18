@@ -537,7 +537,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final prompt = _aiPromptController.text.trim();
     try{
       // Attempt free text-to-image via Pollinations (no API key) with multiple URL variants.
-      final safePrompt = prompt.isEmpty ? 'abstract colorful art' : prompt;
+      const String aiPrefix = 'Paiting colourful (black,white,red,yellow,blue,green) ';
+      final safePrompt = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
       final encoded = Uri.encodeComponent(safePrompt);
       final seed = (safePrompt.hashCode & 0x7fffffff).toString();
       final candidates = <Uri>[
@@ -552,7 +553,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       await _generateAiImageLocally(safePrompt);
     } catch (e){
       // Fallback to local synthesis on any error
-      await _generateAiImageLocally(prompt.isEmpty ? 'abstract colorful art' : prompt);
+      const String aiPrefix = 'Paiting colourful (black,white,red,yellow,blue,green) ';
+      final fallback = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
+      await _generateAiImageLocally(fallback);
     } finally {
       if(mounted){ setState(()=> _aiIsGenerating = false); }
     }
@@ -592,6 +595,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   Future<void> _generateAiImageLocally(String prompt) async {
     try{
+      // Ensure the local generator also reflects the requested style prefix if not already present.
+      const String aiPrefix = 'Paiting colourful (black,white,red,yellow,blue,green) ';
+      if(!prompt.startsWith(aiPrefix)){
+        prompt = (aiPrefix + prompt).trim();
+      }
       const int w = IMAGE_WIDTH;
       const int h = IMAGE_HEIGHT;
       final recorder = ui.PictureRecorder();
