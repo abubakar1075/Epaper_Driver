@@ -496,15 +496,26 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(children:[
-          _smallBtn('Back', (){ setState((){ _showAi = false; }); }),
-          const SizedBox(width: 6),
-          _smallBtn(_aiIsGenerating ? 'Generating...' : 'Generate', _aiIsGenerating ? null : _generateAiImage),
-          const SizedBox(width: 6),
-          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage),
+          // Generate first, with green color
+          ElevatedButton(
+            onPressed: _aiIsGenerating ? null : _generateAiImage,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            child: Text(_aiIsGenerating ? 'Generating...' : 'Generate'),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: Text('AI image', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-          const SizedBox(width: 6),
+          // Orientation toggle next
           _smallBtn(_aiPortrait ? 'Portrait' : 'Landscape', _aiIsGenerating ? null : (){ setState(()=> _aiPortrait = !_aiPortrait); }),
+          const SizedBox(width: 8),
+          // Use in Editor next
+          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage),
+          const Spacer(),
+          // Back last, aligned right
+          _smallBtn('Back', (){ setState((){ _showAi = false; }); }),
         ]),
         const SizedBox(height: 8),
         TextField(
