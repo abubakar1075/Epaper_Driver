@@ -1148,7 +1148,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           final advName = result.advertisementData.advName;
           final devName = result.device.advName;
           final name = advName.isNotEmpty ? advName : devName;
-          if (!_devicesList.contains(result.device)) {
+          if (name.isNotEmpty && !_devicesList.contains(result.device)) {
             setState(() { _devicesList.add(result.device); });
           }
           // Immediate auto-connect to first device whose name starts with EPD
@@ -1555,25 +1555,29 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         ],
         const SizedBox(height:8),
         Expanded(
-          child: _devicesList.isEmpty ? Center(
-            child: Text(_isScanning ? 'Scanning for devices...' : 'No devices found'),
-          ) : ListView.builder(
-            itemCount: _devicesList.length,
-            itemBuilder: (c,i){
-              final d = _devicesList[i];
-              return Card(
-                child: ListTile(
-                  dense: true,
-                  title: Text(d.advName.isEmpty? '(unknown)': d.advName),
-                  subtitle: Text(d.remoteId.str),
-                  trailing: ElevatedButton(
-                    onPressed: _isConnecting ? null : ()=> _connectToDevice(d),
-                    child: Text(_isConnecting? '...' : 'Connect'),
+          child: (!_devicesList.any((d)=> d.advName.isNotEmpty))
+              ? Center(
+                  child: Text(
+                    _isScanning ? 'Scanning for devices...' : 'No devices found',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                )
+              : SingleChildScrollView(
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        _devicesList
+                            .where((d) => d.advName.isNotEmpty)
+                            .map((d) => d.advName)
+                            .toSet()
+                            .join('\n'),
+                        style: const TextStyle(fontSize: 12, height: 1.3),
+                      ),
+                    ),
                   ),
                 ),
-              );
-            },
-          ),
         ),
         const SizedBox(height:8),
         _statusCard(),
