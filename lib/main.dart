@@ -510,11 +510,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         borderRadius: BorderRadius.circular(8),
       ),
   child: Row(children:[
-  _smallBtn(_verticalFrame ? 'Portrait' : 'Landscape', _originalImage==null ? null : (){
-    setState((){ _verticalFrame = !_verticalFrame; _processedImage=null; _processedBytes=null; _processedPngBytes=null; });
-    // Recompute view immediately so preview updates without lag
-    _recomputeViewForCurrentFrame(context);
-  }, icon: Icons.screen_rotation),
+  _smallBtn(
+    _verticalFrame ? 'Portrait' : 'Landscape',
+    (){
+      setState((){
+        _verticalFrame = !_verticalFrame;
+        _processedImage = null;
+        _processedBytes = null;
+        _processedPngBytes = null;
+      });
+      // Recompute view immediately so preview updates without lag (no-op if no image yet)
+      _recomputeViewForCurrentFrame(context);
+    },
+    icon: Icons.screen_rotation,
+  ),
         const SizedBox(width:6),
   _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
         const SizedBox(width:6),
