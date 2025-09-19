@@ -319,7 +319,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       barrierDismissible: false,
       builder: (ctx){
         return AlertDialog(
-          title: const Text('Please Toch the corner of Frame and click On connect'),
+          title: const Text('Please Turn On bluetooth'),
           content: const SizedBox.shrink(),
           actions: [
             TextButton(
@@ -334,7 +334,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 if(mounted && _connectedDevice==null && !_isScanning){ _scanForDevices(); }
                 if (ctx.mounted) Navigator.of(ctx).pop();
               },
-              child: const Text('Connect'),
+              child: const Text('Turn On'),
             ),
           ],
         );
