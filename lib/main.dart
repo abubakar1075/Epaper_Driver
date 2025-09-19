@@ -114,7 +114,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   String _connectionStatusText = 'Not connected';
   // Stay on the second screen even if temporarily disconnected (for background auto-reconnect)
   // First window removed; app always starts on connected UI.
-  // Header/logo asset (FramePic/eframe.*) to show in the AppBar
+  // Header/logo asset (FramePic/CanvasBT.*) to show in the AppBar
   String? _headerAsset;
   double? _headerAspectRatio; // width / height for dynamic AppBar height
 
@@ -220,7 +220,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     });
     // Prompt user to turn on Bluetooth at app start if needed
     WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
-  // Load header/logo asset named eframe in FramePic/ or FramePics/
+  // Load header/logo asset named CanvasBT in FramePic/ or FramePics/
   _loadHeaderAsset();
     // Periodically update connection status text every second
     _connectionStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
@@ -255,8 +255,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       for(final k in keys){
         final base = k.split('/').last.toLowerCase();
         final nameNoExt = base.contains('.') ? base.substring(0, base.lastIndexOf('.')) : base;
-        if(nameNoExt == 'eframe'){ chosen = k; break; }
-        if(chosen==null && nameNoExt.contains('eframe')){ chosen = k; }
+  if(nameNoExt == 'canvasbt'){ chosen = k; break; }
+  if(chosen==null && nameNoExt.contains('canvasbt')){ chosen = k; }
       }
       if(mounted){
         setState(()=> _headerAsset = chosen);
@@ -680,7 +680,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     HttpClient? client;
     try{
       client = HttpClient()
-        ..userAgent = 'eframe-app'
+        ..userAgent = 'CanvasBT-app'
         ..badCertificateCallback = (cert, host, port) => false;
       final req = await client.getUrl(url);
       req.followRedirects = true;
@@ -726,7 +726,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       final paint = Paint()
         ..shader = ui.Gradient.linear(const Offset(0,0), Offset(w.toDouble(), h.toDouble()), [c1, c2]);
       canvas.drawRect(Rect.fromLTWH(0,0,w.toDouble(),h.toDouble()), paint);
-      final words = prompt.isEmpty ? ['eframe','art'] : prompt.split(RegExp(r'\s+')).take(5).toList();
+  final words = prompt.isEmpty ? ['CanvasBT','art'] : prompt.split(RegExp(r'\s+')).take(5).toList();
       final rng = math.Random(hash);
       for(int i=0;i<words.length;i++){
         final px = rng.nextDouble()*w;
@@ -736,7 +736,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         canvas.drawCircle(Offset(px,py), sz, p);
       }
       final textPainter = TextPainter(
-        text: TextSpan(text: prompt.isEmpty ? 'eframe' : prompt, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
+  text: TextSpan(text: prompt.isEmpty ? 'CanvasBT' : prompt, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
         textAlign: TextAlign.center,
         textDirection: TextDirection.ltr,
         maxLines: 2,
@@ -1567,7 +1567,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _isScanning = true;
   _autoConnectTried = false;
     });
-    _updateStatus("finding eframe");
+  _updateStatus("finding CanvasBT");
     
     try {
       // Check if Bluetooth is on
