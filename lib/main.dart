@@ -319,7 +319,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       barrierDismissible: false,
       builder: (ctx){
         return AlertDialog(
-          title: const Text('Please Turn On bluetooth'),
+          title: const Text('Please turn on Bluetooth'),
           content: const SizedBox.shrink(),
           actions: [
             TextButton(
@@ -466,19 +466,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       children: [
         _connectedTopBar(),
         const SizedBox(height: 8),
-        if (_originalImage != null) _buildCropFrame() else Expanded(
+    if (_originalImage != null) _buildCropFrame() else Expanded(
           child: Padding(
             padding: EdgeInsets.only(bottom: _isSending ? 6 : 0),
             child: Center(
-            child: _processedPngBytes != null
-                ? (_verticalFrame
-                    ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-                    : Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-                : (_library.isNotEmpty
-                    ? ( (_library.first.wasVertical)
-                        ? RotatedBox(quarterTurns: 3, child: Image.memory(_library.first.pngBytes, fit: BoxFit.contain))
-                        : Image.memory(_library.first.pngBytes, fit: BoxFit.contain))
-                    : Text('Pick an image', style: Theme.of(context).textTheme.titleMedium)),
+      child: _processedPngBytes != null
+        ? (_verticalFrame
+          ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+          : Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+        : Text(
+          'Please select an image from Gallery, Library or Generate an Image from AI',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleMedium,
+          ),
             ),
           ),
         ),
@@ -512,14 +512,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   child: Row(children:[
   _smallBtn(
     _verticalFrame ? 'Portrait' : 'Landscape',
-    (){
+    _originalImage == null ? null : (){
       setState((){
         _verticalFrame = !_verticalFrame;
         _processedImage = null;
         _processedBytes = null;
         _processedPngBytes = null;
       });
-      // Recompute view immediately so preview updates without lag (no-op if no image yet)
+      // Recompute view immediately so preview updates without lag
       _recomputeViewForCurrentFrame(context);
     },
     icon: Icons.screen_rotation,
@@ -805,6 +805,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // If not processed yet, process with current framing, then send
   Future<void> _sendOrProcessThenSend() async {
     if(_isSending) return;
+    // First, ensure Bluetooth adapter is ON; if OFF, show the same turn-on dialog used at launch
+    try{
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      if(adapterState != BluetoothAdapterState.on){
+        await _ensureBluetoothOnAtLaunch();
+      }
+    }catch(_){ /* ignore; continue to disconnected handling */ }
     // If disconnected, show message and exit
     if(_connectedDevice==null || _rxCharacteristic==null){
       if(!mounted) return;
