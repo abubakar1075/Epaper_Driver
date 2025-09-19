@@ -1022,16 +1022,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             decoration: BoxDecoration(
               border: Border.all(color: Colors.white, width: whiteBorder),
             ),
-            child: SizedBox(
-              width: frameW,
-              height: frameH,
-              child: CustomPaint(
-                painter: _CroppedPreviewPainter(
-                  image: _uiOriginal!,
-                  scale: _viewScale,
-                  rotation: _viewRotation,
-                  translation: _viewTranslation,
-                  frameOrigin: frameOrigin,
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey, width: 1),
+              ),
+              child: SizedBox(
+                width: frameW,
+                height: frameH,
+                child: CustomPaint(
+                  painter: _CroppedPreviewPainter(
+                    image: _uiOriginal!,
+                    scale: _viewScale,
+                    rotation: _viewRotation,
+                    translation: _viewTranslation,
+                    frameOrigin: frameOrigin,
+                  ),
                 ),
               ),
             ),
