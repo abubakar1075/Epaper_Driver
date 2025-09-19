@@ -420,7 +420,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             child: ElevatedButton.icon(
               onPressed: _pickImage,
               icon: const Icon(Icons.photo_library, size: 18),
-              label: const Text('Gallary', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              label: const Text('Gallery', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             ),
           ),
         ),
@@ -2349,7 +2349,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
 
   // Remove obsolete default portrait assets (lion / umbrella) that previously caused rotation issues.
   Future<void> _removeObsoletePortraitAssets() async {
-    final obsolete = _library.where((e)=> e.isDefaultAsset && (e.id.contains('lion') || e.id.contains('umbrella') || e.id.contains('umberalla'))).toList();
+  final obsolete = _library.where((e)=> e.isDefaultAsset && (e.id.contains('lion') || e.id.contains('umbrella'))).toList();
     if(obsolete.isEmpty) return;
     for(final e in obsolete){
       _library.remove(e);
