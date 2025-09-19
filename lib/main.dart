@@ -159,7 +159,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // =============================================================
   // Simple on-device "AI Images" generator (prompt -> synthesized PNG)
   bool _showAi = false;
-  final TextEditingController _aiPromptController = TextEditingController(text: 'eframe art');
+  final TextEditingController _aiPromptController = TextEditingController(text: 'Sunrise Waterfall Birds');
   bool _aiIsGenerating = false;
   Uint8List? _aiPngBytes;
   String? _aiError;
