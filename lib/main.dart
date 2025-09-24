@@ -76,6 +76,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   static const int ACK_PROGRESS = 0x02;
   static const int ACK_COMPLETE = 0x03;
   static const int ACK_ERROR = 0xFF;
+  static const int ACK_BATTERY = 0xB0; // Battery percentage notification
 
   // Hardware palette for 6-color e-paper display - exact RGB values from Python script
   static const List<ColorMap> hwPalette = [
@@ -109,6 +110,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   int _transferProgress = 0;
   double _transferSpeed = 0;
   bool _autoConnectTried = false; // ensure single auto-connect attempt per scan
+  int? _batteryPercent; // latest battery percent from device
   // Periodic connection status for bottom bar
   Timer? _connectionStatusTimer;
   String _connectionStatusText = 'Not connected';
@@ -466,37 +468,48 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       children: [
         _connectedTopBar(),
         const SizedBox(height: 8),
-    if (_originalImage != null) _buildCropFrame() else Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(bottom: _isSending ? 6 : 0),
-            child: Center(
-      child: _processedPngBytes != null
-        ? (_verticalFrame
-          ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-          : Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-        : Text(
-          'Please select an image from Gallery, Library or Generate an Image from AI',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.titleMedium,
-          ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_originalImage != null)
+                  _buildCropFrame()
+                else
+                  Padding(
+                    padding: EdgeInsets.only(bottom: _isSending ? 6 : 0),
+                    child: Center(
+                      child: _processedPngBytes != null
+                        ? (_verticalFrame
+                          ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+                          : Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+                        : Text(
+                            'Please select an image from Gallery, Library or Generate an Image from AI',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                _buildActionBar(),
+                const SizedBox(height: 10),
+                // Reduce available height slightly during sending to avoid overflow of progress bar
+                Padding(
+                  padding: EdgeInsets.only(bottom: _isSending ? 10 : 0),
+                  child: _buildPreviewAndSliders(),
+                ),
+                if (_isSending) ...[
+                  const SizedBox(height: 2),
+                  LinearProgressIndicator(value: _transferProgress/100),
+                  Text('${_transferProgress}%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
+                ],
+                SizedBox(height: _isSending ? 0 : 4),
+                _statusCard(),
+              ],
             ),
           ),
         ),
-  const SizedBox(height: 6),
-    _buildActionBar(),
-    const SizedBox(height: 10),
-        // Reduce available height slightly during sending to avoid overflow of progress bar
-        Padding(
-          padding: EdgeInsets.only(bottom: _isSending ? 10 : 0),
-          child: _buildPreviewAndSliders(),
-        ),
-        if (_isSending) ...[
-          const SizedBox(height: 2),
-          LinearProgressIndicator(value: _transferProgress/100),
-          Text('${_transferProgress}%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
-        ],
-        SizedBox(height: _isSending ? 0 : 4),
-        _statusCard(),
       ],
     );
   }
@@ -510,30 +523,31 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         borderRadius: BorderRadius.circular(8),
       ),
   child: Row(children:[
-  _smallBtn(
-    _verticalFrame ? 'Portrait' : 'Landscape',
-    _originalImage == null ? null : (){
-      setState((){
-        _verticalFrame = !_verticalFrame;
-        _processedImage = null;
-        _processedBytes = null;
-        _processedPngBytes = null;
-      });
-      // Recompute view immediately so preview updates without lag
-      _recomputeViewForCurrentFrame(context);
-    },
-    icon: Icons.screen_rotation,
-  ),
-        const SizedBox(width:6),
-  _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
-        const SizedBox(width:6),
-  _smallBtn(
-    'Send',
-    _sendOrProcessThenSend,
-  icon: Icons.send),
+    // Left side controls
+    Row(children:[
+      _smallBtn(
+        _verticalFrame ? 'Portrait' : 'Landscape',
+        _originalImage == null ? null : (){
+          setState((){
+            _verticalFrame = !_verticalFrame;
+            _processedImage = null;
+            _processedBytes = null;
+            _processedPngBytes = null;
+          });
+          // Recompute view immediately so preview updates without lag
+          _recomputeViewForCurrentFrame(context);
+        },
+        icon: Icons.screen_rotation,
+      ),
+      const SizedBox(width:6),
+      _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
+      const SizedBox(width:6),
+      _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send),
+    ]),
+    const Spacer(),
     const SizedBox(width:6),
     _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
-      ]),
+  ]),
     );
   }
 
@@ -1086,6 +1100,27 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                   child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                 ),
               ),
+              // Battery status bottom-left inside the "In Frame" panel (no separate bar)
+              if (title == 'In Frame' && _batteryPercent != null)
+                Positioned(
+                  left: 4,
+                  bottom: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.battery_full, color: Colors.white, size: 14),
+                        const SizedBox(width: 4),
+                        Text('${_batteryPercent}%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
               // Refresh button top-right
               Positioned(
                 top: 0,
@@ -1758,6 +1793,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     int ackType = data[0];
     
     switch (ackType) {
+      case ACK_BATTERY:
+        if (data.length >= 2) {
+          final int batt = data[1].clamp(0, 100);
+          setState((){ _batteryPercent = batt; });
+          _updateStatus("Battery = ${batt}%");
+        }
+        break;
       case ACK_SIZE_RECEIVED:
         _updateStatus("Size received by device");
         break;
@@ -2049,7 +2091,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                   translation: _viewTranslation,
                 ),
               ),
-              // Frame overlay
+              // Frame overlay (border only)
               Positioned(
                 left: _frameOrigin.dx,
                 top: _frameOrigin.dy,

@@ -11,6 +11,8 @@
 #define ACK_PROGRESS 0x02        // Progress update
 #define ACK_COMPLETE 0x03        // Transfer complete
 #define ACK_ERROR 0xFF           // Error acknowledgment
+// New: battery percentage notification
+#define ACK_BATTERY 0xB0         // Battery percentage notification (value in next byte)
 
 // BLE service and characteristic UUIDs
 extern const char* serviceUUID;
@@ -73,5 +75,6 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
 void displayImageFromSPIFFS();
 bool initSPIFFS();
 void requestMTUIncrease();
+// No periodic BLE tasks (battery sent once at start of image data)
 
 #endif // BLE_H
