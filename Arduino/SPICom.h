@@ -21,23 +21,43 @@
 //   GND  -> GND
 //   If panel needs a separate ENABLE pin, tie according to its datasheet.
 
-// Unconditional pin mapping for XIAO ESP32C3 (conditions removed as requested)
-/*#define PIN_EPD_RST   D0   // D0
-#define PIN_EPD_CS    D1   // D1
-#define PIN_EPD_BUSY  D2   // D2
-#define PIN_EPD_DC    D3   // D3
-#define EPD_SPI_SCK   D8  // D8 (SCK)
-#define EPD_SPI_MOSI  D10   // D10 (MOSI)
-#define EPD_SPI_MISO  -1  // not used
-*/
+// Board selection preprocessor directives
+// Uncomment ONE of these defines to select your board
+#define BOARD_ESP32E  // ESP32E board (default)
+//#define BOARD_FRAME   // Frame board
+//#define BOARD_C3      // C3 board
 
-#define PIN_EPD_RST   4   // D0
-#define PIN_EPD_CS    2   // D1
-#define PIN_EPD_BUSY  5   // D2
-#define PIN_EPD_DC    3   // D3
-#define EPD_SPI_SCK   12  // D8 (SCK)
-#define EPD_SPI_MOSI  11   // D10 (MOSI)
-#define EPD_SPI_MISO  -1  // not used
+#if defined(BOARD_FRAME)
+    // Frame board pin definitions
+    #define PIN_EPD_RST   4   // D0
+    #define PIN_EPD_CS    2   // D1
+    #define PIN_EPD_BUSY  5   // D2
+    #define PIN_EPD_DC    3   // D3
+    #define EPD_SPI_SCK   12  // D8 (SCK)
+    #define EPD_SPI_MOSI  11  // D10 (MOSI)
+    #define EPD_SPI_MISO  -1  // not used
+#elif defined(BOARD_C3)
+    // C3 board pin definitions
+    #define PIN_EPD_RST   D0  // D0
+    #define PIN_EPD_CS    D1  // D1
+    #define PIN_EPD_BUSY  D2  // D2
+    #define PIN_EPD_DC    D3  // D3
+    #define EPD_SPI_SCK   D8  // D8 (SCK)
+    #define EPD_SPI_MOSI  D10 // D10 (MOSI)
+    #define EPD_SPI_MISO  -1  // not used
+#else // BOARD_ESP32E (default)
+    // ESP32E board pin definitions
+    #define PIN_EPD_RST   2   // D0
+    #define PIN_EPD_CS    22  // D1
+    #define PIN_EPD_BUSY  13  // D2
+    #define PIN_EPD_DC    21  // D3
+    #define EPD_SPI_SCK   18  // D8 (SCK)
+    #define EPD_SPI_MOSI  23  // D10 (MOSI)
+    #define EPD_SPI_MISO  -1  // not used
+#endif
+
+
+
 
 #define isEPD_W21_BUSY digitalRead(PIN_EPD_BUSY)
 #define EPD_W21_RST_0 digitalWrite(PIN_EPD_RST,LOW)
