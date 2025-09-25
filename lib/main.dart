@@ -211,7 +211,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   void initState(){
     super.initState();
     _checkPermissions();
-    _initPersistentLibrary();
+    // After first frame, initialize Library then load first image (if any)
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initPersistentLibrary();
+      if(mounted){ _tryLoadFirstLibraryImageOnStartup(); }
+    });
     // Track Bluetooth adapter state
     _btStateSub = FlutterBluePlus.adapterState.listen((s){
       final isOn = (s == BluetoothAdapterState.on);
@@ -243,6 +247,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           _scanForDevices();
         }
       }
+    });
+  }
+
+  // On startup, if editor has no image yet, load the first entry from Library to display on first window
+  void _tryLoadFirstLibraryImageOnStartup(){
+    if(_originalImage!=null || _processedPngBytes!=null) return; // something already selected
+    if(_library.isEmpty) return;
+    final e = _library.first;
+    setState((){
+      _originalImage = null;
+      _uiOriginal = null;
+      _processedImage = e.image.clone();
+      _processedBytes = Uint8List.fromList(e.rawCodes);
+      _processedPngBytes = e.pngBytes;
+      _verticalFrame = e.wasVertical; // match orientation same as selected from Library
+      _viewInitialized = false;
     });
   }
 
@@ -479,16 +499,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 else
                   Padding(
                     padding: EdgeInsets.only(bottom: _isSending ? 6 : 0),
-                    child: Center(
-                      child: _processedPngBytes != null
-                        ? (_verticalFrame
-                          ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-                          : Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-                        : Text(
-                            'Please select an image from Gallery, Library or Generate an Image from AI',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
+                    child: SizedBox(
+                      height: _isSending ? 290 : 300, // match crop frame height so it fits the existing window
+                      child: Center(
+                        child: _processedPngBytes != null
+                          ? FittedBox(
+                              fit: BoxFit.contain,
+                              child: _verticalFrame
+                                ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+                                : Image.memory(_processedPngBytes!, fit: BoxFit.contain),
+                            )
+                          : Text(
+                              'Please select an image from Gallery, Library or Generate an Image from AI',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                      ),
                     ),
                   ),
                 const SizedBox(height: 6),
