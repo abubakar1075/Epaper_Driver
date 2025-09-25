@@ -214,7 +214,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     // After first frame, initialize Library then load first image (if any)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initPersistentLibrary();
-      if(mounted){ _tryLoadFirstLibraryImageOnStartup(); }
+      if(mounted){ await _tryLoadFirstLibraryImageOnStartup(); }
     });
     // Track Bluetooth adapter state
     _btStateSub = FlutterBluePlus.adapterState.listen((s){
@@ -251,7 +251,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   // On startup, if editor has no image yet, load the first entry from Library to display on first window
-  void _tryLoadFirstLibraryImageOnStartup(){
+  Future<void> _tryLoadFirstLibraryImageOnStartup() async {
     if(_originalImage!=null || _processedPngBytes!=null) return; // something already selected
     if(_library.isEmpty) return;
     final e = _library.first;
@@ -264,6 +264,44 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _verticalFrame = e.wasVertical; // match orientation same as selected from Library
       _viewInitialized = false;
     });
+    // Decode PNG to ui.Image for the crop workspace so it renders in the first window
+    try{
+      final codec = await ui.instantiateImageCodec(e.pngBytes);
+      final frame = await codec.getNextFrame();
+      ui.Image decoded = frame.image;
+      // If this entry was saved as portrait, rotate the decoded UI image 90° so it displays as portrait in the first window
+      if(e.wasVertical){
+        decoded = await _rotateUiImage90(decoded, clockwise: false); // -90° to convert 800x480 -> 480x800
+      }
+      if(mounted){ setState(()=> _uiOriginal = decoded); }
+    }catch(_){ /* ignore; PNG fallback remains */ }
+  }
+
+  // Rotate a ui.Image by 90 degrees. When clockwise is true, rotate +90°; otherwise rotate -90°.
+  Future<ui.Image> _rotateUiImage90(ui.Image src, {bool clockwise = true}) async {
+    final int newW = clockwise ? src.height : src.height;
+    final int newH = clockwise ? src.width : src.width;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, newW.toDouble(), newH.toDouble()));
+    if(clockwise){
+      // Move origin to the right edge, then rotate +90°
+      canvas.translate(newW.toDouble(), 0);
+      canvas.rotate(math.pi/2);
+    }else{
+      // Move origin to the bottom edge, then rotate -90°
+      canvas.translate(0, newH.toDouble());
+      canvas.rotate(-math.pi/2);
+    }
+    paintImage(
+      canvas: canvas,
+      rect: Rect.fromLTWH(0, 0, src.width.toDouble(), src.height.toDouble()),
+      image: src,
+      fit: BoxFit.contain,
+      alignment: Alignment.topLeft,
+    );
+    final picture = recorder.endRecording();
+    final rotated = await picture.toImage(newW, newH);
+    return rotated;
   }
 
   // First window removed: no promo strip loader
@@ -494,7 +532,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (_originalImage != null)
+                // Show the crop workspace whenever we have a UI image (including startup from Library)
+                if (_uiOriginal != null)
                   _buildCropFrame()
                 else
                   Padding(
@@ -553,16 +592,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     Row(children:[
       _smallBtn(
         _verticalFrame ? 'Portrait' : 'Landscape',
-        _originalImage == null ? null : (){
+        (_uiOriginal != null || _processedPngBytes != null) ? (){
           setState((){
             _verticalFrame = !_verticalFrame;
             _processedImage = null;
             _processedBytes = null;
-            _processedPngBytes = null;
+            // Keep _processedPngBytes so fallback view remains available; main view uses _uiOriginal
+            _viewInitialized = false; // force recompute next build
           });
           // Recompute view immediately so preview updates without lag
           _recomputeViewForCurrentFrame(context);
-        },
+        } : null,
         icon: Icons.screen_rotation,
       ),
       const SizedBox(width:6),
