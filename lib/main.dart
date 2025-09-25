@@ -1066,7 +1066,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return SizedBox(
       height: _isSending ? 190 : 210,
       child: Row(children:[
-  if (_originalImage != null)
+  if (_uiOriginal != null)
     Expanded(
       child: Builder(
         builder: (context){
