@@ -1919,26 +1919,34 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try {
       _updateStatus("Preparing image data...");
       
-      // Perform vertical flip (device correction) then horizontal flip to intentionally show a flipped image on the e-paper (net 180° rotation).
+      // If the user selected LANDSCAPE frame, rotate 180° before sending (per request).
+      // If PORTRAIT was selected, send as-is (no 180° rotation).
       final int w = IMAGE_WIDTH;
       final int h = IMAGE_HEIGHT;
       final Uint8List src = _processedBytes!; // raw codes length w*h
-      // Vertical flip
-      final Uint8List vFlipped = Uint8List(src.length);
-      for (int y = 0; y < h; y++) {
-        final int srcOffset = y * w;
-        final int dstOffset = (h - 1 - y) * w;
-        vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
-      }
-      // Horizontal flip on the vertically flipped buffer -> 180° rotation overall
-      final Uint8List vhFlipped = Uint8List(src.length);
-      for (int y = 0; y < h; y++) {
-        final int row = y * w;
-        for (int x = 0; x < w; x++) {
-          vhFlipped[row + (w - 1 - x)] = vFlipped[row + x];
+      Uint8List toSend;
+      if (!_verticalFrame) {
+        // Landscape selected -> rotate 180° (vertical + horizontal flip)
+        final Uint8List vFlipped = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int srcOffset = y * w;
+          final int dstOffset = (h - 1 - y) * w;
+          vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
         }
+        final Uint8List vhFlipped = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int row = y * w;
+          for (int x = 0; x < w; x++) {
+            vhFlipped[row + (w - 1 - x)] = vFlipped[row + x];
+          }
+        }
+        toSend = vhFlipped;
+        _updateStatus("Applied 180° rotation for landscape selection");
+      } else {
+        // Portrait selected -> no rotation
+        toSend = src;
       }
-      Uint8List packedData = _packPixels(vhFlipped);
+      Uint8List packedData = _packPixels(toSend);
       _updateStatus("Packed data size: ${packedData.length} bytes");
       
       // First send the total size as a 4-byte value
