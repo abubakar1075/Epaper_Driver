@@ -46,3 +46,5 @@ app.*.map.json
 \n# Keystore credentials (do not commit)
 key.properties
 release-keystore.jks
+android/key.properties
+android/app/release-keystore.jks
