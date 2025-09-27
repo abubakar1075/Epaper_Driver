@@ -32,6 +32,10 @@ import 'package:path_provider/path_provider.dart'; // persistent storage dir
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Force the whole app to stay in portrait mode (device rotations won't trigger landscape layouts)
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
   runApp(const MyApp());
 }
 

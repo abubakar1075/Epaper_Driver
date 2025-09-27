@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,8 +8,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Load keystore credentials if android/key.properties exists
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+}
+val releaseStoreFilePath = keystoreProperties.getProperty("storeFile")
+val releaseStoreFile = releaseStoreFilePath?.let { rootProject.file(it) }
+val hasReleaseKeystore = keystorePropertiesFile.exists() && releaseStoreFile?.exists() == true
+println("[SIGNING] key.properties exists=${keystorePropertiesFile.exists()} storeFilePath=${releaseStoreFilePath} storeFileExists=${releaseStoreFile?.exists()} root=${rootProject.projectDir}")
+
 android {
-    namespace = "com.example.flutter_application_1"
+    namespace = "com.inventorstech.canvasbt"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,8 +34,8 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.flutter_application_1"
+        // Final applicationId chosen for Play Store distribution
+        applicationId = "com.inventorstech.canvasbt"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -30,11 +44,29 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = releaseStoreFile
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            } else {
+                println("[WARN] Release keystore not fully configured (missing key.properties or keystore file) - falling back to debug signing for this build.")
+            }
+        }
+    }
+
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+    release {
+            // Use release signing only when keystore is fully present
+            signingConfig = if (hasReleaseKeystore) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            // Explicitly disable code and resource shrinking for now
+            isMinifyEnabled = false
+            isShrinkResources = false
+            // After validating a working Play build, you can enable:
+            // isMinifyEnabled = true
+            // proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
