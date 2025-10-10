@@ -1,24 +1,33 @@
  // 30 seconds branch
- //#define TEST_IMAGE
+//#define TEST_IMAGE
 #include <SPI.h>
 #include <ArduinoBLE.h>
 #include <FS.h>
 #include <SPIFFS.h>
+#include "esp_sleep.h"  // For deep sleep timer wake
 #include "SPICom.h"
 #include "W21.h"
 #include "image.h"
 #include "BLE.h"
 void handleLedBlinking();
+// Print touch reading every 500ms
+static unsigned long lastTouchPrint = 0;
+
+// Shared battery percent helper (ADC pin 1.60V ->0%, 2.00V ->100%)
+uint8_t getBatteryPercent() {
+  analogReadResolution(12);
+  int raw = analogRead(BATTERY_PIN);
+  float vAdc = (raw / 4095.0f) * 3.3f; // ADC pin voltage
+  const float VADC_EMPTY = 1.60f;
+  const float VADC_FULL  = 2.00f;
+  float percent = (vAdc - VADC_EMPTY) * 100.0f / (VADC_FULL - VADC_EMPTY);
+  return (uint8_t)(percent + 0.5f);
+}
 
 // Single function to read and print battery status at startup
 static void printBatteryStatus() {
-  const int BATTERY_PIN = 34; // ADC1 channel; assumes 2:1 divider from battery to ADC
-  analogReadResolution(12);   // 12-bit ADC (0–4095)
-  int raw = analogRead(BATTERY_PIN);
-  float voltage = (raw / 4095.0f) * 3.3f * 2.0f; // Adjust multiplier if your divider is different
-  float percent = -100.0f * voltage * voltage + 840.0f * voltage - 1680.0f; // 3.2V=0%, 3.7V=50%, 4.2V=100%
-  if (percent < 0) percent = 0; if (percent > 100) percent = 100;
-  Serial.printf("Battery Voltage: %.2f V | Charge: %.0f%%\n", voltage, percent);
+  uint8_t percent = getBatteryPercent();
+  Serial.printf("Battery: %u%%\n", percent);
 }
 
 // Forward declarations from W21.cpp
@@ -27,10 +36,8 @@ extern unsigned char Color_get(unsigned char color);
 // Flag to use BLE received image
 bool useBleImage = false;
 
-const int GND = 12;   // GPIO12
-const int LED2 = 4;   // GPIO13
-const int TOUCH_PIN = 15;   // GPIO15 for touch
-const int TOUCH_THRESHOLD = 69;
+
+const int TOUCH_THRESHOLD = 60;
 
 // Variables for LED blinking
 unsigned long previousMillis = 0;
@@ -42,20 +49,65 @@ unsigned long connectionStartTime = 0;
 const long connectionTimeout = 30000;  // 30 seconds timeout for inactivity
 bool bleConnected = false;
 
+// Periodic refresh interval: 5 days in microseconds
+static const uint64_t REFRESH_INTERVAL_US = 5ULL * 24ULL * 60ULL * 60ULL * 1000000ULL;
+
 
 void setup() {
-  pinMode(GND, OUTPUT);
-  pinMode(LED2, OUTPUT);
-  digitalWrite(GND, LOW);   // GPIO12 = 0
-  digitalWrite(LED2, HIGH);  // LED off initially
+
+  
+  // If woken by 5-minute RTC timer, quickly refresh image and return to deep sleep.
+  esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
+  if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
+    Serial.println("Wake cause: RTC timer. Refreshing image from SPIFFS...");
+    // Ensure board GPIOs are configured (power rails, indicator LED)
+    if (!spiffsReady) {
+      spiffsReady = SPIFFS.begin(true);
+      if (!spiffsReady) {
+        Serial.println("SPIFFS mount failed during timer wake.");
+      }
+    }
+    // Ensure EPD pins and SPI are initialized before driving the display
+    pinMode(PIN_EPD_BUSY, INPUT);  // BUSY (panel drives this)
+    pinMode(PIN_EPD_RST, OUTPUT);  // RES
+    pinMode(PIN_EPD_DC, OUTPUT);   // DC  
+    pinMode(PIN_EPD_CS, OUTPUT);   // CS  
+    digitalWrite(PIN_EPD_CS, HIGH); // deselect
+    digitalWrite(PIN_EPD_DC, HIGH);
+    digitalWrite(PIN_EPD_RST, HIGH);
+    
+#if defined(ARDUINO_XIAO_ESP32C3)
+    SPI.begin(EPD_SPI_SCK, EPD_SPI_MISO, EPD_SPI_MOSI, PIN_EPD_CS);
+#else
+    SPI.begin();
+#endif
+    SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+
+    // Display from SPIFFS if available, then sleep again
+    displayImageFromSPIFFS();
+    Serial.println("Refresh complete. Going back to deep sleep for next cycle...");
+    // Keep both timer and touch as wake sources
+    touchSleepWakeUpEnable(TOUCH_PIN, TOUCH_THRESHOLD);
+    esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
+    Serial.flush();
+    esp_deep_sleep_start();
+  }
+
+  pinMode(GND, OUTPUT); // Will be ignored if GPIO35 is input-only
+  pinMode(LED2, OUTPUT); // Will be ignored if GPIO34 is input-only
+  digitalWrite(GND, LOW);
+  digitalWrite(LED2, HIGH);
   Serial.begin(115200);
   delay(1000);
  // while (!Serial && millis() < 5000); // Wait for serial or timeout
-  
-  Serial.println("Going to deep sleep... touch GPIO15 to wake up");
-  touchSleepWakeUpEnable(T3, TOUCH_THRESHOLD);
+
+  Serial.printf("Going to deep sleep... touch GPIO%d to wake up\n", TOUCH_PIN);
+  touchSleepWakeUpEnable(TOUCH_PIN, TOUCH_THRESHOLD);
 
   Serial.println("E-Paper Display + BLE Example");
+  #if (LED2 == 34)
+    Serial.println("[Warning] LED2 assigned to GPIO34 (input-only on standard ESP32) - blinking will not function.");
+  #endif
   Serial.println("==============================");
   // Print battery status once at startup
   printBatteryStatus();
@@ -110,6 +162,16 @@ void setup() {
 void loop() {
   // Handle LED2 blinking
   handleLedBlinking();
+
+  // Periodically print capacitive touch reading for TOUCH_PIN
+  if (millis() - lastTouchPrint >= 500) {
+    lastTouchPrint = millis();
+    uint16_t touchVal = touchRead(TOUCH_PIN);
+    Serial.print("Touch(");
+    Serial.print(TOUCH_PIN);
+    Serial.print(") = ");
+    Serial.println(touchVal);
+  }
   
   // Check for BLE connection status
   if (BLE.connected() && !bleConnected) {
@@ -170,6 +232,7 @@ void goToSleep() {
     BLE.end();
     bleActive = false;
   }
+
   
   // Flash LED2 to indicate going to sleep
   for (int i = 0; i < 5; i++) {
@@ -179,11 +242,14 @@ void goToSleep() {
     delay(100);
   }
   
-  Serial.println("Entering deep sleep mode. Touch GPIO15 to wake up again.");
+  Serial.printf("Entering deep sleep mode. Touch GPIO%d to wake up again.\n", TOUCH_PIN);
   Serial.flush();
   
   // Configure touchpad as wakeup source
-  touchSleepWakeUpEnable(T3, TOUCH_THRESHOLD);
+  // Use touch channel T9 which maps to GPIO32 on classic ESP32
+  touchSleepWakeUpEnable(TOUCH_PIN, TOUCH_THRESHOLD);
+  // Also configure periodic 5-day RTC timer wake for image refresh
+  esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
   
   // Go to deep sleep
   esp_deep_sleep_start();

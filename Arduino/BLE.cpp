@@ -62,16 +62,7 @@ bool warnedSizePacking = false;
 // Battery send flag per transfer
 static bool batterySentForThisTransfer = false;
 
-// Read battery percentage using the same formula as in Spectra6.ino
-static uint8_t readBatteryPercent() {
-  const int BATTERY_PIN = 34; // ADC1 channel; assumes 2:1 divider
-  analogReadResolution(12);   // 12-bit ADC
-  int raw = analogRead(BATTERY_PIN);
-  float voltage = (raw / 4095.0f) * 3.3f * 2.0f;
-  float percent = -100.0f * voltage * voltage + 840.0f * voltage - 1680.0f;
-  if (percent < 0) percent = 0; if (percent > 100) percent = 100;
-  return (uint8_t)(percent + 0.5f);
-}
+// getBatteryPercent() implemented in Spectra6.ino
 
 // Periodic BLE tasks
 static unsigned long lastBatteryAnnounce = 0;
@@ -81,7 +72,7 @@ void bleTick() {
   // Re-announce battery every 10 seconds while connected
   if (now - lastBatteryAnnounce >= 10000) {
     lastBatteryAnnounce = now;
-    uint8_t batt = readBatteryPercent();
+  uint8_t batt = getBatteryPercent();
     uint8_t battMsg[] = {ACK_BATTERY, batt};
     txCharacteristic.writeValue(battMsg, sizeof(battMsg));
   }
@@ -378,7 +369,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     Serial.println("Size received, ready for image data");
     // Send battery once, right at the start of image data per request
     if (!batterySentForThisTransfer) {
-      uint8_t batt = readBatteryPercent();
+  uint8_t batt = getBatteryPercent();
       uint8_t battMsg[] = {ACK_BATTERY, batt};
       txCharacteristic.writeValue(battMsg, sizeof(battMsg));
       batterySentForThisTransfer = true;

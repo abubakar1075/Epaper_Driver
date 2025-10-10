@@ -23,9 +23,11 @@
 
 // Board selection preprocessor directives
 // Uncomment ONE of these defines to select your board
-#define BOARD_ESP32E  // ESP32E board (default)
+//#define BOARD_ESP32E  // ESP32E board (default) FireBeatle
 //#define BOARD_FRAME   // Frame board
-//#define BOARD_C3      // C3 board
+//#define BOARD_C3      // C3 board XIAO
+#define BOARD_ESP32E // LOLIN LITE board (uncomment to use)
+//#define BOARD_FIRSTPCB // FirstPCB custom board
 
 #if defined(BOARD_FRAME)
     // Frame board pin definitions
@@ -45,8 +47,34 @@
     #define EPD_SPI_SCK   D8  // D8 (SCK)
     #define EPD_SPI_MOSI  D10 // D10 (MOSI)
     #define EPD_SPI_MISO  -1  // not used
+#elif defined(BOARD_LOLIN_LITE)
+    // LOLIN LITE board pin definitions (user supplied)
+    #define PIN_EPD_RST   16   // D0
+    #define PIN_EPD_CS    5    // D1
+    #define PIN_EPD_BUSY  4    // D2
+    #define PIN_EPD_DC    17   // D3
+    #define EPD_SPI_SCK   18   // D8 (SCK)
+    #define EPD_SPI_MOSI  23   // D10 (MOSI)
+    #define EPD_SPI_MISO  -1   // not used
+    const int BATTERY_PIN = 33; // ADC1 channel; 2:1 divider (two 1MΩ resistors)
+    const int GND = 27;   // GPIO35 (requested) NOTE: GPIO35 is input-only on classic ESP32
+    const int LED2 = 26;  // GPIO34 (requested) NOTE: GPIO34 is input-only; LED drive will not work on classic ESP32
+    const int TOUCH_PIN = 32;   // GPIO32 for touch (was 15)
+#elif defined(BOARD_FIRSTPCB)
+    // FirstPCB custom board pin definitions
+    #define PIN_EPD_RST   21   // RES
+    #define PIN_EPD_CS    2    // CS
+    #define PIN_EPD_BUSY  22   // BUSY
+    #define PIN_EPD_DC    15   // C/D
+    #define EPD_SPI_SCK   18   // CLK (SCK)
+    #define EPD_SPI_MOSI  23   // SDI (MOSI)
+    #define EPD_SPI_MISO  -1   // not used.
+    //Changed for FirstPCB board
+    const int BATTERY_PIN = 34; // ADC1 channel; 2:1 divider (two 1MΩ resistors)
+    const int GND = 12;   
+    const int LED2 = 4;   
+    const int TOUCH_PIN = 27;   // GPIO32 for touch (was 15)
 #else // BOARD_ESP32E (default)
-    // ESP32E board pin definitions
     #define PIN_EPD_RST   2   // D0
     #define PIN_EPD_CS    22  // D1
     #define PIN_EPD_BUSY  13  // D2
@@ -54,6 +82,10 @@
     #define EPD_SPI_SCK   18  // D8 (SCK)
     #define EPD_SPI_MOSI  23  // D10 (MOSI)
     #define EPD_SPI_MISO  -1  // not used
+    const int BATTERY_PIN = 34; // ADC1 channel; 2:1 divider (two 1MΩ resistors)
+    const int GND = 12;   // GPIO12
+    const int LED2 = 4;   // GPIO13
+    const int TOUCH_PIN = 15;   // GPIO32 for touch (was 15)
 #endif
 
 

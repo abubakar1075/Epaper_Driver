@@ -77,4 +77,7 @@ bool initSPIFFS();
 void requestMTUIncrease();
 // No periodic BLE tasks (battery sent once at start of image data)
 
+// Shared battery percentage helper (ADC pin 1.60V=0%, 2.00V=100%)
+uint8_t getBatteryPercent();
+
 #endif // BLE_H
