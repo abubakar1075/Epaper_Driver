@@ -591,33 +591,36 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         color: Colors.grey[200],
         borderRadius: BorderRadius.circular(8),
       ),
-  child: Row(children:[
-    // Left side controls
-    Row(children:[
-      _smallBtn(
-        _verticalFrame ? 'Portrait' : 'Landscape',
-        (_uiOriginal != null || _processedPngBytes != null) ? (){
-          setState((){
-            _verticalFrame = !_verticalFrame;
-            _processedImage = null;
-            _processedBytes = null;
-            // Keep _processedPngBytes so fallback view remains available; main view uses _uiOriginal
-            _viewInitialized = false; // force recompute next build
-          });
-          // Recompute view immediately so preview updates without lag
-          _recomputeViewForCurrentFrame(context);
-        } : null,
-        icon: Icons.screen_rotation,
-      ),
-      const SizedBox(width:6),
-      _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
-      const SizedBox(width:6),
-      _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send),
-    ]),
-    const Spacer(),
-    const SizedBox(width:6),
-    _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
-  ]),
+      child: Row(children:[
+        // Left side controls
+        Row(children:[
+          _smallBtn(
+            _verticalFrame ? 'Portrait' : 'Landscape',
+            (_uiOriginal != null || _processedPngBytes != null) ? (){
+              setState((){
+                _verticalFrame = !_verticalFrame;
+                _processedImage = null;
+                _processedBytes = null;
+                _viewInitialized = false;
+              });
+              _recomputeViewForCurrentFrame(context);
+            } : null,
+            icon: Icons.screen_rotation,
+          ),
+          const SizedBox(width:6),
+          _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
+          const SizedBox(width:6),
+          _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send),
+        ]),
+        const Spacer(),
+        // Right side controls
+        Row(children:[
+          const SizedBox(width:6),
+          _smallBtn('OTA', _sendOtaFile, icon: Icons.system_update_alt),
+          const SizedBox(width:6),
+          _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
+        ])
+      ]),
     );
   }
 
@@ -2050,6 +2053,115 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }
   }
 
+  Future<void> _sendOtaFile() async {
+    if (_connectedDevice == null || _rxCharacteristic == null) {
+      _updateStatus("Not connected. Trying to connect...");
+      // Reuse the same UX pattern as _sendOrProcessThenSend when disconnected
+      if(!mounted) return;
+      final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
+      await showDialog(
+        context: context,
+        builder: (ctx){
+          _activeDialogContext = ctx;
+          return AlertDialog(
+            title: const Text('Please Touch the frame'),
+            content: fingerAsset==null
+              ? const SizedBox.shrink()
+              : SizedBox(
+                  width: 320,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 16/9,
+                        child: Image.asset(fingerAsset, fit: BoxFit.contain),
+                      ),
+                    ],
+                  ),
+                ),
+            actions: [
+              TextButton(onPressed: (){ Navigator.of(ctx).pop(); }, child: const Text('Close')),
+            ],
+          );
+        }
+      );
+      _activeDialogContext = null;
+      return;
+    }
+    if (_isSending) {
+      _updateStatus("Another transfer is in progress");
+      return;
+    }
+
+    try {
+      // Load first available bin from assets/OTAFile
+      Uint8List? otaBytes;
+      final candidates = [
+        'OTAFile/firmware.bin',
+        'OTAFile/ota.bin',
+        'OTAFile/update.bin',
+        'OTAFile/Spectra6.ino.bin',
+      ];
+      for (final path in candidates) {
+        try {
+          final bd = await rootBundle.load(path);
+          otaBytes = bd.buffer.asUint8List();
+          _updateStatus("Loaded OTA: ${path.split('/').last} (${otaBytes.length} bytes)");
+          break;
+        } catch (_) {}
+      }
+      if (otaBytes == null || otaBytes.isEmpty) {
+        _updateStatus("No OTA .bin found in assets/OTAFile");
+        return;
+      }
+
+      setState(() {
+        _isSending = true;
+        _transferProgress = 0;
+        _transferSpeed = 0;
+      });
+
+      // Protocol: send 4-byte LE size then raw chunks (same as image sender)
+      final totalSize = otaBytes.length;
+      final sizeBytes = Uint8List(4)
+        ..[0] = totalSize & 0xFF
+        ..[1] = (totalSize >> 8) & 0xFF
+        ..[2] = (totalSize >> 16) & 0xFF
+        ..[3] = (totalSize >> 24) & 0xFF;
+      await _rxCharacteristic!.write(sizeBytes);
+      await Future.delayed(const Duration(milliseconds: 30));
+
+      final start = DateTime.now().millisecondsSinceEpoch;
+      int sent = 0;
+      for (int i = 0; i < otaBytes.length; i += BLE_CHUNK_SIZE) {
+        final end = (i + BLE_CHUNK_SIZE > otaBytes.length) ? otaBytes.length : i + BLE_CHUNK_SIZE;
+        final chunk = otaBytes.sublist(i, end);
+        await _rxCharacteristic!.write(chunk);
+        sent = end;
+
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final elapsed = (now - start) / 1000.0;
+        final speed = elapsed > 0 ? (sent / 1024.0) / elapsed : 0.0;
+        final progress = (sent * 100 ~/ totalSize);
+        setState(() { _transferSpeed = speed; _transferProgress = progress; });
+
+        if (i % (BLE_CHUNK_SIZE * 20) == 0) {
+          _updateStatus("OTA ${progress}% - ${speed.toStringAsFixed(1)} KB/s");
+        }
+        await Future.delayed(const Duration(milliseconds: 6));
+      }
+
+      final end = DateTime.now().millisecondsSinceEpoch;
+      final totalSec = (end - start) / 1000.0;
+      final avg = (totalSize / 1024.0) / totalSec;
+      _updateStatus("OTA data sent: ${totalSize} bytes in ${totalSec.toStringAsFixed(2)}s, ${avg.toStringAsFixed(1)} KB/s");
+      // keep _isSending true until ACK_COMPLETE from device
+    } catch (e) {
+      _updateStatus("OTA send failed: $e");
+      setState(() { _isSending = false; });
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -2330,7 +2442,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
               created: DateTime.now(),
               wasVertical: _isPortraitAsset(baseName),
               isDefaultAsset: true,
-              title: _deriveAssetTitle(baseName),
+              title: 'Saved',
             );
             _library.add(entry);
             await _persistLibraryEntry(entry, writeIndex:false);

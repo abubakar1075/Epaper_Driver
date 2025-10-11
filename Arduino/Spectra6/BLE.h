@@ -5,6 +5,7 @@
 #include <ArduinoBLE.h>
 #include <FS.h>
 #include <SPIFFS.h>
+// OTA update support will be implemented in BLE.cpp using Update.h
 
 // Constants for BLE acknowledgements
 #define ACK_SIZE_RECEIVED 0x01   // Size acknowledgment
@@ -55,6 +56,10 @@ extern bool dataReceived;
 // SPIFFS related globals
 extern const char* IMAGE_PATH;
 extern File imageFile;
+// OTA target path
+extern const char* OTA_PATH;
+// Whether the current transfer is an OTA (not image)
+extern bool isOtaTransfer;
 
 // Function declarations for BLE operations
 void updateTransferSpeed();

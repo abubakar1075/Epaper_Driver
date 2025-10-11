@@ -1,6 +1,7 @@
 #include "BLE.h"
 #include "W21.h"
 #include "SPICom.h"
+#include <Update.h>
 
 // Forward declaration of Color_get from W21.cpp
 extern unsigned char Color_get(unsigned char color);
@@ -53,6 +54,9 @@ bool dataReceived = false;
 const char* IMAGE_PATH = "/ble_image.bin"; // Path to store incoming image data
 File imageFile;
 bool spiffsReady = false;
+// OTA file path and transfer mode flag
+const char* OTA_PATH = "/ota.bin";
+bool isOtaTransfer = false;
 
 // Last connected device tracking
 String lastConnectedDeviceAddress = "";
@@ -254,6 +258,7 @@ void onBLEConnected(BLEDevice central) {
   displayInitialized = false;
   dataReceived = false;
   batterySentForThisTransfer = false;
+  isOtaTransfer = false;
   
   // For ArduinoBLE, we can't directly request MTU changes, but we can
   // optimize our settings for the fastest possible transfer
@@ -333,13 +338,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     Serial.print(expectedDataSize / 1024.0, 1);
     Serial.println(" KB)");
 
-    // Verify we're receiving the expected packed format (2 pixels per byte)
+    // Decide whether this is image or OTA based on size
     if (expectedDataSize == BLE_IMAGE_SIZE) {
-      Serial.println("[Info] Receiving BLE data in 2-pixels-per-byte format (192,000 bytes)");
+      isOtaTransfer = false;
+      Serial.println("[Info] Receiving image data (192,000 bytes)");
     } else {
-      Serial.print("[Warning] Unexpected data size. Expected 192,000 bytes. Got: ");
+      isOtaTransfer = true;
+      Serial.print("[Info] Receiving OTA data size: ");
       Serial.println(expectedDataSize);
-      Serial.println("[Info] Will attempt to process anyway");
     }
     
     // Reset counters for image data and start timing the transfer
@@ -348,17 +354,21 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     displayInitialized = false;
     transferStartTime = millis(); // Start timing the transfer
 
-    // Prepare SPIFFS file for writing new image
+    // Prepare SPIFFS file for writing incoming data (image or OTA)
     if (spiffsReady) {
-      if (SPIFFS.exists(IMAGE_PATH)) {
-        SPIFFS.remove(IMAGE_PATH);
-        Serial.println("Old image file removed from SPIFFS.");
+      const char* path = isOtaTransfer ? OTA_PATH : IMAGE_PATH;
+      if (SPIFFS.exists(path)) {
+        SPIFFS.remove(path);
+        Serial.print("Old file removed from SPIFFS: ");
+        Serial.println(path);
       }
-      imageFile = SPIFFS.open(IMAGE_PATH, FILE_WRITE);
+      imageFile = SPIFFS.open(path, FILE_WRITE);
       if (!imageFile) {
-        Serial.println("Failed to create image file in SPIFFS.");
+        Serial.print("Failed to create file in SPIFFS: ");
+        Serial.println(path);
       } else {
-        Serial.println("Created image file in SPIFFS for incoming data.");
+        Serial.print("Created file in SPIFFS for incoming data: ");
+        Serial.println(path);
       }
     } else {
       Serial.println("SPIFFS not ready - cannot store incoming data.");
@@ -378,19 +388,17 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       Serial.println("%");
     }
   } 
-  // Otherwise, we're receiving the image data
+  // Otherwise, we're receiving the image or OTA data
   else {
-    // If this is the first chunk, initialize the display
-    if (!displayInitialized) {
+    // If this is the first chunk for image transfer, initialize the display
+    if (!isOtaTransfer && !displayInitialized) {
       Serial.println("Initializing display for data reception");
       EPD_init_fast();
-      
       // Start writing old data (all white)
       EPD_W21_WriteCMD(0x10);
       for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT / 8; i++) {
         EPD_W21_WriteDATA(0xff);
       }
-      
       displayInitialized = true;
     }
     
@@ -479,7 +487,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       }
     }
     
-    // Check if we've received all the data
+  // Check if we've received all the data
     if (receivedDataSize >= expectedDataSize) {
       // Print total transfer time and speed at completion
       unsigned long totalTime = millis() - transferStartTime;
@@ -503,23 +511,68 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         }
         
         imageFile.close();
-        Serial.print("Image data stored in SPIFFS at ");
-        Serial.println(IMAGE_PATH);
-        
-        // Set flag for main loop to display the image
-        dataReceived = true;
+        if (isOtaTransfer) {
+          Serial.print("OTA data stored in SPIFFS at ");
+          Serial.println(OTA_PATH);
+          // Apply OTA update
+          File otaFile = SPIFFS.open(OTA_PATH, FILE_READ);
+          if (!otaFile) {
+            Serial.println("Failed to open OTA file for reading");
+            sendAcknowledgment(ACK_ERROR);
+          } else {
+            Serial.println("Starting OTA update...");
+            if (!Update.begin(expectedDataSize)) {
+              Serial.println("Update.begin failed");
+              otaFile.close();
+              sendAcknowledgment(ACK_ERROR);
+            } else {
+              size_t written = 0;
+              const size_t BUFSZ = 4096;
+              uint8_t buf[BUFSZ];
+              while (otaFile.available()) {
+                size_t n = otaFile.read(buf, BUFSZ);
+                if (n == 0) break;
+                size_t w = Update.write(buf, n);
+                written += w;
+                if (w != n) {
+                  Serial.println("OTA write mismatch");
+                  break;
+                }
+              }
+              otaFile.close();
+              if (written == expectedDataSize && Update.end(true)) {
+                Serial.println("OTA successful. Rebooting...");
+                sendAcknowledgment(ACK_COMPLETE);
+                delay(200);
+                ESP.restart();
+              } else {
+                Serial.print("OTA failed. Error #");
+                Serial.println(Update.getError());
+                Update.end();
+                sendAcknowledgment(ACK_ERROR);
+              }
+            }
+          }
+        } else {
+          Serial.print("Image data stored in SPIFFS at ");
+          Serial.println(IMAGE_PATH);
+          // Set flag for main loop to display the image
+          dataReceived = true;
+          // Send completion acknowledgment for image
+          sendAcknowledgment(ACK_COMPLETE);
+        }
       } else {
         Serial.println("No SPIFFS file to close / print.");
       }
       
-      // Send completion acknowledgment
-      sendAcknowledgment(ACK_COMPLETE);
-    
+      // For image transfers, completion ack already sent above. For OTA, we send ack inside OTA branch.
+      
       // Reset state for next transfer
       receivingSize = true;
       receivedDataSize = 0;
       expectedDataSize = 0;
       displayInitialized = false;
+      isOtaTransfer = false;
     } else if (receivedDataSize > expectedDataSize) {
       Serial.println("Error: Received more data than expected.");
       
@@ -531,6 +584,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       receivedDataSize = 0;
       displayInitialized = false;
       EPD_sleep();
+      isOtaTransfer = false;
     }
   }
 }
