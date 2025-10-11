@@ -1,5 +1,5 @@
  // 30 seconds branch
-//#define TEST_IMAGE
+#define TEST_IMAGE
 #include <SPI.h>
 #include <ArduinoBLE.h>
 #include <FS.h>
