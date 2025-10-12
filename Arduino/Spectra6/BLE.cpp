@@ -22,7 +22,7 @@ unsigned long transferSpeed = 0; // bytes per second
 
 // BLE service and characteristics
 BLEService uartService(serviceUUID);
-BLECharacteristic rxCharacteristic(rxCharUUID, BLEWrite, BLE_MAX_WRITE_SIZE);  // Use max write size from BLE.h
+BLECharacteristic rxCharacteristic(rxCharUUID, BLEWrite | BLEWriteWithoutResponse, BLE_MAX_WRITE_SIZE);  // Allow write without response for speed
 BLECharacteristic txCharacteristic(txCharUUID, BLENotify, 20);  // Notify buffer size = 20 bytes
 BLEDescriptor rxDescriptor("2901", "RX Channel");
 BLEDescriptor txDescriptor("2901", "TX Channel");

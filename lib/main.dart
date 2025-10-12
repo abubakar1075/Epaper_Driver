@@ -71,7 +71,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // =============================================================
   static const int IMAGE_WIDTH = 800;
   static const int IMAGE_HEIGHT = 480;
-  static const int BLE_CHUNK_SIZE = 230; // Reduced from 512 to stay under BLE MTU limit
+  static const int BLE_CHUNK_SIZE = 480; // High-speed: near-MTU chunking for faster throughput
 
   // BLE UUIDs - match with Arduino code
   static const String UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
@@ -1281,9 +1281,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   // Update the status message
-  void _updateStatus(String message) {
+  void _updateStatus(String message, {bool force = false}) {
     final now = DateTime.now();
-    if(_isSending && now.difference(_lastStatusUpdate).inMilliseconds < 350 && !message.startsWith('Progress')){ return; }
+    if(_isSending && !force && now.difference(_lastStatusUpdate).inMilliseconds < 350 && !message.startsWith('Progress')){ return; }
     _lastStatusUpdate = now;
     if(mounted){ setState(()=> _statusMessage = message); }
   }
@@ -1972,8 +1972,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         // Portrait selected -> no rotation
         toSend = src;
       }
-      Uint8List packedData = _packPixels(toSend);
-      _updateStatus("Packed data size: ${packedData.length} bytes");
+  Uint8List packedData = _packPixels(toSend);
+  _updateStatus("Packed data size: ${packedData.length} bytes", force: true);
       
   // First send a 1-byte type + 4-byte little-endian size header
   int totalSize = packedData.length;
@@ -1983,57 +1983,44 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bd.setUint32(1, totalSize, Endian.little);
   // Send the header
   await _rxCharacteristic!.write(header);
-  _updateStatus("Sent image header: $totalSize bytes");
+  _updateStatus("Sent image header: $totalSize bytes", force: true);
       
-      // Small delay to ensure Arduino processes the size
-      await Future.delayed(const Duration(milliseconds: 50));
+  // Short delay to ensure Arduino processes the header
+  await Future.delayed(const Duration(milliseconds: 12));
       
       // Start the transfer timer
       int startTime = DateTime.now().millisecondsSinceEpoch;
       int bytesSent = 0;
       
-      // Split data into chunks and send
-      List<Uint8List> chunks = [];
-      for (int i = 0; i < packedData.length; i += BLE_CHUNK_SIZE) {
-        int end = math.min(i + BLE_CHUNK_SIZE, packedData.length);
-        chunks.add(Uint8List.fromList(packedData.sublist(i, end)));
-      }
-      
-      _updateStatus("Sending ${chunks.length} chunks...");
-      
-      for (int i = 0; i < chunks.length; i++) {
+      // Stream chunks without allocating new lists (zero-copy views)
+      int dynamicChunk = BLE_CHUNK_SIZE;
+      final int totalChunks = (packedData.length + dynamicChunk - 1) ~/ dynamicChunk;
+      _updateStatus("Sending ${totalChunks} chunks...", force: true);
+      for (int i = 0; i < packedData.length;) {
+        // Bound chunk by remaining bytes and current dynamic chunk size
+        final int end = math.min(i + dynamicChunk, packedData.length);
+        final Uint8List view = Uint8List.sublistView(packedData, i, end);
         // Only show status updates occasionally to reduce overhead
-        if (i % 20 == 0 || i == chunks.length - 1) {
-          _updateStatus("Sending chunk ${i+1}/${chunks.length}");
+        final int chunkIndex = (i ~/ (dynamicChunk == 0 ? 1 : dynamicChunk));
+        if (chunkIndex % 20 == 0 || end == packedData.length) {
+          _updateStatus("Sending chunk ${chunkIndex+1}/${totalChunks}", force: true);
         }
         
         try {
-          // Use write without any optional parameters
-          await _rxCharacteristic!.write(chunks[i]);
-          bytesSent += chunks[i].length;
-          
-          // Small delay between chunks to prevent overwhelming the device
-          await Future.delayed(const Duration(milliseconds: 10));
+          await _rxCharacteristic!.write(view, withoutResponse: true);
+          bytesSent += view.length;
+          // Very small pacing prevents peripheral overflow while keeping speed high
+          await Future.delayed(const Duration(milliseconds: 1));
+          // Advance only on success
+          i = end;
         } catch (e) {
-          _updateStatus("Error sending chunk ${i+1}: $e");
-          // Try again with a smaller chunk if possible
-          if (chunks[i].length > 100) {
-            _updateStatus("Retrying with smaller chunk...");
-            try {
-              // Split the problematic chunk in half and try again
-              int halfSize = chunks[i].length ~/ 2;
-              await _rxCharacteristic!.write(chunks[i].sublist(0, halfSize));
-              await Future.delayed(const Duration(milliseconds: 20));
-              await _rxCharacteristic!.write(chunks[i].sublist(halfSize));
-              bytesSent += chunks[i].length;
-            } catch (retryError) {
-              _updateStatus("Retry failed: $retryError");
-              // If this fails too, we should abort to prevent more errors
-              throw Exception("BLE data transfer failed after retry");
-            }
-          } else {
-            // The chunk is already small, just propagate the error
-            rethrow;
+          _updateStatus("Error sending chunk at ${i} (size ${view.length}): $e", force: true);
+          // Adaptive fallback: reduce dynamic chunk size and retry same offset
+          dynamicChunk = math.max(20, dynamicChunk ~/ 2);
+          await Future.delayed(const Duration(milliseconds: 25));
+          if (dynamicChunk <= 20 && view.length <= 20) {
+            // Even the smallest failed; abort
+            throw Exception("BLE data transfer failed at offset ${i}: $e");
           }
         }
         
@@ -2062,12 +2049,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       double totalTime = (endTime - startTime) / 1000;
       double avgSpeed = (totalSize / 1024) / totalTime;
       
-      _updateStatus("Data transfer complete: $totalSize bytes in ${totalTime.toStringAsFixed(2)} seconds");
-      _updateStatus("Average speed: ${avgSpeed.toStringAsFixed(2)} KB/s");
+  _updateStatus("Data transfer complete: $totalSize bytes in ${totalTime.toStringAsFixed(2)} seconds", force: true);
+  _updateStatus("Average speed: ${avgSpeed.toStringAsFixed(2)} KB/s", force: true);
       
       // We don't set _isSending to false here - wait for ACK_COMPLETE
     } catch (e) {
-      _updateStatus("Error sending data: $e");
+  _updateStatus("Error sending data: $e", force: true);
       setState(() {
         _isSending = false;
       });
@@ -2155,15 +2142,27 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       final bd = ByteData.view(header.buffer);
       bd.setUint32(1, totalSize, Endian.little);
       await _rxCharacteristic!.write(header);
-      await Future.delayed(const Duration(milliseconds: 30));
+  await Future.delayed(const Duration(milliseconds: 10));
 
       final start = DateTime.now().millisecondsSinceEpoch;
       int sent = 0;
-      for (int i = 0; i < otaBytes.length; i += BLE_CHUNK_SIZE) {
-        final end = (i + BLE_CHUNK_SIZE > otaBytes.length) ? otaBytes.length : i + BLE_CHUNK_SIZE;
-        final chunk = otaBytes.sublist(i, end);
-        await _rxCharacteristic!.write(chunk);
-        sent = end;
+      int dynamicChunkOta = BLE_CHUNK_SIZE;
+      for (int i = 0; i < otaBytes.length;) {
+        final end = (i + dynamicChunkOta > otaBytes.length) ? otaBytes.length : i + dynamicChunkOta;
+        final view = Uint8List.sublistView(otaBytes, i, end);
+        try {
+          await _rxCharacteristic!.write(view, withoutResponse: true);
+          sent = end;
+          i = end;
+        } catch (e) {
+          _updateStatus("OTA: error at ${i} (size ${view.length}): $e", force: true);
+          dynamicChunkOta = math.max(20, dynamicChunkOta ~/ 2);
+          await Future.delayed(const Duration(milliseconds: 25));
+          if (dynamicChunkOta <= 20 && view.length <= 20) {
+            throw Exception("OTA failed at offset ${i}: $e");
+          }
+          continue;
+        }
 
         final now = DateTime.now().millisecondsSinceEpoch;
         final elapsed = (now - start) / 1000.0;
@@ -2174,7 +2173,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if (i % (BLE_CHUNK_SIZE * 20) == 0) {
           _updateStatus("OTA ${progress}% - ${speed.toStringAsFixed(1)} KB/s");
         }
-        await Future.delayed(const Duration(milliseconds: 6));
+        await Future.delayed(const Duration(milliseconds: 1));
       }
 
       final end = DateTime.now().millisecondsSinceEpoch;
