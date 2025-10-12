@@ -941,8 +941,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       );
       // Dialog closed; clear handle if still set
       _activeDialogContext = null;
-      // If user manually dismissed, don't auto-resume
-      _pendingSend = _PendingSend.none;
+      // If still disconnected, user likely dismissed the dialog -> clear intent.
+      // If we connected and closed programmatically, keep intent for auto-resume in _connectToDevice.
+      final stillDisconnected = (_connectedDevice == null || _rxCharacteristic == null);
+      if (stillDisconnected) {
+        _pendingSend = _PendingSend.none;
+      }
       return;
     }
     // Connected path: ensure we don't mistakenly treat as pending
@@ -1820,11 +1824,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _isConnecting = false;
   // Remain on the connected UI; first window was removed
       });
-      // If the popup was visible (user tapped while disconnected), close it and resume the intended action now
+      // If the popup was visible (user tapped while disconnected), close it
       if(_activeDialogContext != null){
         _dismissActiveDialog();
         await Future.delayed(const Duration(milliseconds: 100));
-        // Trigger the correct action based on user's intent
+      }
+      // Resume the intended action if one is pending (even if dialog was already closed)
+      if (_pendingSend != _PendingSend.none) {
         final intent = _pendingSend;
         _pendingSend = _PendingSend.none;
         if (intent == _PendingSend.ota) {
@@ -2102,8 +2108,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         }
       );
       _activeDialogContext = null;
-      // If user manually dismissed, don't auto-resume
-      _pendingSend = _PendingSend.none;
+      // Only clear intent if still disconnected (manual dismiss). If connected, keep for auto-resume.
+      final stillDisconnected = (_connectedDevice == null || _rxCharacteristic == null);
+      if (stillDisconnected) {
+        _pendingSend = _PendingSend.none;
+      }
       return;
     }
     if (_isSending) {
