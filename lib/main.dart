@@ -899,7 +899,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   // If not processed yet, process with current framing, then send
   Future<void> _sendOrProcessThenSend() async {
-    if(_isSending) return;
+    if(_isSending){
+      if(!await _isReallyConnected()){
+        setState((){ _isSending = false; });
+      } else {
+        return;
+      }
+    }
     // First, ensure Bluetooth adapter is ON; if OFF, show the same turn-on dialog used at launch
     try{
       final adapterState = await FlutterBluePlus.adapterState.first;
@@ -908,7 +914,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       }
     }catch(_){ /* ignore; continue to disconnected handling */ }
     // If disconnected, show message and exit
-    if(_connectedDevice==null || _rxCharacteristic==null){
+    if(!await _isReallyConnected()){
+      setState((){ _connectedDevice = null; _rxCharacteristic = null; });
       if(!mounted) return;
       // Pick the correct finger image based on current orientation
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
@@ -1286,6 +1293,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     if(_isSending && !force && now.difference(_lastStatusUpdate).inMilliseconds < 350 && !message.startsWith('Progress')){ return; }
     _lastStatusUpdate = now;
     if(mounted){ setState(()=> _statusMessage = message); }
+  }
+
+  // Verify actual BLE connection state; fields may be stale during reconnects
+  Future<bool> _isReallyConnected() async {
+    try {
+      final dev = _connectedDevice;
+      if (dev == null) return false;
+      final state = await dev.connectionState.first;
+      return state == BluetoothConnectionState.connected;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Pick an image from gallery and clear prior processed state
@@ -2062,7 +2081,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   Future<void> _sendOtaFile() async {
-    if (_connectedDevice == null || _rxCharacteristic == null) {
+    if (!await _isReallyConnected()) {
+      setState((){ _connectedDevice = null; _rxCharacteristic = null; });
       _updateStatus("Not connected. Trying to connect...");
       // Reuse the same UX pattern as _sendOrProcessThenSend when disconnected
       if(!mounted) return;
