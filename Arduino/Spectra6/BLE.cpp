@@ -57,6 +57,11 @@ bool spiffsReady = false;
 // OTA file path and transfer mode flag
 const char* OTA_PATH = "/ota.bin";
 bool isOtaTransfer = false;
+// Header parsing state for typed header support (1-byte type + 4-byte size)
+static uint8_t headerBuf[5];
+static int headerCollected = 0;
+static int headerExpectedLen = 0; // 5 for typed header, 4 for legacy
+static bool headerHasType = false; // true if first byte is a transfer type
 
 // Last connected device tracking
 String lastConnectedDeviceAddress = "";
@@ -259,6 +264,9 @@ void onBLEConnected(BLEDevice central) {
   dataReceived = false;
   batterySentForThisTransfer = false;
   isOtaTransfer = false;
+  headerCollected = 0;
+  headerExpectedLen = 0;
+  headerHasType = false;
   
   // For ArduinoBLE, we can't directly request MTU changes, but we can
   // optimize our settings for the fastest possible transfer
@@ -323,36 +331,100 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
   
   // If this is the size information
   if (receivingSize) {
-    // Read the data into our main buffer
-    characteristic.readValue(buffer, dataLength);
-    
-    // First 4 bytes contain the expected data size
-    expectedDataSize = ((unsigned long)buffer[0]) | 
-                       ((unsigned long)buffer[1] << 8) |
-                       ((unsigned long)buffer[2] << 16) |
-                       ((unsigned long)buffer[3] << 24);
-    
+    // Read the incoming bytes locally to support typed or legacy headers and possible extra payload
+    uint8_t temp[BLE_MAX_WRITE_SIZE];
+    characteristic.readValue(temp, dataLength);
+
+    int usedForHeader = 0;
+
+    // Determine header format if starting fresh
+    if (headerCollected == 0) {
+      // If first byte looks like a transfer type, expect 5-byte header, else legacy 4-byte size
+      if (dataLength >= 1 && (temp[0] == 0x10 || temp[0] == 0x20)) {
+        headerHasType = true;
+        headerExpectedLen = 5;
+      } else {
+        headerHasType = false;
+        headerExpectedLen = 4;
+      }
+
+      if (dataLength >= headerExpectedLen) {
+        // We have full header in this packet
+        if (headerHasType) {
+          uint8_t t = temp[0];
+          expectedDataSize = ((unsigned long)temp[1]) |
+                             ((unsigned long)temp[2] << 8) |
+                             ((unsigned long)temp[3] << 16) |
+                             ((unsigned long)temp[4] << 24);
+          isOtaTransfer = (t == 0x20); // 0x10 = image, 0x20 = OTA
+          Serial.print("[Typed] Header type: 0x");
+          Serial.print(t, HEX);
+          Serial.print(" size: ");
+          Serial.println(expectedDataSize);
+          usedForHeader = 5;
+        } else {
+          expectedDataSize = ((unsigned long)temp[0]) |
+                             ((unsigned long)temp[1] << 8) |
+                             ((unsigned long)temp[2] << 16) |
+                             ((unsigned long)temp[3] << 24);
+          isOtaTransfer = (expectedDataSize != BLE_IMAGE_SIZE);
+          Serial.print("[Legacy] Header size: ");
+          Serial.println(expectedDataSize);
+          usedForHeader = 4;
+        }
+      } else {
+        // Partial header, store and wait for next packet
+        memcpy(headerBuf, temp, dataLength);
+        headerCollected = dataLength;
+        return;
+      }
+    } else {
+      // Continue collecting a partial header
+      int need = headerExpectedLen - headerCollected;
+      int toCopy = (dataLength < need) ? dataLength : need;
+      memcpy(&headerBuf[headerCollected], temp, toCopy);
+      headerCollected += toCopy;
+      usedForHeader = toCopy;
+      if (headerCollected < headerExpectedLen) {
+        // Still waiting for more header bytes
+        return;
+      }
+      // We now have a full header in headerBuf
+      if (headerHasType) {
+        uint8_t t = headerBuf[0];
+        expectedDataSize = ((unsigned long)headerBuf[1]) |
+                           ((unsigned long)headerBuf[2] << 8) |
+                           ((unsigned long)headerBuf[3] << 16) |
+                           ((unsigned long)headerBuf[4] << 24);
+        isOtaTransfer = (t == 0x20);
+        Serial.print("[Typed] Header(type in two packets) type: 0x");
+        Serial.print(t, HEX);
+        Serial.print(" size: ");
+        Serial.println(expectedDataSize);
+      } else {
+        expectedDataSize = ((unsigned long)headerBuf[0]) |
+                           ((unsigned long)headerBuf[1] << 8) |
+                           ((unsigned long)headerBuf[2] << 16) |
+                           ((unsigned long)headerBuf[3] << 24);
+        isOtaTransfer = (expectedDataSize != BLE_IMAGE_SIZE);
+        Serial.print("[Legacy] Header(size in two packets) size: ");
+        Serial.println(expectedDataSize);
+      }
+      // Reset header collection for next transfer
+      headerCollected = 0;
+    }
+
     Serial.print("Expected data size: ");
     Serial.print(expectedDataSize);
     Serial.print(" bytes (");
     Serial.print(expectedDataSize / 1024.0, 1);
     Serial.println(" KB)");
 
-    // Decide whether this is image or OTA based on size
-    if (expectedDataSize == BLE_IMAGE_SIZE) {
-      isOtaTransfer = false;
-      Serial.println("[Info] Receiving image data (192,000 bytes)");
-    } else {
-      isOtaTransfer = true;
-      Serial.print("[Info] Receiving OTA data size: ");
-      Serial.println(expectedDataSize);
-    }
-    
-    // Reset counters for image data and start timing the transfer
+    // Reset counters for data and start timing the transfer
     receivedDataSize = 0;
     receivingSize = false;
     displayInitialized = false;
-    transferStartTime = millis(); // Start timing the transfer
+    transferStartTime = millis();
 
     // Prepare SPIFFS file for writing incoming data (image or OTA)
     if (spiffsReady) {
@@ -373,19 +445,130 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     } else {
       Serial.println("SPIFFS not ready - cannot store incoming data.");
     }
-    
-    // Send acknowledgment
+
+    // Send acknowledgment for header/size
     sendAcknowledgment(ACK_SIZE_RECEIVED);
-    Serial.println("Size received, ready for image data");
-    // Send battery once, right at the start of image data per request
+    Serial.println("Size received, ready for data");
+    // Send battery once, at the start
     if (!batterySentForThisTransfer) {
-  uint8_t batt = getBatteryPercent();
+      uint8_t batt = getBatteryPercent();
       uint8_t battMsg[] = {ACK_BATTERY, batt};
       txCharacteristic.writeValue(battMsg, sizeof(battMsg));
       batterySentForThisTransfer = true;
       Serial.print("Battery percent sent at start: ");
       Serial.print(batt);
       Serial.println("%");
+    }
+
+    // If there are leftover bytes in this packet after the header, treat them as the first data chunk
+    int leftover = dataLength - usedForHeader;
+    if (leftover > 0) {
+      const uint8_t* payload = &temp[usedForHeader];
+      // Initialize display on first payload if this is an image transfer
+      if (!isOtaTransfer && !displayInitialized) {
+        Serial.println("Initializing display for data reception");
+        EPD_init_fast();
+        EPD_W21_WriteCMD(0x10);
+        for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT / 8; i++) {
+          EPD_W21_WriteDATA(0xff);
+        }
+        displayInitialized = true;
+      }
+      if (imageFile) {
+        imageFile.write(payload, leftover);
+      }
+      receivedDataSize += leftover;
+
+      // Minimal progress/ack updates matching main path
+      uint8_t progress = (receivedDataSize * 100) / expectedDataSize;
+      if ((receivedDataSize % (BLE_MAX_WRITE_SIZE * BLE_ACK_THRESHOLD)) == 0 || (receivedDataSize >= expectedDataSize)) {
+        sendProgressUpdate(progress);
+        if ((progress % 20) == 0 || progress == 100) {
+          unsigned long currentTime = millis();
+          unsigned long elapsedTime = currentTime - transferStartTime;
+          if (elapsedTime > 0) {
+            transferSpeed = (receivedDataSize * 1000) / elapsedTime;
+            Serial.print("Transfer speed: ");
+            Serial.print(transferSpeed / 1024.0, 2);
+            Serial.println(" KB/s");
+          }
+        }
+      }
+
+      // If we already received everything in this packet, finalize
+      if (imageFile && (receivedDataSize >= expectedDataSize)) {
+        imageFile.flush();
+      }
+
+      if (receivedDataSize >= expectedDataSize) {
+        unsigned long totalTime = millis() - transferStartTime;
+        float speedKBps = (float)(expectedDataSize * 1000) / (float)(totalTime * 1024);
+        Serial.print("Transfer complete in ");
+        Serial.print(totalTime / 1000.0, 2);
+        Serial.println(" seconds");
+        Serial.print("Average transfer speed: ");
+        Serial.print(speedKBps, 2);
+        Serial.println(" KB/s");
+
+        if (imageFile) {
+          imageFile.close();
+          if (isOtaTransfer) {
+            Serial.print("OTA data stored in SPIFFS at ");
+            Serial.println(OTA_PATH);
+            // Apply OTA update
+            File otaFile = SPIFFS.open(OTA_PATH, FILE_READ);
+            if (!otaFile) {
+              Serial.println("Failed to open OTA file for reading");
+              sendAcknowledgment(ACK_ERROR);
+            } else {
+              Serial.println("Starting OTA update...");
+              if (!Update.begin(expectedDataSize)) {
+                Serial.println("Update.begin failed");
+                otaFile.close();
+                sendAcknowledgment(ACK_ERROR);
+              } else {
+                size_t written = 0;
+                const size_t BUFSZ = 4096;
+                uint8_t buf[BUFSZ];
+                while (otaFile.available()) {
+                  size_t n = otaFile.read(buf, BUFSZ);
+                  if (n == 0) break;
+                  size_t w = Update.write(buf, n);
+                  written += w;
+                  if (w != n) {
+                    Serial.println("OTA write mismatch");
+                    break;
+                  }
+                }
+                otaFile.close();
+                if (written == expectedDataSize && Update.end(true)) {
+                  Serial.println("OTA successful. Rebooting...");
+                  sendAcknowledgment(ACK_COMPLETE);
+                  delay(200);
+                  ESP.restart();
+                } else {
+                  Serial.print("OTA failed. Error #");
+                  Serial.println(Update.getError());
+                  Update.end();
+                  sendAcknowledgment(ACK_ERROR);
+                }
+              }
+            }
+          } else {
+            Serial.print("Image data stored in SPIFFS at ");
+            Serial.println(IMAGE_PATH);
+            dataReceived = true;
+            sendAcknowledgment(ACK_COMPLETE);
+          }
+        }
+
+        // Reset state for next transfer
+        receivingSize = true;
+        receivedDataSize = 0;
+        expectedDataSize = 0;
+        displayInitialized = false;
+        isOtaTransfer = false;
+      }
     }
   } 
   // Otherwise, we're receiving the image or OTA data

@@ -30,6 +30,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:tuple/tuple.dart';
 import 'package:path_provider/path_provider.dart'; // persistent storage dir
 
+// Tracks which action the user intended when tapping while disconnected
+enum _PendingSend { none, image, ota }
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Force the whole app to stay in portrait mode (device rotations won't trigger landscape layouts)
@@ -81,6 +84,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   static const int ACK_COMPLETE = 0x03;
   static const int ACK_ERROR = 0xFF;
   static const int ACK_BATTERY = 0xB0; // Battery percentage notification
+  // Transfer-type header values (1 byte)
+  static const int TRANSFER_TYPE_IMAGE = 0x10;
+  static const int TRANSFER_TYPE_OTA   = 0x20;
 
   // Hardware palette for 6-color e-paper display - exact RGB values from Python script
   static const List<ColorMap> hwPalette = [
@@ -177,6 +183,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
   // automatically dismiss it and send once the device connects.
   BuildContext? _activeDialogContext;
+  // Track which action should auto-resume after connect when the popup was shown
+  _PendingSend _pendingSend = _PendingSend.none;
 
   Widget _smallBtn(String label, VoidCallback? onPressed, {IconData? icon}){
     if(icon!=null){
@@ -904,6 +912,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       if(!mounted) return;
       // Pick the correct finger image based on current orientation
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
+      _pendingSend = _PendingSend.image; // remember user's intent
       await showDialog(
         context: context,
         builder: (ctx){
@@ -932,6 +941,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       );
       // Dialog closed; clear handle if still set
       _activeDialogContext = null;
+      // If user manually dismissed, don't auto-resume
+      _pendingSend = _PendingSend.none;
       return;
     }
     // Connected path: ensure we don't mistakenly treat as pending
@@ -1809,12 +1820,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _isConnecting = false;
   // Remain on the connected UI; first window was removed
       });
-      // If the popup was visible (user tapped Send while disconnected), close it and send now
+      // If the popup was visible (user tapped while disconnected), close it and resume the intended action now
       if(_activeDialogContext != null){
         _dismissActiveDialog();
         await Future.delayed(const Duration(milliseconds: 100));
-        // Trigger send; it will process if needed
-        unawaited(_sendOrProcessThenSend());
+        // Trigger the correct action based on user's intent
+        final intent = _pendingSend;
+        _pendingSend = _PendingSend.none;
+        if (intent == _PendingSend.ota) {
+          unawaited(_sendOtaFile());
+        } else if (intent == _PendingSend.image) {
+          unawaited(_sendOrProcessThenSend());
+        }
       }
       // Listen for future connection state changes and auto-reconnect
       await _connStateSub?.cancel();
@@ -1952,17 +1969,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       Uint8List packedData = _packPixels(toSend);
       _updateStatus("Packed data size: ${packedData.length} bytes");
       
-      // First send the total size as a 4-byte value
-      int totalSize = packedData.length;
-      Uint8List sizeBytes = Uint8List(4);
-      sizeBytes[0] = totalSize & 0xFF;
-      sizeBytes[1] = (totalSize >> 8) & 0xFF;
-      sizeBytes[2] = (totalSize >> 16) & 0xFF;
-      sizeBytes[3] = (totalSize >> 24) & 0xFF;
-      
-      // Send the size
-      await _rxCharacteristic!.write(sizeBytes);
-      _updateStatus("Sent size: $totalSize bytes");
+  // First send a 1-byte type + 4-byte little-endian size header
+  int totalSize = packedData.length;
+  final header = Uint8List(5);
+  header[0] = TRANSFER_TYPE_IMAGE;
+  final bd = ByteData.view(header.buffer);
+  bd.setUint32(1, totalSize, Endian.little);
+  // Send the header
+  await _rxCharacteristic!.write(header);
+  _updateStatus("Sent image header: $totalSize bytes");
       
       // Small delay to ensure Arduino processes the size
       await Future.delayed(const Duration(milliseconds: 50));
@@ -2059,6 +2074,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       // Reuse the same UX pattern as _sendOrProcessThenSend when disconnected
       if(!mounted) return;
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
+      _pendingSend = _PendingSend.ota; // remember user's intent
       await showDialog(
         context: context,
         builder: (ctx){
@@ -2086,6 +2102,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         }
       );
       _activeDialogContext = null;
+      // If user manually dismissed, don't auto-resume
+      _pendingSend = _PendingSend.none;
       return;
     }
     if (_isSending) {
@@ -2121,14 +2139,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _transferSpeed = 0;
       });
 
-      // Protocol: send 4-byte LE size then raw chunks (same as image sender)
+      // Protocol: send 1-byte type (OTA) + 4-byte LE size then raw chunks
       final totalSize = otaBytes.length;
-      final sizeBytes = Uint8List(4)
-        ..[0] = totalSize & 0xFF
-        ..[1] = (totalSize >> 8) & 0xFF
-        ..[2] = (totalSize >> 16) & 0xFF
-        ..[3] = (totalSize >> 24) & 0xFF;
-      await _rxCharacteristic!.write(sizeBytes);
+      final header = Uint8List(5);
+      header[0] = TRANSFER_TYPE_OTA;
+      final bd = ByteData.view(header.buffer);
+      bd.setUint32(1, totalSize, Endian.little);
+      await _rxCharacteristic!.write(header);
       await Future.delayed(const Duration(milliseconds: 30));
 
       final start = DateTime.now().millisecondsSinceEpoch;
