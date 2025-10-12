@@ -120,6 +120,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   int _transferProgress = 0;
   double _transferSpeed = 0;
   bool _autoConnectTried = false; // ensure single auto-connect attempt per scan
+  bool _mtuRequestedForThisConnection = false; // guard to avoid repeated MTU requests per connection
   int? _batteryPercent; // latest battery percent from device
   // Periodic connection status for bottom bar
   Timer? _connectionStatusTimer;
@@ -1795,13 +1796,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       // Connect to the device
       await device.connect();
       
-      // Request MTU increase - this might allow larger data chunks on supported devices
-      try {
-        await device.requestMtu(512);
-        _updateStatus("Requested larger MTU size");
-      } catch (e) {
-        _updateStatus("Could not negotiate MTU: $e");
-        // Continue anyway with smaller chunks
+      // Request MTU increase once per connection (no user-facing success message)
+      if (!_mtuRequestedForThisConnection) {
+        try {
+          await device.requestMtu(512);
+          _mtuRequestedForThisConnection = true;
+        } catch (e) {
+          _updateStatus("Could not negotiate MTU: $e");
+          // Continue anyway with smaller chunks
+        }
       }
       
       // Discover services
@@ -1870,6 +1873,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             });
             _updateStatus('Device disconnected. Reconnecting...');
           }
+          _mtuRequestedForThisConnection = false; // reset for next connection
           // Keep pending send true so it resumes on reconnect
           if(!_isScanning && !_isConnecting){ _scanForDevices(); }
         }
