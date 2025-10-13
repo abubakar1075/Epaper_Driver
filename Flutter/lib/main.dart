@@ -691,7 +691,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal:8, vertical:2),
       decoration: BoxDecoration(
-        color: Colors.grey[200],
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(children:[
@@ -1682,7 +1682,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           ),
           child: Container(
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.white, width: whiteBorder),
+              border: Border.all(color: Colors.transparent, width: whiteBorder),
             ),
             child: Container(
               decoration: BoxDecoration(
@@ -1715,7 +1715,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       Expanded(child: ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: Container(
-          color: Colors.white,
+          color: Colors.transparent,
           child: Stack(
             children: [
               Positioned.fill(child: child),
@@ -2788,7 +2788,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Widget _statusCard() => Container(
     padding: const EdgeInsets.all(8),
     decoration: BoxDecoration(
-      color: Colors.grey[200],
+      color: Colors.white.withOpacity(0.1),
       borderRadius: BorderRadius.circular(8),
     ),
     child: Row(
