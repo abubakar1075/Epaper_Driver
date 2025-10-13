@@ -488,52 +488,98 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Top bar visible while connected (image, library, navigation)
   Widget _connectedTopBar(){
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 1),
       child: Row(children:[
         Expanded(
           child: SizedBox(
-            height: 40,
-            child: ElevatedButton.icon(
+            height: 32,
+            child: ElevatedButton(
               onPressed: _pickImage,
-              icon: const Icon(Icons.photo_library, size: 16),
-              label: const Text('Gallery', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.photo_library, size: 11),
+                  SizedBox(width: 2),
+                  Text('Gallery', style: TextStyle(fontSize: 15)),
+                ],
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
             ),
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
         Expanded(
           child: SizedBox(
-            height: 40,
-            child: ElevatedButton.icon(
+            height: 32,
+            child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _library.isEmpty ? null : Colors.green.shade600,
                 foregroundColor: _library.isEmpty ? null : Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
               ),
               onPressed: _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); },
-              icon: const Icon(Icons.collections, size: 16),
-              label: Text('Library (${_library.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.collections, size: 11),
+                  SizedBox(width: 2),
+                  Text('Lib', style: TextStyle(fontSize: 15)),
+                ],
+              ),
             ),
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
         Expanded(
           child: SizedBox(
-            height: 40,
-            child: ElevatedButton.icon(
+            height: 32,
+            child: ElevatedButton(
               onPressed: (){ setState((){ _showAi = true; _aiError = null; }); },
-              icon: const Icon(Icons.auto_awesome, size: 16),
-              label: const Text('AI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.auto_awesome, size: 11),
+                  SizedBox(width: 2),
+                  Text('AI', style: TextStyle(fontSize: 15)),
+                ],
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
             ),
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
         Expanded(
           child: SizedBox(
-            height: 40,
-            child: ElevatedButton.icon(
+            height: 32,
+            child: ElevatedButton(
               onPressed: (){ setState((){ _showOnline = true; _onlineImagesFuture ??= _fetchGitHubImages(); }); },
-              icon: const Icon(Icons.cloud_download, size: 16),
-              label: const Text('Online', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.cloud_download, size: 11),
+                  SizedBox(width: 2),
+                  Text('Online', style: TextStyle(fontSize: 15)),
+                ],
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
             ),
           ),
         ),
