@@ -1200,14 +1200,27 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 );
               }
               
+              // Ultra-aggressive preloading - preload first 15 images in parallel
+              _preloadImages(imageUrls.take(15).toList());
+              
+              // Continue preloading remaining images in background
+              if (imageUrls.length > 15) {
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  _preloadImages(imageUrls.skip(15).toList());
+                });
+              }
+              
               return GridView.builder(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3, // 3 columns to fit more images
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
+                  crossAxisCount: 4, // 4 columns for more images and faster scrolling
+                  crossAxisSpacing: 4,
+                  mainAxisSpacing: 4,
                   childAspectRatio: 1.0,
                 ),
+                // Performance optimizations
+                cacheExtent: 1000, // Cache more items for smoother scrolling
+                physics: const BouncingScrollPhysics(), // Faster scroll physics
                 itemCount: imageUrls.length,
                 itemBuilder: (context, index) {
                   final imageUrl = imageUrls[index];
@@ -1215,11 +1228,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     onTap: () => _loadOnlineImage(imageUrl),
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade400, width: 0.5),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                         child: _buildImageWithRetry(imageUrl),
                       ),
                     ),
@@ -1263,7 +1276,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             
             if (fileId != null && fileName != null && _isValidImageFile(fileName)) {
               debugPrint('Found valid image: $fileName with ID: $fileId');
-              imageUrls.add('https://drive.google.com/uc?export=download&id=$fileId');
+              // Use ultra-fast small thumbnail format
+              imageUrls.add('https://drive.google.com/thumbnail?id=$fileId&sz=w200-h200');
             }
           }
           
@@ -1290,8 +1304,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                     !fileId.contains('folder') && // Exclude folder IDs
                     !fileId.startsWith('0B')) { // Exclude old format IDs
                   seenIds.add(fileId);
-                  // Use the more reliable Google Drive format
-                  imageUrls.add('https://drive.google.com/uc?export=view&id=$fileId');
+                  // Use ultra-fast small thumbnail format for quicker loading
+                  imageUrls.add('https://drive.google.com/thumbnail?id=$fileId&sz=w200-h200');
                 }
               }
             }
@@ -1359,8 +1373,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               seenIds.add(fileId);
               debugPrint('Found potential file: $fileId');
               
-              // Use the download URL format
-              imageUrls.add('https://drive.google.com/uc?export=download&id=$fileId');
+              // Use ultra-fast tiny thumbnail URL format for instant loading
+              imageUrls.add('https://drive.google.com/thumbnail?id=$fileId&sz=w200-h200');
             }
           }
           
@@ -1393,36 +1407,64 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
            lowerName.endsWith('.webp');
   }
   
-  // Build image widget with retry logic and better error handling
+  // Ultra-fast preloading with memory optimization
+  void _preloadImages(List<String> imageUrls) {
+    // Preload in batches to avoid memory issues
+    for (int i = 0; i < imageUrls.length; i++) {
+      final url = imageUrls[i];
+      try {
+        // Use optimized network image with small cache
+        final imageProvider = NetworkImage(
+          url,
+          headers: const {
+            'User-Agent': 'Mozilla/5.0 (compatible)',
+            'Accept': 'image/*',
+            'Cache-Control': 'max-age=3600', // 1 hour cache
+          },
+        );
+        precacheImage(imageProvider, context);
+        
+        // Small delay between preloads to avoid overwhelming the network
+        if (i % 3 == 0 && i > 0) {
+          Future.delayed(const Duration(milliseconds: 50));
+        }
+      } catch (e) {
+        debugPrint('Failed to preload image: $url');
+      }
+    }
+  }
+  
+  // Build image widget with faster loading and caching
   Widget _buildImageWithRetry(String imageUrl) {
     return Image.network(
       imageUrl,
       fit: BoxFit.cover,
+      // Ultra-aggressive performance optimizations
+      cacheWidth: 150, // Even smaller cache for lightning speed
+      cacheHeight: 150,
+      filterQuality: FilterQuality.none, // Fastest possible decoding
+      gaplessPlayback: true, // Smooth transitions
+      // Ultra-optimized headers for maximum speed
+      headers: const {
+        'User-Agent': 'Mozilla/5.0 (Mobile; compatible)',
+        'Accept': 'image/webp,image/jpeg,image/png,image/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate',
+        'Cache-Control': 'max-age=3600',
+        'Connection': 'keep-alive',
+      },
       loadingBuilder: (context, child, loadingProgress) {
         if (loadingProgress == null) return child;
         return Container(
-          color: Colors.grey.shade50,
+          color: Colors.grey.shade100,
           child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded / 
-                          loadingProgress.expectedTotalBytes!
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Loading...',
-                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                ),
-              ],
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: Colors.blue.shade300,
+                // Remove progress calculation for faster rendering
+              ),
             ),
           ),
         );
@@ -1430,9 +1472,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       errorBuilder: (context, error, stackTrace) {
         debugPrint('Image load failed: $imageUrl');
         
-        // Try an alternative URL format for Google Drive
-        final fileId = imageUrl.split('id=').last.split('&').first;
-        final alternativeUrl = 'https://lh3.googleusercontent.com/d/$fileId';
+        // Try alternative faster URL formats for Google Drive
+        final fileId = imageUrl.contains('id=') 
+            ? imageUrl.split('id=').last.split('&').first
+            : imageUrl.split('thumbnail?id=').last.split('&').first;
+        final alternativeUrl = 'https://drive.google.com/uc?export=view&id=$fileId';
         
         return Image.network(
           alternativeUrl,
@@ -1467,9 +1511,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Load an online image and set it as the current image
   Future<void> _loadOnlineImage(String imageUrl) async {
     try {
-      _updateStatus('Downloading image...');
+      _updateStatus('Downloading full-resolution image...');
       
-      final response = await http.get(Uri.parse(imageUrl));
+      // Convert thumbnail URL to full-resolution download URL
+      String fullResUrl = imageUrl;
+      if (imageUrl.contains('thumbnail?id=')) {
+        final fileId = imageUrl.split('id=')[1].split('&')[0];
+        fullResUrl = 'https://drive.google.com/uc?export=download&id=$fileId';
+      }
+      
+      final response = await http.get(Uri.parse(fullResUrl));
       if (response.statusCode == 200) {
         // Create a temporary file
         final tempDir = await getTemporaryDirectory();
