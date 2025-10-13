@@ -162,6 +162,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   int? _selectedLibraryIndex; // selected index in library view
   bool _showLibrary = false; // toggle to show library screen when connected
   bool _showOnline = false; // toggle to show online images screen when connected
+  Future<List<String>>? _onlineImagesFuture; // cached future for online images
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -530,7 +531,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           child: SizedBox(
             height: 40,
             child: ElevatedButton.icon(
-              onPressed: (){ setState((){ _showOnline = true; }); },
+              onPressed: (){ setState((){ _showOnline = true; _onlineImagesFuture ??= _fetchGitHubImages(); }); },
               icon: const Icon(Icons.cloud_download, size: 16),
               label: const Text('Online', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             ),
@@ -1108,7 +1109,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _deleteLibraryEntryFiles(entry);
   }
 
-  // Online images view - shows images from GitHub repository
+  // Online images view - shows images from Google Drive folder
   Widget _buildOnlineView(){
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1128,12 +1129,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                   textAlign: TextAlign.center,
                 ),
               ),
+              IconButton(
+                onPressed: (){ setState((){ _onlineImagesFuture = _fetchGitHubImages(); }); },
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh images',
+              ),
             ],
           ),
         ),
         Expanded(
           child: FutureBuilder<List<String>>(
-            future: _fetchGitHubImages(),
+            future: _onlineImagesFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -1159,17 +1165,47 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               
               final imageUrls = snapshot.data ?? [];
               if (imageUrls.isEmpty) {
-                return const Center(
-                  child: Text('No images found'),
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.folder_open, size: 64, color: Colors.orange),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Individual File Sharing Required',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Your folder is public, but individual files need sharing:\n\n'
+                          '1. Go to your Google Drive folder\n'
+                          '2. Select each image file\n'
+                          '3. Right-click → Share → "Anyone with the link"\n'
+                          '4. Refresh this page\n\n'
+                          'Or try uploading new images (they inherit folder permissions)',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => setState(() => _onlineImagesFuture = _fetchGitHubImages()),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               }
               
               return GridView.builder(
                 padding: const EdgeInsets.all(8),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
+                  crossAxisCount: 3, // 3 columns to fit more images
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
                   childAspectRatio: 1.0,
                 ),
                 itemCount: imageUrls.length,
@@ -1184,27 +1220,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded / 
-                                      loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: Colors.grey.shade200,
-                              child: const Icon(Icons.error, color: Colors.red),
-                            );
-                          },
-                        ),
+                        child: _buildImageWithRetry(imageUrl),
                       ),
                     ),
                   );
@@ -1217,33 +1233,236 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     );
   }
 
-  // Fetch image URLs from GitHub repository
+  // Fetch images from your public Google Drive folder  
   Future<List<String>> _fetchGitHubImages() async {
     try {
-      const repoUrl = 'https://api.github.com/repos/abubakar1075/Canvas_BT/contents';
-      final response = await http.get(Uri.parse(repoUrl));
+      debugPrint('Loading images from your public Google Drive folder...');
       
-      if (response.statusCode == 200) {
-        final List<dynamic> contents = json.decode(response.body);
-        final imageUrls = <String>[];
+      const folderId = '1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
+      
+      // Since your folder is already public, let's use a direct approach
+      
+      // Method 1: Try to access folder contents via web scraping
+      final folderUrl = 'https://drive.google.com/drive/folders/$folderId';
+      
+      try {
+        final response = await http.get(Uri.parse(folderUrl));
         
-        for (final item in contents) {
-          if (item['type'] == 'file' && item['name'] != null && item['download_url'] != null) {
-            final fileName = item['name'].toString().toLowerCase();
-            if (fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
-              imageUrls.add(item['download_url']);
+        if (response.statusCode == 200) {
+          final htmlContent = response.body;
+          final imageUrls = <String>[];
+          
+          // Look for file patterns in the HTML that indicate images
+          // Google Drive exposes file information in the page source
+          final filePattern = RegExp(r'"([a-zA-Z0-9_-]{25,})"[^"]*"([^"]*\.(?:jpg|jpeg|png|gif|webp))"', caseSensitive: false);
+          final matches = filePattern.allMatches(htmlContent);
+          
+          for (final match in matches) {
+            final fileId = match.group(1);
+            final fileName = match.group(2);
+            
+            if (fileId != null && fileName != null && _isValidImageFile(fileName)) {
+              debugPrint('Found valid image: $fileName with ID: $fileId');
+              imageUrls.add('https://drive.google.com/uc?export=download&id=$fileId');
             }
           }
+          
+          // Alternative pattern - be more selective about file IDs
+          if (imageUrls.isEmpty) {
+            // Look for specific patterns that indicate image files in Google Drive
+            final patterns = [
+              // Pattern 1: Look for file IDs near image-related terms
+              RegExp(r'"([a-zA-Z0-9_-]{28,})"[^"]{0,100}(?:jpg|jpeg|png|gif|webp)', caseSensitive: false),
+              // Pattern 2: Look for file IDs in image context
+              RegExp(r'(?:jpg|jpeg|png|gif|webp)[^"]{0,50}"([a-zA-Z0-9_-]{28,})"', caseSensitive: false),
+            ];
+            
+            final seenIds = <String>{};
+            
+            for (final pattern in patterns) {
+              final matches = pattern.allMatches(htmlContent);
+              for (final match in matches) {
+                final fileId = match.group(1);
+                if (fileId != null && 
+                    fileId.length >= 28 && 
+                    fileId.length <= 50 && 
+                    !seenIds.contains(fileId) &&
+                    !fileId.contains('folder') && // Exclude folder IDs
+                    !fileId.startsWith('0B')) { // Exclude old format IDs
+                  seenIds.add(fileId);
+                  // Use the more reliable Google Drive format
+                  imageUrls.add('https://drive.google.com/uc?export=view&id=$fileId');
+                }
+              }
+            }
+            
+            debugPrint('Found ${imageUrls.length} carefully filtered image URLs');
+          }
+          
+          if (imageUrls.isNotEmpty) {
+            // Filter out duplicate URLs and very short IDs
+            final filteredUrls = imageUrls.toSet().where((url) {
+              final id = url.split('id=').last;
+              return id.length >= 25; // Google Drive file IDs are at least 25 characters
+            }).toList();
+            
+            // Return all discovered images from your Google Drive folder
+            debugPrint('Discovered ${filteredUrls.length} image URLs from your Google Drive');
+            return filteredUrls; // Show ALL images from your folder
+          }
         }
-        
-        return imageUrls;
-      } else {
-        throw Exception('Failed to fetch repository contents: ${response.statusCode}');
+      } catch (e) {
+        debugPrint('Web scraping failed: $e');
       }
+      
+      // Method 2: Fallback to known working approach
+      return _getKnownPublicImages();
+      
     } catch (e) {
-      throw Exception('Error fetching images: $e');
+      debugPrint('Error auto-discovering images: $e');
+      return _getKnownPublicImages();
     }
   }
+  
+  // Access your public Google Drive folder directly
+  Future<List<String>> _getKnownPublicImages() async {
+    try {
+      debugPrint('Accessing your public Google Drive folder directly...');
+      
+      const folderId = '1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
+      
+      // For public folders, try to get the files using the folder's export URL
+      final exportUrl = 'https://drive.google.com/drive/folders/$folderId?usp=sharing';
+      
+      try {
+        final response = await http.get(Uri.parse(exportUrl));
+        debugPrint('Public folder access status: ${response.statusCode}');
+        
+        if (response.statusCode == 200) {
+          // Parse HTML to find actual file IDs
+          final htmlContent = response.body;
+          final imageUrls = <String>[];
+          
+          // Look for patterns like: "1ABC...XYZ"
+          final fileIdPattern = RegExp(r'"(1[a-zA-Z0-9_-]{32,42})"');
+          final matches = fileIdPattern.allMatches(htmlContent);
+          final seenIds = <String>{};
+          
+          for (final match in matches) {
+            final fileId = match.group(1);
+            if (fileId != null && 
+                fileId != folderId && 
+                fileId.length >= 33 && 
+                fileId.length <= 44 &&
+                !seenIds.contains(fileId)) {
+              
+              seenIds.add(fileId);
+              debugPrint('Found potential file: $fileId');
+              
+              // Use the download URL format
+              imageUrls.add('https://drive.google.com/uc?export=download&id=$fileId');
+            }
+          }
+          
+          if (imageUrls.isNotEmpty) {
+            debugPrint('Found ${imageUrls.length} files in your public folder');
+            return imageUrls;
+          }
+        }
+      } catch (e) {
+        debugPrint('Direct folder access failed: $e');
+      }
+      
+      // If auto-discovery fails, provide manual setup instructions
+      debugPrint('Auto-discovery failed - folder may need individual file sharing');
+      return [];
+      
+    } catch (e) {
+      debugPrint('Error accessing public folder: $e');
+      return [];
+    }
+  }
+  
+  // Helper method to check if a filename is a valid image file
+  bool _isValidImageFile(String fileName) {
+    final lowerName = fileName.toLowerCase();
+    return lowerName.endsWith('.jpg') || 
+           lowerName.endsWith('.jpeg') || 
+           lowerName.endsWith('.png') || 
+           lowerName.endsWith('.gif') || 
+           lowerName.endsWith('.webp');
+  }
+  
+  // Build image widget with retry logic and better error handling
+  Widget _buildImageWithRetry(String imageUrl) {
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          color: Colors.grey.shade50,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded / 
+                          loadingProgress.expectedTotalBytes!
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Loading...',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('Image load failed: $imageUrl');
+        
+        // Try an alternative URL format for Google Drive
+        final fileId = imageUrl.split('id=').last.split('&').first;
+        final alternativeUrl = 'https://lh3.googleusercontent.com/d/$fileId';
+        
+        return Image.network(
+          alternativeUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error2, stackTrace2) {
+            debugPrint('Both URLs failed for file ID: $fileId');
+            return Container(
+              color: Colors.grey.shade100,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.image_not_supported, color: Colors.grey, size: 32),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Not accessible',
+                    style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+  
+
+  
+
 
   // Load an online image and set it as the current image
   Future<void> _loadOnlineImage(String imageUrl) async {
