@@ -711,17 +711,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             icon: Icons.screen_rotation,
             backgroundColor: Colors.indigo.shade600,
           ),
-          const SizedBox(width:6),
+          const SizedBox(width:2),
           _smallBtn('Save', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.green.shade600),
-          const SizedBox(width:6),
+          const SizedBox(width:2),
           _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send, backgroundColor: Colors.blue.shade600),
         ]),
         const Spacer(),
         // Right side controls
         Row(children:[
-          const SizedBox(width:6),
+          const SizedBox(width:2),
           _smallBtn('OTA', _sendOtaFile, icon: Icons.system_update_alt, backgroundColor: Colors.orange.shade600),
-          const SizedBox(width:6),
+          const SizedBox(width:2),
           _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app, backgroundColor: Colors.red.shade600),
         ])
       ]),
