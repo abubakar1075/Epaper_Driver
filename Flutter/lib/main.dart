@@ -163,6 +163,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _showLibrary = false; // toggle to show library screen when connected
   bool _showOnline = false; // toggle to show online images screen when connected
   Future<List<String>>? _onlineImagesFuture; // cached future for online images
+  String? _selectedOnlineImageUrl; // selected online image URL
+  Uint8List? _selectedOnlineImageBytes; // downloaded bytes of selected online image
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -970,6 +972,83 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }
   }
 
+  // Select an online image and download it for preview
+  Future<void> _selectOnlineImage(String imageUrl) async {
+    if (_selectedOnlineImageUrl == imageUrl) {
+      // If already selected, deselect
+      setState(() {
+        _selectedOnlineImageUrl = null;
+        _selectedOnlineImageBytes = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedOnlineImageUrl = imageUrl;
+      _selectedOnlineImageBytes = null; // Clear previous bytes
+    });
+
+    try {
+      _updateStatus('Downloading image preview...');
+      
+      // Convert thumbnail URL to full-resolution download URL
+      String fullResUrl = imageUrl;
+      if (imageUrl.contains('thumbnail?id=')) {
+        final fileId = imageUrl.split('id=')[1].split('&')[0];
+        fullResUrl = 'https://drive.google.com/uc?export=download&id=$fileId';
+      }
+      
+      final response = await http.get(Uri.parse(fullResUrl));
+      if (response.statusCode == 200) {
+        setState(() {
+          _selectedOnlineImageBytes = response.bodyBytes;
+        });
+        _updateStatus('Image ready to use in editor');
+      } else {
+        _updateStatus('Failed to download image');
+        setState(() {
+          _selectedOnlineImageUrl = null;
+        });
+      }
+    } catch (e) {
+      _updateStatus('Error downloading image: $e');
+      setState(() {
+        _selectedOnlineImageUrl = null;
+      });
+    }
+  }
+
+  // Use the selected online image in the editor
+  Future<void> _useSelectedOnlineImage() async {
+    if (_selectedOnlineImageBytes == null) return;
+    
+    try {
+      // Create a temporary file
+      final tempDir = await getTemporaryDirectory();
+      final fileName = _selectedOnlineImageUrl!.split('/').last;
+      final tempFile = File('${tempDir.path}/online_${DateTime.now().millisecondsSinceEpoch}_$fileName');
+      await tempFile.writeAsBytes(_selectedOnlineImageBytes!);
+      
+      // Set as current image
+      setState(() {
+        _originalImage = tempFile;
+        _uiOriginal = null;
+        _processedImage = null;
+        _processedBytes = null;
+        _processedPngBytes = null;
+        _showOnline = false; // Return to main view
+        _viewInitialized = false; // Force frame recompute
+        _selectedOnlineImageUrl = null; // Clear selection
+        _selectedOnlineImageBytes = null;
+      });
+      
+      await _loadUiImage();
+      _updateStatus('Online image loaded into editor');
+    } catch (e) {
+      _updateStatus('Failed to load online image: $e');
+    }
+  }
+
   // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
   Future<void> _addCurrentToLibrary() async {
     // Process on-demand if not already processed
@@ -1195,22 +1274,42 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         Container(
           color: Colors.blue.shade50,
           padding: const EdgeInsets.all(8),
-          child: Row(
+          child: Column(
             children: [
-              IconButton(
-                onPressed: (){ setState(()=> _showOnline = false); },
-                icon: const Icon(Icons.arrow_back),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: (){ setState(()=> _showOnline = false); },
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const Expanded(
+                    child: Text('Online Images', 
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: (){ setState((){ _onlineImagesFuture = _fetchGitHubImages(); }); },
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Refresh images',
+                  ),
+                ],
               ),
-              const Expanded(
-                child: Text('Online Images', 
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              IconButton(
-                onPressed: (){ setState((){ _onlineImagesFuture = _fetchGitHubImages(); }); },
-                icon: const Icon(Icons.refresh),
-                tooltip: 'Refresh images',
+              // Action buttons row - always show Use in Editor button
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _smallBtn('Use in Editor', 
+                    (_selectedOnlineImageUrl != null && _selectedOnlineImageBytes != null) ? _useSelectedOnlineImage : null, 
+                    icon: Icons.open_in_new, backgroundColor: Colors.green.shade600),
+                  const Spacer(),
+                  if (_selectedOnlineImageUrl != null)
+                    Text(_selectedOnlineImageBytes != null ? 'Ready to use' : 'Loading...', 
+                      style: const TextStyle(fontSize: 12))
+                  else
+                    const Text('Select an image to use in editor', 
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
               ),
             ],
           ),
@@ -1302,11 +1401,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 itemCount: imageUrls.length,
                 itemBuilder: (context, index) {
                   final imageUrl = imageUrls[index];
+                  final isSelected = _selectedOnlineImageUrl == imageUrl;
                   return GestureDetector(
-                    onTap: () => _loadOnlineImage(imageUrl),
+                    onTap: () => _selectOnlineImage(imageUrl),
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400, width: 0.5),
+                        border: Border.all(
+                          color: isSelected ? Colors.blue.shade600 : Colors.grey.shade400, 
+                          width: isSelected ? 3.0 : 0.5
+                        ),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: ClipRRect(
@@ -1587,46 +1690,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
 
   // Load an online image and set it as the current image
-  Future<void> _loadOnlineImage(String imageUrl) async {
-    try {
-      _updateStatus('Downloading full-resolution image...');
-      
-      // Convert thumbnail URL to full-resolution download URL
-      String fullResUrl = imageUrl;
-      if (imageUrl.contains('thumbnail?id=')) {
-        final fileId = imageUrl.split('id=')[1].split('&')[0];
-        fullResUrl = 'https://drive.google.com/uc?export=download&id=$fileId';
-      }
-      
-      final response = await http.get(Uri.parse(fullResUrl));
-      if (response.statusCode == 200) {
-        // Create a temporary file
-        final tempDir = await getTemporaryDirectory();
-        final fileName = imageUrl.split('/').last;
-        final tempFile = File('${tempDir.path}/$fileName');
-        await tempFile.writeAsBytes(response.bodyBytes);
-        
-        // Set as current image
-        setState(() {
-          _originalImage = tempFile;
-          _uiOriginal = null;
-          _processedImage = null;
-          _processedBytes = null;
-          _processedPngBytes = null;
-          _showOnline = false; // Return to main view
-          _viewInitialized = false; // Force frame recompute
-        });
-        
-        _loadUiImage();
-        _updateStatus('Online image loaded successfully');
-      } else {
-        _updateStatus('Failed to download image: ${response.statusCode}');
-      }
-    } catch (e) {
-      _updateStatus('Error loading online image: $e');
-    }
-  }
-
   // Preview: show only "In Frame" (left); processing happens on Send
   Widget _buildPreviewAndSliders(){
     return SizedBox(
