@@ -512,14 +512,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             height: 32,
             child: ElevatedButton(
               onPressed: _pickImage,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.photo_library, size: 11),
-                  SizedBox(width: 2),
-                  Text('Gallery', style: TextStyle(fontSize: 15)),
-                ],
-              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 backgroundColor: Colors.blue.shade500,
@@ -529,6 +521,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.photo_library, size: 11),
+                  SizedBox(width: 2),
+                  Text('Gallery', style: TextStyle(fontSize: 15)),
+                ],
               ),
             ),
           ),
@@ -566,14 +566,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             height: 32,
             child: ElevatedButton(
               onPressed: (){ setState((){ _showAi = true; _aiError = null; }); },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.auto_awesome, size: 11),
-                  SizedBox(width: 2),
-                  Text('AI', style: TextStyle(fontSize: 15)),
-                ],
-              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 backgroundColor: Colors.purple.shade500,
@@ -584,6 +576,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.auto_awesome, size: 11),
+                  SizedBox(width: 2),
+                  Text('AI', style: TextStyle(fontSize: 15)),
+                ],
+              ),
             ),
           ),
         ),
@@ -593,14 +593,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             height: 32,
             child: ElevatedButton(
               onPressed: (){ setState((){ _showOnline = true; _onlineImagesFuture ??= _fetchGitHubImages(); }); },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.cloud_download, size: 11),
-                  SizedBox(width: 2),
-                  Text('Online', style: TextStyle(fontSize: 15)),
-                ],
-              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 backgroundColor: Colors.orange.shade500,
@@ -610,6 +602,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.cloud_download, size: 11),
+                  SizedBox(width: 2),
+                  Text('Online', style: TextStyle(fontSize: 15)),
+                ],
               ),
             ),
           ),
@@ -2750,26 +2750,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      automaticallyImplyLeading: false,
-      title: const SizedBox.shrink(),
-      toolbarHeight: _headerAspectRatio!=null ? MediaQuery.of(context).size.width / _headerAspectRatio! : 88,
-      backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      flexibleSpace: (_headerAsset!=null)
-          ? SafeArea(
-              bottom: false,
-              child: SizedBox.expand(
-                child: Image.asset(
-                  _headerAsset!,
-                  fit: BoxFit.fitWidth,
-                  alignment: Alignment.center,
-                ),
-              ),
-            )
-          : null,
+  Widget build(BuildContext context) => Container(
+    decoration: const BoxDecoration(
+      image: DecorationImage(
+        image: AssetImage('FramePic/backgroundImage.png'),
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+      ),
     ),
-    body: Padding(padding: const EdgeInsets.all(12), child: _buildConnected()),
+    child: Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const SizedBox.shrink(),
+        toolbarHeight: _headerAspectRatio!=null ? MediaQuery.of(context).size.width / _headerAspectRatio! : 88,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        flexibleSpace: (_headerAsset!=null)
+            ? SafeArea(
+                bottom: false,
+                child: SizedBox.expand(
+                  child: Image.asset(
+                    _headerAsset!,
+                    fit: BoxFit.fitWidth,
+                    alignment: Alignment.center,
+                  ),
+                ),
+              )
+            : null,
+      ),
+      body: Padding(padding: const EdgeInsets.all(12), child: _buildConnected()),
+    ),
   );
 
   // First window removed; no _buildDisconnected() screen.

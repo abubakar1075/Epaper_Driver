@@ -76,6 +76,7 @@ flutter:
   assets:
     - FramePics/
     - FramePic/
+    - Framepic/
     - OTAFile/
 
 # Configure app icons generation
