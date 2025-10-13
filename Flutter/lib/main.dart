@@ -29,6 +29,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tuple/tuple.dart';
 import 'package:path_provider/path_provider.dart'; // persistent storage dir
+import 'package:http/http.dart' as http;
 
 // Tracks which action the user intended when tapping while disconnected
 enum _PendingSend { none, image, ota }
@@ -160,6 +161,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   final List<_LibraryEntry> _library = [];
   int? _selectedLibraryIndex; // selected index in library view
   bool _showLibrary = false; // toggle to show library screen when connected
+  bool _showOnline = false; // toggle to show online images screen when connected
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -489,37 +491,48 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       child: Row(children:[
         Expanded(
           child: SizedBox(
-            height: 48,
+            height: 40,
             child: ElevatedButton.icon(
               onPressed: _pickImage,
-              icon: const Icon(Icons.photo_library, size: 18),
-              label: const Text('Gallery', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              icon: const Icon(Icons.photo_library, size: 16),
+              label: const Text('Gallery', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
         Expanded(
           child: SizedBox(
-            height: 48,
+            height: 40,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _library.isEmpty ? null : Colors.green.shade600,
                 foregroundColor: _library.isEmpty ? null : Colors.white,
               ),
               onPressed: _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); },
-              icon: const Icon(Icons.collections, size: 18),
-              label: Text('Library(${_library.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              icon: const Icon(Icons.collections, size: 16),
+              label: Text('Library (${_library.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
         Expanded(
           child: SizedBox(
-            height: 48,
+            height: 40,
             child: ElevatedButton.icon(
               onPressed: (){ setState((){ _showAi = true; _aiError = null; }); },
-              icon: const Icon(Icons.auto_awesome, size: 18),
-              label: const Text('AI image', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('AI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: SizedBox(
+            height: 40,
+            child: ElevatedButton.icon(
+              onPressed: (){ setState((){ _showOnline = true; }); },
+              icon: const Icon(Icons.cloud_download, size: 16),
+              label: const Text('Online', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             ),
           ),
         ),
@@ -533,6 +546,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }
     if(_showLibrary){
       return _buildLibraryView();
+    }
+    if(_showOnline){
+      return _buildOnlineView();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1090,6 +1106,177 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     });
     _updateStatus('Deleted. ${_library.length} remaining');
     _deleteLibraryEntryFiles(entry);
+  }
+
+  // Online images view - shows images from GitHub repository
+  Widget _buildOnlineView(){
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          color: Colors.blue.shade50,
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: (){ setState(()=> _showOnline = false); },
+                icon: const Icon(Icons.arrow_back),
+              ),
+              const Expanded(
+                child: Text('Online Images', 
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: FutureBuilder<List<String>>(
+            future: _fetchGitHubImages(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('Error loading images: ${snapshot.error}'),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => setState(() {}),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              
+              final imageUrls = snapshot.data ?? [];
+              if (imageUrls.isEmpty) {
+                return const Center(
+                  child: Text('No images found'),
+                );
+              }
+              
+              return GridView.builder(
+                padding: const EdgeInsets.all(8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 1.0,
+                ),
+                itemCount: imageUrls.length,
+                itemBuilder: (context, index) {
+                  final imageUrl = imageUrls[index];
+                  return GestureDetector(
+                    onTap: () => _loadOnlineImage(imageUrl),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded / 
+                                      loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.grey.shade200,
+                              child: const Icon(Icons.error, color: Colors.red),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Fetch image URLs from GitHub repository
+  Future<List<String>> _fetchGitHubImages() async {
+    try {
+      const repoUrl = 'https://api.github.com/repos/abubakar1075/Canvas_BT/contents';
+      final response = await http.get(Uri.parse(repoUrl));
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> contents = json.decode(response.body);
+        final imageUrls = <String>[];
+        
+        for (final item in contents) {
+          if (item['type'] == 'file' && item['name'] != null && item['download_url'] != null) {
+            final fileName = item['name'].toString().toLowerCase();
+            if (fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) {
+              imageUrls.add(item['download_url']);
+            }
+          }
+        }
+        
+        return imageUrls;
+      } else {
+        throw Exception('Failed to fetch repository contents: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error fetching images: $e');
+    }
+  }
+
+  // Load an online image and set it as the current image
+  Future<void> _loadOnlineImage(String imageUrl) async {
+    try {
+      _updateStatus('Downloading image...');
+      
+      final response = await http.get(Uri.parse(imageUrl));
+      if (response.statusCode == 200) {
+        // Create a temporary file
+        final tempDir = await getTemporaryDirectory();
+        final fileName = imageUrl.split('/').last;
+        final tempFile = File('${tempDir.path}/$fileName');
+        await tempFile.writeAsBytes(response.bodyBytes);
+        
+        // Set as current image
+        setState(() {
+          _originalImage = tempFile;
+          _uiOriginal = null;
+          _processedImage = null;
+          _processedBytes = null;
+          _processedPngBytes = null;
+          _showOnline = false; // Return to main view
+          _viewInitialized = false; // Force frame recompute
+        });
+        
+        _loadUiImage();
+        _updateStatus('Online image loaded successfully');
+      } else {
+        _updateStatus('Failed to download image: ${response.statusCode}');
+      }
+    } catch (e) {
+      _updateStatus('Error loading online image: $e');
+    }
   }
 
   // Preview: show only "In Frame" (left); processing happens on Send
