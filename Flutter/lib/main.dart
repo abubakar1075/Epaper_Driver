@@ -151,8 +151,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
   bool _verticalFrame = false; // portrait orientation toggle
   // Slider-driven tuning
-  double _ditherStrength = 1.0; // 0=off .. 1=full
-  double _strongColorBoost = 1.0; // influences brightness/contrast/saturation mapping (default max)
+  final double _ditherStrength = 1.0; // 0=off .. 1=full
+  final double _strongColorBoost = 1.0; // influences brightness/contrast/saturation mapping (default max)
 
   // =============================================================
   // IN-MEMORY LIBRARY (session only)
@@ -580,7 +580,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 if (_isSending) ...[
                   const SizedBox(height: 2),
                   LinearProgressIndicator(value: _transferProgress/100),
-                  Text('${_transferProgress}%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
+                  Text('$_transferProgress%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
                 ],
                 SizedBox(height: _isSending ? 0 : 4),
                 _statusCard(),
@@ -754,7 +754,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       final genH = _verticalFrame ? IMAGE_WIDTH : IMAGE_HEIGHT;  // 800 if portrait
       final candidates = <Uri>[
         Uri.parse('https://image.pollinations.ai/prompt/$encoded?width=$genW&height=$genH&seed=$seed&nologo=true'),
-        Uri.parse('https://image.pollinations.ai/prompt/$encoded?size=${genW}x${genH}&seed=$seed&nologo=true'),
+        Uri.parse('https://image.pollinations.ai/prompt/$encoded?size=${genW}x$genH&seed=$seed&nologo=true'),
       ];
       for(final url in candidates){
         final ok = await _tryFetchImage(url).timeout(const Duration(seconds: 20), onTimeout: () => false);
@@ -921,6 +921,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       // Pick the correct finger image based on current orientation
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
       _pendingSend = _PendingSend.image; // remember user's intent
+      if (!mounted) return;
       await showDialog(
         context: context,
         builder: (ctx){
@@ -1212,7 +1213,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                       children: [
                         const Icon(Icons.battery_full, color: Colors.white, size: 14),
                         const SizedBox(width: 4),
-                        Text('${_batteryPercent}%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                        Text('$_batteryPercent%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -1605,7 +1606,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
     final List<int> codes = hwPalette.map((c) => c.code).toList();
     final List<List<int>> palette = hwPalette
-        .map((m) => [m.rgbColor.red, m.rgbColor.green, m.rgbColor.blue])
+        .map((m) => [(m.rgbColor.r * 255.0).round() & 0xff, (m.rgbColor.g * 255.0).round() & 0xff, (m.rgbColor.b * 255.0).round() & 0xff])
         .toList(growable: false);
 
     final Uint8List rawCodes = Uint8List(w * h);
@@ -1714,7 +1715,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     
     try {
       // Check if Bluetooth is on
-      if (!(await FlutterBluePlus.isOn)) {
+      var adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) {
         _updateStatus("Bluetooth is turned off");
         setState(() {
           _isScanning = false;
@@ -1741,7 +1743,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             final upper = name.toUpperCase();
             if(upper.startsWith('EPD')){
               _autoConnectTried = true;
-              _updateStatus("Auto-connecting to ${name}");
+              _updateStatus("Auto-connecting to $name");
               // Stop further scanning to speed up connect
               try { FlutterBluePlus.stopScan(); } catch(_){ }
               _connectToDevice(result.device);
@@ -1916,7 +1918,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if (data.length >= 2) {
           final int batt = data[1].clamp(0, 100);
           setState((){ _batteryPercent = batt; });
-          _updateStatus("Battery = ${batt}%");
+          _updateStatus("Battery = $batt%");
         }
         break;
       case ACK_SIZE_RECEIVED:
@@ -2018,7 +2020,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       // Stream chunks without allocating new lists (zero-copy views)
       int dynamicChunk = BLE_CHUNK_SIZE;
       final int totalChunks = (packedData.length + dynamicChunk - 1) ~/ dynamicChunk;
-      _updateStatus("Sending ${totalChunks} chunks...", force: true);
+      _updateStatus("Sending $totalChunks chunks...", force: true);
       for (int i = 0; i < packedData.length;) {
         // Bound chunk by remaining bytes and current dynamic chunk size
         final int end = math.min(i + dynamicChunk, packedData.length);
@@ -2026,7 +2028,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         // Only show status updates occasionally to reduce overhead
         final int chunkIndex = (i ~/ (dynamicChunk == 0 ? 1 : dynamicChunk));
         if (chunkIndex % 20 == 0 || end == packedData.length) {
-          _updateStatus("Sending chunk ${chunkIndex+1}/${totalChunks}", force: true);
+          _updateStatus("Sending chunk ${chunkIndex+1}/$totalChunks", force: true);
         }
         
         try {
@@ -2037,13 +2039,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           // Advance only on success
           i = end;
         } catch (e) {
-          _updateStatus("Error sending chunk at ${i} (size ${view.length}): $e", force: true);
+          _updateStatus("Error sending chunk at $i (size ${view.length}): $e", force: true);
           // Adaptive fallback: reduce dynamic chunk size and retry same offset
           dynamicChunk = math.max(20, dynamicChunk ~/ 2);
           await Future.delayed(const Duration(milliseconds: 25));
           if (dynamicChunk <= 20 && view.length <= 20) {
             // Even the smallest failed; abort
-            throw Exception("BLE data transfer failed at offset ${i}: $e");
+            throw Exception("BLE data transfer failed at offset $i: $e");
           }
         }
         
@@ -2092,6 +2094,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       if(!mounted) return;
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
       _pendingSend = _PendingSend.ota; // remember user's intent
+      if (!mounted) return;
       await showDialog(
         context: context,
         builder: (ctx){
@@ -2179,11 +2182,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           sent = end;
           i = end;
         } catch (e) {
-          _updateStatus("OTA: error at ${i} (size ${view.length}): $e", force: true);
+          _updateStatus("OTA: error at $i (size ${view.length}): $e", force: true);
           dynamicChunkOta = math.max(20, dynamicChunkOta ~/ 2);
           await Future.delayed(const Duration(milliseconds: 25));
           if (dynamicChunkOta <= 20 && view.length <= 20) {
-            throw Exception("OTA failed at offset ${i}: $e");
+            throw Exception("OTA failed at offset $i: $e");
           }
           continue;
         }
@@ -2195,7 +2198,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         setState(() { _transferSpeed = speed; _transferProgress = progress; });
 
         if (i % (BLE_CHUNK_SIZE * 20) == 0) {
-          _updateStatus("OTA ${progress}% - ${speed.toStringAsFixed(1)} KB/s");
+          _updateStatus("OTA $progress% - ${speed.toStringAsFixed(1)} KB/s");
         }
         await Future.delayed(const Duration(milliseconds: 1));
       }
@@ -2203,7 +2206,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       final end = DateTime.now().millisecondsSinceEpoch;
       final totalSec = (end - start) / 1000.0;
       final avg = (totalSize / 1024.0) / totalSec;
-      _updateStatus("OTA data sent: ${totalSize} bytes in ${totalSec.toStringAsFixed(2)}s, ${avg.toStringAsFixed(1)} KB/s");
+      _updateStatus("OTA data sent: $totalSize bytes in ${totalSec.toStringAsFixed(2)}s, ${avg.toStringAsFixed(1)} KB/s");
       // keep _isSending true until ACK_COMPLETE from device
     } catch (e) {
       _updateStatus("OTA send failed: $e");
@@ -2350,7 +2353,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 right: 8,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(

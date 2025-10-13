@@ -211,7 +211,7 @@ class ImageProcessor {
     final palette = <int>[];
     for (var mapping in hwPalette) {
       final c = mapping.rgbColor;
-      palette.addAll([c.red, c.green, c.blue]);
+      palette.addAll([(c.r * 255.0).round() & 0xff, (c.g * 255.0).round() & 0xff, (c.b * 255.0).round() & 0xff]);
     }
     
     // Create a palette image
@@ -252,9 +252,9 @@ class ImageProcessor {
         
         for (int i = 0; i < hwPalette.length; i++) {
           final Color c = hwPalette[i].rgbColor;
-          final int dr = r - c.red;
-          final int dg = g - c.green;
-          final int db = b - c.blue;
+          final int dr = r - (c.r * 255.0).round();
+          final int dg = g - (c.g * 255.0).round();
+          final int db = b - (c.b * 255.0).round();
           final int distance = dr * dr + dg * dg + db * db;
           
           if (distance < minDistance) {

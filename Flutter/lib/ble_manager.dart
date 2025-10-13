@@ -38,6 +38,7 @@ class BleManager {
   
   // Getters
   BluetoothDevice? get connectedDevice => _device;
+  BluetoothCharacteristic? get txCharacteristic => _txCharacteristic;
   bool get isConnected => _device != null && _device!.isConnected;
   bool get isTransferring => _isTransferring;
   
@@ -60,7 +61,8 @@ class BleManager {
     
     try {
       // Check if Bluetooth is on
-      if (!(await FlutterBluePlus.isOn)) {
+      var adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) {
         _notifyError("Bluetooth is turned off");
         return devices;
       }
