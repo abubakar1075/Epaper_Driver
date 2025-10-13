@@ -712,7 +712,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             backgroundColor: Colors.indigo.shade600,
           ),
           const SizedBox(width:6),
-          _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.green.shade600),
+          _smallBtn('Save', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.green.shade600),
           const SizedBox(width:6),
           _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send, backgroundColor: Colors.blue.shade600),
         ]),
