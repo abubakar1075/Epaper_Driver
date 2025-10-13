@@ -179,30 +179,47 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _aiIsGenerating = false;
   Uint8List? _aiPngBytes;
   String? _aiError;
-  final ButtonStyle _smallBtnStyle = ElevatedButton.styleFrom(
-    minimumSize: const Size(60,34),
-    padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
-    textStyle: const TextStyle(fontSize:11, fontWeight: FontWeight.w500),
-  );
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
   // automatically dismiss it and send once the device connects.
   BuildContext? _activeDialogContext;
   // Track which action should auto-resume after connect when the popup was shown
   _PendingSend _pendingSend = _PendingSend.none;
 
-  Widget _smallBtn(String label, VoidCallback? onPressed, {IconData? icon}){
+  Widget _smallBtn(String label, VoidCallback? onPressed, {IconData? icon, Color? backgroundColor}){
+    final bgColor = backgroundColor ?? Colors.blue.shade600;
+    final shadowColor = backgroundColor?.withOpacity(0.3) ?? Colors.blue.withOpacity(0.3);
+    
+    final buttonStyle = ElevatedButton.styleFrom(
+      minimumSize: const Size(60,32),
+      padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
+      textStyle: const TextStyle(fontSize:15, fontWeight: FontWeight.w600),
+      backgroundColor: bgColor,
+      foregroundColor: Colors.white,
+      elevation: 2,
+      shadowColor: shadowColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+    );
+    
     if(icon!=null){
-      return ElevatedButton.icon(
-        style: _smallBtnStyle,
+      return ElevatedButton(
+        style: buttonStyle,
         onPressed: onPressed,
-        icon: Icon(icon, size:14),
-        label: Text(label),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14),
+            SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 15)),
+          ],
+        ),
       );
     }
     return ElevatedButton(
-      style: _smallBtnStyle,
+      style: buttonStyle,
       onPressed: onPressed,
-      child: Text(label),
+      child: Text(label, style: TextStyle(fontSize: 15)),
     );
   }
 
@@ -505,8 +522,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                backgroundColor: Colors.blue.shade500,
+                foregroundColor: Colors.white,
+                elevation: 2,
+                shadowColor: Colors.blue.withOpacity(0.3),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
@@ -518,11 +539,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             height: 32,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _library.isEmpty ? null : Colors.green.shade600,
-                foregroundColor: _library.isEmpty ? null : Colors.white,
+                backgroundColor: _library.isEmpty ? Colors.grey.shade400 : Colors.green.shade600,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                elevation: 2,
+                shadowColor: (_library.isEmpty ? Colors.grey : Colors.green).withOpacity(0.3),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
               onPressed: _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); },
@@ -553,8 +576,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                backgroundColor: Colors.purple.shade500,
+                foregroundColor: Colors.white,
+                elevation: 2,
+                shadowColor: Colors.purple.withOpacity(0.3),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
@@ -576,8 +603,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                backgroundColor: Colors.orange.shade500,
+                foregroundColor: Colors.white,
+                elevation: 2,
+                shadowColor: Colors.orange.withOpacity(0.3),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
@@ -678,19 +709,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               _recomputeViewForCurrentFrame(context);
             } : null,
             icon: Icons.screen_rotation,
+            backgroundColor: Colors.indigo.shade600,
           ),
           const SizedBox(width:6),
-          _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add),
+          _smallBtn('Add in Library', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.green.shade600),
           const SizedBox(width:6),
-          _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send),
+          _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send, backgroundColor: Colors.blue.shade600),
         ]),
         const Spacer(),
         // Right side controls
         Row(children:[
           const SizedBox(width:6),
-          _smallBtn('OTA', _sendOtaFile, icon: Icons.system_update_alt),
+          _smallBtn('OTA', _sendOtaFile, icon: Icons.system_update_alt, backgroundColor: Colors.orange.shade600),
           const SizedBox(width:6),
-          _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app),
+          _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app, backgroundColor: Colors.red.shade600),
         ])
       ]),
     );
