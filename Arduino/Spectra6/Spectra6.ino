@@ -258,10 +258,20 @@ void goToSleep() {
 
 /**
  * Handle the blinking of LED2 (50ms on, every second)
+ * If touch value is below threshold, keep LED ON continuously
+ * Otherwise, continue normal blinking behavior
  */
 void handleLedBlinking() {
   unsigned long currentMillis = millis();
+  uint16_t touchVal = touchRead(TOUCH_PIN);
   
+  // If touch value is less than threshold, keep LED ON continuously
+  if (touchVal < TOUCH_THRESHOLD) {
+    digitalWrite(LED2, HIGH);
+    return; // Exit early, no blinking needed
+  }
+  
+  // Otherwise, continue normal blinking behavior
   // Check if it's time to turn the LED on
   if (currentMillis - previousMillis >= blinkInterval) {
     // Save the time when we started the blink cycle
