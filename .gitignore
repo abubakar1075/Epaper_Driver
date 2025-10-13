@@ -1,9 +1,276 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
+# Flutter/Dart specific - Updated for new folder structure# Flutter/Dart specific - Updated for new folder structure# Miscellaneous
+
+Flutter/build/
+
+Flutter/.dart_tool/Flutter/build/*.class
+
+Flutter/.flutter-plugins
+
+Flutter/.flutter-plugins-dependenciesFlutter/.dart_tool/*.log
+
+Flutter/.packages
+
+Flutter/.pub-cache/Flutter/.flutter-plugins*.pyc
+
+Flutter/.pub/
+
+Flutter/**/doc/api/Flutter/.flutter-plugins-dependencies*.swp
+
+Flutter/**/ios/Flutter/.last_build_id
+
+Flutter/coverage/Flutter/.packages.DS_Store
+
+
+
+# Flutter build artifactsFlutter/.pub-cache/.atom/
+
+Flutter/app.*.symbols
+
+Flutter/app.*.map.jsonFlutter/.pub/.build/
+
+
+
+# Android specific - Updated pathsFlutter/**/doc/api/.buildlog/
+
+Flutter/android/app/debug
+
+Flutter/android/app/profileFlutter/**/ios/Flutter/.last_build_id.history
+
+Flutter/android/app/release
+
+Flutter/android/.gradle/Flutter/coverage/.svn/
+
+Flutter/android/captures/
+
+Flutter/android/gradlew.swiftpm/
+
+Flutter/android/gradlew.bat
+
+Flutter/android/local.properties# Flutter build artifactsmigrate_working_dir/
+
+Flutter/android/app/outputs/
+
+Flutter/app.*.symbols
+
+# iOS specific - Updated paths
+
+Flutter/ios/.symlinks/Flutter/app.*.map.json# IntelliJ related
+
+Flutter/ios/Pods/
+
+Flutter/ios/Runner.xcworkspace/*.iml
+
+Flutter/ios/Flutter/flutter_assets/
+
+Flutter/ios/ServiceDefinitions.json# Android specific - Updated paths*.ipr
+
+
+
+# macOS specificFlutter/android/app/debug*.iws
+
+Flutter/macos/Flutter/flutter_assets/
+
+Flutter/android/app/profile.idea/
+
+# Linux specific
+
+Flutter/linux/flutter/Flutter/android/app/release
+
+
+
+# Windows specific  Flutter/android/.gradle/# The .vscode folder contains launch configuration and tasks you configure in
+
+Flutter/windows/flutter/
+
+Flutter/android/captures/# VS Code which you may wish to be included in version control, so this line
+
+# Web specific
+
+Flutter/web/Flutter/android/gradlew# is commented out by default.
+
+
+
+# Arduino specificFlutter/android/gradlew.bat#.vscode/
+
+Arduino/**/*.hex
+
+Arduino/**/*.binFlutter/android/local.properties
+
+Arduino/**/*.elf
+
+Arduino/**/*.mapFlutter/android/app/outputs/# Flutter/Dart/Pub related
+
+Arduino/**/*.lst
+
+Arduino/**/build/**/doc/api/
+
+
+
+# Python specific# iOS specific - Updated paths**/ios/Flutter/.last_build_id
+
+Python/__pycache__/
+
+Python/*.py[cod]Flutter/ios/.symlinks/.dart_tool/
+
+Python/*$py.class
+
+Python/*.soFlutter/ios/Pods/.flutter-plugins-dependencies
+
+Python/.Python
+
+Python/build/Flutter/ios/Runner.xcworkspace/.pub-cache/
+
+Python/develop-eggs/
+
+Python/dist/Flutter/ios/Flutter/flutter_assets/.pub/
+
+Python/downloads/
+
+Python/eggs/Flutter/ios/ServiceDefinitions.json/build/
+
+Python/.eggs/
+
+Python/lib//coverage/
+
+Python/lib64/
+
+Python/parts/# macOS specific
+
+Python/sdist/
+
+Python/var/Flutter/macos/Flutter/flutter_assets/# Symbolication related
+
+Python/wheels/
+
+Python/*.egg-info/app.*.symbols
+
+Python/.installed.cfg
+
+Python/*.egg# Linux specific
+
+Python/MANIFEST
+
+Python/venv/Flutter/linux/flutter/# Obfuscation related
+
+Python/.venv/
+
+Python/env/app.*.map.json
+
+Python/.env/
+
+# Windows specific  
+
+# IDE files
+
+.idea/Flutter/windows/flutter/# Android Studio will place build artifacts here
+
+*.iml
+
+*.ipr/android/app/debug
+
+*.iws
+
+.vscode/# Web specific/android/app/profile
+
 *.swp
+
+*.swoFlutter/web//android/app/release
+
+*~
+
+\n# Keystore credentials (do not commit)
+
+# OS generated files
+
+.DS_Store# Arduino specifickey.properties
+
+.DS_Store?
+
+._*Arduino/**/*.hexrelease-keystore.jks
+
+.Spotlight-V100
+
+.TrashesArduino/**/*.binandroid/key.properties
+
+ehthumbs.db
+
+Thumbs.dbArduino/**/*.elfandroid/app/release-keystore.jks
+
+.atom/
+
+.build/Arduino/**/*.map
+
+.buildlog/Arduino/**/*.lst
+
+.historyArduino/**/build/
+
+.svn/
+
+.swiftpm/# Python specific
+
+migrate_working_dir/Python/__pycache__/
+
+Python/*.py[cod]
+
+# Logs and temporary filesPython/*$py.class
+
+*.classPython/*.so
+
+*.logPython/.Python
+
+*.pycPython/build/
+
+*.tmpPython/develop-eggs/
+
+*.tempPython/dist/
+
+*.bakPython/downloads/
+
+*.backupPython/eggs/
+
+Python/.eggs/
+
+# Keys and sensitive files (updated paths)Python/lib/
+
+Flutter/android/key.propertiesPython/lib64/
+
+Flutter/android/app/release-keystore.jksPython/parts/
+
+key.propertiesPython/sdist/
+
+release-keystore.jksPython/var/
+
+*.keyPython/wheels/
+
+*.p12Python/*.egg-info/
+
+*.pemPython/.installed.cfg
+
+*.jksPython/*.egg
+Python/MANIFEST
+Python/venv/
+Python/.venv/
+Python/env/
+Python/.env/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 .atom/
 .build/
 .buildlog/
@@ -12,39 +279,21 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
+# Logs and temporary files
+*.class
+*.log
+*.pyc
+*.tmp
+*.temp
+*.bak
+*.backup
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-\n# Keystore credentials (do not commit)
+# Keys and sensitive files (updated paths)
+Flutter/android/key.properties
+Flutter/android/app/release-keystore.jks
 key.properties
 release-keystore.jks
-android/key.properties
-android/app/release-keystore.jks
+*.key
+*.p12
+*.pem
+*.jks

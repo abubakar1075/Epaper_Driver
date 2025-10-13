@@ -1,64 +1,95 @@
-# EPaper Image Sender App
+# CanvasBT - EPaper BLE Image Transfer System
 
-This Flutter application allows you to send images to an Arduino-powered 6-color ePaper display over Bluetooth Low Energy (BLE). It replaces the functionality of the Python application with a mobile app that can be used on Android devices.
+A complete system for sending images to Arduino-powered 6-color e-paper displays (800x480) via Bluetooth Low Energy. This repository contains three integrated components: a Flutter mobile app, Arduino firmware, and Python desktop tools.
 
-## Features
+## Project Structure
 
-- Image selection from gallery
-- Image processing with adjustable settings:
-  - Fit/Stretch modes for resizing
-  - Dithering toggle for better color representation
-  - Brightness, contrast, and saturation adjustments
-  - 180° rotation option
-- BLE device scanning and connection
-- Image transfer with progress tracking
-- Real-time transfer speed display
+```
+CanvasBT/
+├── Flutter/          # Mobile app for Android/iOS
+├── Arduino/          # ESP32 firmware for e-paper display
+├── Python/           # Desktop image processing tools  
+└── .github/          # Documentation and CI
+```
 
-## Requirements
+## Components Overview
 
-- Flutter SDK
-- Android device with BLE support (minimum API level 21)
-- Arduino device running the provided Spectra6 firmware
+### Flutter Mobile App (`Flutter/`)
+- Image selection from gallery with pan/zoom/rotate gestures
+- Real-time image processing with 6-color palette conversion
+- BLE device scanning and high-speed image transfer
+- Image library with persistent storage
+- OTA firmware update capability
 
-## Getting Started
+### Arduino Firmware (`Arduino/Spectra6/`)
+- ESP32-based BLE receiver for 800x480 6-color e-paper display
+- SPIFFS image storage with periodic refresh (5-day cycle)
+- Deep sleep power management with touch wake
+- Battery monitoring and status reporting
 
-1. Clone this repository
-2. Run `flutter pub get` to install dependencies
-3. Connect your Android device
-4. Run `flutter run` to start the application
+### Python Tools (`Python/`)
+- Desktop image conversion utilities
+- BLE transfer tools for development/testing
+- Support for all Pillow-compatible image formats
 
-## How to Use
+## Quick Start
 
-1. **Select an Image**: Tap the "Select Image" button to choose an image from your gallery.
-2. **Adjust Image Settings**: Modify the processing settings as needed:
-   - Choose between Fit (letterbox) or Stretch resize modes
-   - Toggle dithering on/off
-   - Adjust brightness, contrast, and saturation
-   - Enable/disable 180° rotation
-3. **Scan for BLE Devices**: Tap "Scan for BLE Devices" to find nearby Arduino devices
-4. **Connect to Device**: Tap on your Arduino device in the list to connect
-5. **Send Image**: Once connected, tap "Send Image to Device" to transfer the image
+### Flutter Mobile App
+```bash
+cd Flutter
+flutter pub get
+flutter run  # Requires Android device with BLE
+```
 
-## Permissions
+### Arduino Setup
+1. Open `Arduino/Spectra6/Spectra6.ino` in Arduino IDE
+2. Install ArduinoBLE library
+3. Upload to ESP32 board
 
-The app requires the following permissions:
-- Bluetooth (scan, connect, advertise)
-- Location (required for BLE scanning on Android)
-- Storage (for image access)
+### Python Tools
+```bash
+cd Python
+pip install pillow bleak
+python epd_image_tool_ble.py
+```
 
-## Arduino Compatibility
+## Key Features
 
-This app is designed to work with the Arduino Spectra6 firmware that drives a 6-color ePaper display. The Arduino code should be flashed to an ESP32 board connected to the ePaper display.
+### 6-Color E-Paper Display Support
+- Hardware-specific color palette (Black, White, Yellow, Red, Blue, Green)
+- Optimized image quantization with Floyd-Steinberg dithering
+- 800x480 resolution with 2 pixels per byte packing
 
-## Technical Details
+### High-Speed BLE Transfer
+- Nordic UART service protocol
+- 480-512 byte chunk sizes for optimal throughput
+- Progress tracking with real-time speed monitoring
+- Automatic reconnection and error recovery
 
-- Image processing uses the 6-color palette supported by the ePaper display
-- Image data is packed to reduce transfer size (2 pixels per byte)
-- BLE transfer uses a chunk size of 512 bytes for optimal performance
-- Progress updates and acknowledgments are sent from the Arduino device
+### Advanced Image Processing
+- Pan/zoom/rotate gestures for precise framing
+- Brightness, contrast, saturation adjustments
+- Fit (letterbox) vs Stretch resize modes
+- 180° rotation option for display orientation
 
-## Troubleshooting
+### Power Management
+- Arduino deep sleep with 5-day refresh cycles
+- Touch wake capability
+- Battery percentage monitoring and reporting
 
-- If the app can't find your Arduino device, make sure Bluetooth is enabled and the device is powered on
-- If the connection fails, try restarting the Arduino device
-- If the image doesn't display correctly, try adjusting the processing settings or using a different image
+## Hardware Requirements
+
+- **Mobile Device**: Android with BLE support (API 21+)
+- **Arduino**: ESP32 board with BLE capability
+- **Display**: 6-color e-paper display (800x480)
+- **Optional**: Touch sensor for wake functionality
+
+## Development
+
+Each component can be developed independently:
+
+- **Flutter**: Standard Flutter development workflow
+- **Arduino**: Arduino IDE with ArduinoBLE library
+- **Python**: Python 3.6+ with Pillow and Bleak libraries
+
+See individual folder README files for detailed setup instructions.
