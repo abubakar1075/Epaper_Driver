@@ -1,5 +1,9 @@
  // 30 seconds branch
 //#define TEST_IMAGE
+
+// GPIO pin definitions
+#define CALIBRATION_BUTTON_PIN 27  // GPIO 27 for threshold calibration
+
 #include <SPI.h>
 #include <ArduinoBLE.h>
 #include <FS.h>
@@ -141,10 +145,10 @@ void setup() {
     Serial.printf("Touch threshold: %d\n", touchThreshold);
   }
   
-  // Setup GPIO 27 for threshold calibration
-  pinMode(27, INPUT_PULLUP);
-  Serial.println("GPIO 27 configured as INPUT_PULLUP for threshold calibration");
-  Serial.println("Connect GPIO 27 to GND to calibrate threshold");
+  // Setup calibration button for threshold calibration
+  pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP);
+  Serial.printf("GPIO %d configured as INPUT_PULLUP for threshold calibration\n", CALIBRATION_BUTTON_PIN);
+  Serial.printf("Connect GPIO %d to GND to calibrate threshold\n", CALIBRATION_BUTTON_PIN);
    
   // Initialize EPD pins - but don't run any display commands yet
   pinMode(PIN_EPD_BUSY, INPUT);  // BUSY (panel drives this)
@@ -189,19 +193,19 @@ void loop() {
   // Handle LED2 blinking
   handleLedBlinking();
 
-  // Simple GPIO 27 button check for threshold calibration
+  // Simple calibration button check for threshold calibration
   static bool lastButtonState = HIGH;
   static unsigned long lastDebugPrint = 0;
-  bool buttonState = digitalRead(27);
+  bool buttonState = digitalRead(CALIBRATION_BUTTON_PIN);
   
-  // Debug: Print GPIO 27 state every 2 seconds
+  // Debug: Print calibration button state every 2 seconds
   if (millis() - lastDebugPrint > 2000) {
     lastDebugPrint = millis();
-    Serial.printf("GPIO27 state: %d\n", buttonState);
+    Serial.printf("GPIO%d state: %d\n", CALIBRATION_BUTTON_PIN, buttonState);
   }
   
   if (lastButtonState == HIGH && buttonState == LOW) {
-    Serial.println("GPIO27 pressed! Calibrating...");
+    Serial.printf("GPIO%d pressed! Calibrating...\n", CALIBRATION_BUTTON_PIN);
     // Button pressed - calibrate threshold
     uint16_t currentTouch = touchRead(TOUCH_PIN);
     touchThreshold = currentTouch - 2;
