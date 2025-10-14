@@ -30,14 +30,33 @@ static void printBatteryStatus() {
   Serial.printf("Battery: %u%%\n", percent);
 }
 
+// Simple threshold save/load
+void saveThreshold(int value) {
+  File file = SPIFFS.open("/thresh.txt", "w");
+  if (file) {
+    file.println(value);
+    file.close();
+  }
+}
+
+int loadThreshold() {
+  File file = SPIFFS.open("/thresh.txt", "r");
+  if (file) {
+    int value = file.parseInt();
+    file.close();
+    return (value > 0) ? value : 70;
+  }
+  return 70;
+}
+
 // Forward declarations from W21.cpp
 extern unsigned char Color_get(unsigned char color);
 
 // Flag to use BLE received image
 bool useBleImage = false;
 
-
-const int TOUCH_THRESHOLD = 60;
+// Simple threshold management
+int touchThreshold = 70;  // Default threshold
 
 // Variables for LED blinking
 unsigned long previousMillis = 0;
@@ -87,7 +106,7 @@ void setup() {
     displayImageFromSPIFFS();
     Serial.println("Refresh complete. Going back to deep sleep for next cycle...");
     // Keep both timer and touch as wake sources
-    touchSleepWakeUpEnable(TOUCH_PIN, TOUCH_THRESHOLD);
+    touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
     esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
     Serial.flush();
     esp_deep_sleep_start();
@@ -102,7 +121,7 @@ void setup() {
  // while (!Serial && millis() < 5000); // Wait for serial or timeout
 
   Serial.printf("Going to deep sleep... touch GPIO%d to wake up\n", TOUCH_PIN);
-  touchSleepWakeUpEnable(TOUCH_PIN, TOUCH_THRESHOLD);
+  touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
 
   Serial.println("E-Paper Display + BLE Example");
   #if (LED2 == 34)
@@ -118,7 +137,14 @@ void setup() {
     Serial.println("SPIFFS mount failed!");
   } else {
     Serial.println("SPIFFS mounted successfully.");
+    touchThreshold = loadThreshold();
+    Serial.printf("Touch threshold: %d\n", touchThreshold);
   }
+  
+  // Setup GPIO 27 for threshold calibration
+  pinMode(27, INPUT_PULLUP);
+  Serial.println("GPIO 27 configured as INPUT_PULLUP for threshold calibration");
+  Serial.println("Connect GPIO 27 to GND to calibrate threshold");
    
   // Initialize EPD pins - but don't run any display commands yet
   pinMode(PIN_EPD_BUSY, INPUT);  // BUSY (panel drives this)
@@ -162,6 +188,33 @@ void setup() {
 void loop() {
   // Handle LED2 blinking
   handleLedBlinking();
+
+  // Simple GPIO 27 button check for threshold calibration
+  static bool lastButtonState = HIGH;
+  static unsigned long lastDebugPrint = 0;
+  bool buttonState = digitalRead(27);
+  
+  // Debug: Print GPIO 27 state every 2 seconds
+  if (millis() - lastDebugPrint > 2000) {
+    lastDebugPrint = millis();
+    Serial.printf("GPIO27 state: %d\n", buttonState);
+  }
+  
+  if (lastButtonState == HIGH && buttonState == LOW) {
+    Serial.println("GPIO27 pressed! Calibrating...");
+    // Button pressed - calibrate threshold
+    uint16_t currentTouch = touchRead(TOUCH_PIN);
+    touchThreshold = currentTouch - 2;
+    if (touchThreshold < 10) touchThreshold = 10;
+    saveThreshold(touchThreshold);
+    Serial.printf("Threshold calibrated to: %d (was reading: %u)\n", touchThreshold, currentTouch);
+    // Flash LED 3 times
+    for(int i=0; i<3; i++) {
+      digitalWrite(LED2, HIGH); delay(100);
+      digitalWrite(LED2, LOW); delay(100);
+    }
+  }
+  lastButtonState = buttonState;
 
   // Periodically print capacitive touch reading for TOUCH_PIN
   if (millis() - lastTouchPrint >= 500) {
@@ -247,7 +300,7 @@ void goToSleep() {
   
   // Configure touchpad as wakeup source
   // Use touch channel T9 which maps to GPIO32 on classic ESP32
-  touchSleepWakeUpEnable(TOUCH_PIN, TOUCH_THRESHOLD);
+  touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
   // Also configure periodic 5-day RTC timer wake for image refresh
   esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
   
@@ -266,7 +319,7 @@ void handleLedBlinking() {
   uint16_t touchVal = touchRead(TOUCH_PIN);
   
   // If touch value is less than threshold, keep LED ON continuously
-  if (touchVal < TOUCH_THRESHOLD) {
+  if (touchVal < touchThreshold) {
     digitalWrite(LED2, HIGH);
     return; // Exit early, no blinking needed
   }
