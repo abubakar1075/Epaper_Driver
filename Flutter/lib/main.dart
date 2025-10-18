@@ -2630,7 +2630,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         }
         
         try {
-          await _rxCharacteristic!.write(view, withoutResponse: false);
+          await _rxCharacteristic!.write(view, withoutResponse: true);
           bytesSent += view.length;
           // Very small pacing prevents peripheral overflow while keeping speed high
           await Future.delayed(const Duration(milliseconds: 1));

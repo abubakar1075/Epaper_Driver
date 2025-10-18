@@ -317,6 +317,28 @@ void goToSleep() {
   
   Serial.printf("Entering deep sleep mode. Touch GPIO%d to wake up again.\n", TOUCH_PIN);
   Serial.flush();
+
+  // CLEANUP: remove any stored image or OTA file so the device wakes up in a clean state.
+  // Only do this when not in the middle of a transfer.
+  if (spiffsReady && receivingSize) {
+    // Remove image file if present
+    if (SPIFFS.exists(IMAGE_PATH)) {
+      Serial.println("Removing stored image from SPIFFS before sleep...");
+      SPIFFS.remove(IMAGE_PATH);
+      Serial.println("Image removed.");
+
+    }
+    // Remove OTA file if present
+    if (SPIFFS.exists(OTA_PATH)) {
+      Serial.println("Removing stored OTA file from SPIFFS before sleep...");
+      SPIFFS.remove(OTA_PATH);
+      Serial.println("OTA file removed.");
+    }
+  } else if (!spiffsReady) {
+    Serial.println("SPIFFS not mounted; skipping cleanup before sleep.");
+  } else {
+    Serial.println("Transfer in progress; skipping SPIFFS cleanup before sleep.");
+  }
   
   // Configure touchpad as wakeup source
   // Use touch channel T9 which maps to GPIO32 on classic ESP32
