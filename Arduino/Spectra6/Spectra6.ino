@@ -224,10 +224,24 @@ void loop() {
   if (millis() - lastTouchPrint >= 500) {
     lastTouchPrint = millis();
     uint16_t touchVal = touchRead(TOUCH_PIN);
-    Serial.print("Touch(");
-    Serial.print(TOUCH_PIN);
-    Serial.print(") = ");
-    Serial.println(touchVal);
+  uint8_t battInline = getBatteryPercent();
+  Serial.print("Touch(");
+  Serial.print(TOUCH_PIN);
+  Serial.print(") = ");
+  Serial.print(touchVal);
+  Serial.print("  Battery=");
+  Serial.print(battInline);
+  Serial.println("%");
+    // If BLE is connected, send formatted touch + battery status over TX characteristic
+    if (BLE.connected()) {
+      uint8_t batt = battInline; // already read above
+      // Create a small human-readable message like: "Touch(15) = 69  Battery=85%"
+      char msg[64];
+      int len = snprintf(msg, sizeof(msg), "Touch(%d) = %u  Battery=%u%%", TOUCH_PIN, touchVal, batt);
+      if (len > 0) {
+        txCharacteristic.writeValue((const uint8_t*)msg, len);
+      }
+    }
   }
   
   // Check for BLE connection status
@@ -281,8 +295,10 @@ void loop() {
  * Put the device into deep sleep mode
  */
 void goToSleep() {
-  // Ensure the e-paper display is in sleep mode
-  EPD_sleep();
+  // Ensure the e-paper display is commanded to sleep. Use non-blocking variant
+  // so that the ESP32 will still go to sleep even if the display is not present
+  // or its BUSY pin is floating.
+  EPD_sleep_no_wait();
   
   // Shut down BLE to save power
   if (bleActive) {

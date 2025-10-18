@@ -596,7 +596,13 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       
       // Update queue state
       bufferQueue.writeIndex = (writeIdx + 1) % BLE_BUFFER_COUNT;
-      bufferQueue.count++;
+      // Avoid using ++ on volatile-qualified type (deprecated).
+      // Use a temporary local and assign back to ensure a single write.
+      {
+        int tmp = bufferQueue.count;
+        tmp = tmp + 1;
+        bufferQueue.count = tmp;
+      }
       
       // Process any available buffers while we're receiving more
       if (bufferQueue.count > 0) {
@@ -613,7 +619,12 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         
         // Update queue state
         bufferQueue.readIndex = (readIdx + 1) % BLE_BUFFER_COUNT;
-        bufferQueue.count--;
+        // Avoid using -- on volatile-qualified type (deprecated).
+        {
+          int tmp = bufferQueue.count;
+          tmp = tmp - 1;
+          bufferQueue.count = tmp;
+        }
       }
     } else {
       // Queue is full, read directly into main buffer and process immediately
@@ -642,14 +653,12 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     
     // Calculate progress percentage and only send acknowledgment periodically
     // This reduces BLE overhead by not sending too many ACKs
-    uint8_t progress = (receivedDataSize * 100) / expectedDataSize;
-    static uint8_t lastProgress = 0;
+  uint8_t progress = (receivedDataSize * 100) / expectedDataSize;
     
     // Only send progress update based on BLE_ACK_THRESHOLD to reduce overhead
     // Send ack every X chunks (defined in BLE_ACK_THRESHOLD) instead of by percentage
     if ((receivedDataSize % (BLE_MAX_WRITE_SIZE * BLE_ACK_THRESHOLD)) == 0 || (receivedDataSize >= expectedDataSize)) {
-      lastProgress = progress;
-      sendProgressUpdate(progress);
+  sendProgressUpdate(progress);
       
       // Only print progress at 20% intervals to reduce Serial overhead
       if ((progress % 20) == 0 || progress == 100) {
@@ -690,7 +699,10 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
           int readIdx = bufferQueue.readIndex;
           imageFile.write(bufferQueue.data[readIdx], bufferQueue.sizes[readIdx]);
           bufferQueue.readIndex = (readIdx + 1) % BLE_BUFFER_COUNT;
-          bufferQueue.count--;
+          // Decrement count without using -- on volatile
+          int tmp = bufferQueue.count;
+          tmp = tmp - 1;
+          bufferQueue.count = tmp;
         }
         
         imageFile.close();

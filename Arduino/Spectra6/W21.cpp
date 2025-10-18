@@ -186,6 +186,16 @@ void EPD_sleep(void)
     EPD_W21_WriteDATA(0xA5);*/
 }
 
+// Non-blocking sleep: issue sleep command but don't wait for BUSY.
+void EPD_sleep_no_wait(void)
+{
+  EPD_W21_WriteCMD(0X02);   //power off
+  EPD_W21_WriteDATA(0x00);
+  // Do NOT call lcd_chkstatus() here: if the panel is not connected BUSY may never respond.
+  /* Optionally, we could also send deep sleep command here, but many panels
+     require a proper sequence; keep minimal to be safe when panel absent. */
+}
+
 unsigned char Color_get(unsigned char color)
 {
   unsigned datas;

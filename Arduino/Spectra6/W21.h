@@ -55,6 +55,8 @@ void EPD_init(void);
 void PIC_display(const unsigned char* picData);
 void PIC_display_fast(const unsigned char* picData, size_t dataLength);  // Optimized display function
 void EPD_sleep(void);
+// Non-blocking sleep: send sleep command but do not wait on BUSY pin.
+void EPD_sleep_no_wait(void);
 void EPD_refresh(void);
 void lcd_chkstatus(void);
 void PIC_display_Clear(void);
