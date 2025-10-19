@@ -753,21 +753,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       }
     }
     final Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
-    // Compute cover scale and center translation
+    // Compute fit scale to show entire image within frame and center translation
     final iw = imgObj.width.toDouble();
     final ih = imgObj.height.toDouble();
-    final coverScale = math.max(frameW / iw, frameH / ih);
+    final fitScale = math.min(frameW / iw, frameH / ih);
     setState((){
       _frameWidth = frameW;
       _frameHeight = frameH;
       _frameOrigin = origin;
-      _viewScale = coverScale;
-      _minScale = (coverScale * 0.01).clamp(0.005, double.infinity);
-      _maxScale = coverScale * 80;
+      _viewScale = fitScale;
+      _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
+      _maxScale = fitScale * 80;
       _viewRotation = 0.0; // keep upright when switching orientation
       _viewTranslation = Offset(
-        (workspaceW - iw*coverScale)/2,
-        (workspaceH - ih*coverScale)/2,
+        (workspaceW - iw*fitScale)/2,
+        (workspaceH - ih*fitScale)/2,
       );
       _viewInitialized = true;
     });
@@ -2949,17 +2949,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if (!_viewInitialized && _uiOriginal != null) {
           final iw = _uiOriginal!.width.toDouble();
           final ih = _uiOriginal!.height.toDouble();
-          // scale so image fully covers frame
-          final coverScale = math.max(_frameWidth / iw, _frameHeight / ih);
-          _viewScale = coverScale;
-          // Allow zooming out to a small fraction of cover, in, to large magnification
-          _minScale = coverScale * 0.01; // 1% of cover size (very far zoom out)
+          // scale so entire image fits within frame (fit rather than cover)
+          final fitScale = math.min(_frameWidth / iw, _frameHeight / ih);
+          _viewScale = fitScale;
+          // Allow zooming out to a small fraction of fit scale, in, to large magnification
+          _minScale = fitScale * 0.01; // 1% of fit size (very far zoom out)
           if (_minScale < 0.005) _minScale = 0.005;
-          _maxScale = coverScale * 80; // very deep zoom possible
+          _maxScale = fitScale * 80; // very deep zoom possible
           // center image in workspace
           _viewTranslation = Offset(
-            (workspaceW - iw*coverScale)/2,
-            (workspaceH - ih*coverScale)/2,
+            (workspaceW - iw*fitScale)/2,
+            (workspaceH - ih*fitScale)/2,
           );
           _viewInitialized = true;
           // Cropped preview now paints directly; no PNG cache needed
