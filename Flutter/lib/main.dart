@@ -2956,7 +2956,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           _minScale = fitScale * 0.01; // 1% of fit size (very far zoom out)
           if (_minScale < 0.005) _minScale = 0.005;
           _maxScale = fitScale * 80; // very deep zoom possible
-          // center image in workspace
+          // center image in workspace and ensure no rotation
+          _viewRotation = 0.0;
           _viewTranslation = Offset(
             (workspaceW - iw*fitScale)/2,
             (workspaceH - ih*fitScale)/2,
@@ -3060,7 +3061,7 @@ class _WorkspacePainter extends CustomPainter {
     canvas.translate(translation.dx, translation.dy);
     canvas.rotate(rotation);
     canvas.scale(scale, scale);
-    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,img.width.toDouble(), img.height.toDouble()), image: img, fit: BoxFit.contain, alignment: Alignment.topLeft);
+    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,img.width.toDouble(), img.height.toDouble()), image: img, fit: BoxFit.fill, alignment: Alignment.center);
     canvas.restore();
   }
   @override
@@ -3082,7 +3083,7 @@ class _CroppedPreviewPainter extends CustomPainter {
     canvas.translate(translation.dx, translation.dy);
     canvas.rotate(rotation);
     canvas.scale(scale, scale);
-    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,image.width.toDouble(), image.height.toDouble()), image: image, fit: BoxFit.contain, alignment: Alignment.topLeft);
+    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,image.width.toDouble(), image.height.toDouble()), image: image, fit: BoxFit.fill, alignment: Alignment.center);
     canvas.restore();
   }
   @override
