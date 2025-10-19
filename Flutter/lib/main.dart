@@ -194,6 +194,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   String? _otaFileVersion; // version from OTA file (embedded in filename or metadata)
   bool _otaButtonEnabled = false; // enable OTA button only if versions differ
   bool _isCheckingVersion = false; // loading state for version check
+  bool _versionCheckCompleted = false; // prevents flickering by tracking completion
 
   Widget _smallBtn(String label, VoidCallback? onPressed, {IconData? icon, Color? backgroundColor}){
     final bgColor = backgroundColor ?? Colors.blue.shade600;
@@ -234,6 +235,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   Widget _buildOtaButton() {
+    // Don't show anything until version check is complete (prevents flickering)
+    if (!_versionCheckCompleted) {
+      return const SizedBox.shrink();
+    }
+    
     // Show loading state while checking version
     if (_isCheckingVersion) {
       return Container(
@@ -775,8 +781,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         const Spacer(),
         // Right side controls
         Row(children:[
-          // Only add spacing if OTA button is visible
-          if (_otaButtonEnabled || _isCheckingVersion) ...[
+          // Only add spacing if OTA button is visible (after version check is complete)
+          if (_versionCheckCompleted && (_otaButtonEnabled || _isCheckingVersion)) ...[
             const SizedBox(width:2),
             _buildOtaButton(),
             const SizedBox(width:2),
@@ -1050,6 +1056,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _otaFileVersion = otaVersion;
         _otaButtonEnabled = _shouldEnableOtaButton(deviceVersion, otaVersion);
         _isCheckingVersion = false;
+        _versionCheckCompleted = true; // Mark as completed to prevent flickering
       });
       
       if (deviceVersion != null && otaVersion != null) {
@@ -1065,6 +1072,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       setState(() {
         _isCheckingVersion = false;
         _otaButtonEnabled = true; // Enable by default on error
+        _versionCheckCompleted = true; // Mark as completed even on error
       });
       _updateStatus('Version check failed: $e');
     }
@@ -2698,6 +2706,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             setState((){
               _connectedDevice = null;
               _rxCharacteristic = null;
+              // Reset version check state to avoid flickering on reconnect
+              _versionCheckCompleted = false;
+              _isCheckingVersion = false;
+              _otaButtonEnabled = false;
               // Keep showing the second screen UI; auto-reconnect runs in background
             });
             _updateStatus('Device disconnected. Reconnecting...');
