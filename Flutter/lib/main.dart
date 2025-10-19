@@ -256,28 +256,25 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       );
     }
     
-    // Build version tooltip text
-    String tooltip = 'OTA Update';
-    if (_deviceFirmwareVersion != null && _otaFileVersion != null) {
-      if (_otaButtonEnabled) {
-        tooltip = 'Update: v$_deviceFirmwareVersion → v$_otaFileVersion';
-      } else {
-        tooltip = 'Up-to-date: v$_deviceFirmwareVersion';
-      }
+    // Hide button when no update is available (instead of disabling it)
+    if (!_otaButtonEnabled) {
+      return const SizedBox.shrink(); // Hidden when up-to-date
     }
     
-    // Choose button color based on availability
-    Color backgroundColor = _otaButtonEnabled 
-        ? Colors.orange.shade600  // Orange when update available
-        : Colors.grey.shade500;   // Grey when up-to-date
+    // Build tooltip text for available update
+    String tooltip = 'OTA Update Available';
+    if (_deviceFirmwareVersion != null && _otaFileVersion != null) {
+      tooltip = 'Update: v$_deviceFirmwareVersion → v$_otaFileVersion';
+    }
     
+    // Only show button when update is available - always orange and enabled
     return Tooltip(
       message: tooltip,
       child: _smallBtn(
         'OTA', 
-        _otaButtonEnabled ? _sendOtaFile : null, // Disable callback when up-to-date
+        _sendOtaFile,
         icon: Icons.system_update_alt, 
-        backgroundColor: backgroundColor,
+        backgroundColor: Colors.orange.shade600,
       ),
     );
   }
@@ -778,11 +775,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         const Spacer(),
         // Right side controls
         Row(children:[
-          const SizedBox(width:2),
-          _buildOtaButton(),
-          const SizedBox(width:2),
-          _smallBtn('Ver', _checkFirmwareVersion, icon: Icons.info_outline, backgroundColor: Colors.teal.shade600),
-          const SizedBox(width:2),
+          // Only add spacing if OTA button is visible
+          if (_otaButtonEnabled || _isCheckingVersion) ...[
+            const SizedBox(width:2),
+            _buildOtaButton(),
+            const SizedBox(width:2),
+          ],
           _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app, backgroundColor: Colors.red.shade600),
         ])
       ]),
