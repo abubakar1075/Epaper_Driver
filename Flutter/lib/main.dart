@@ -164,7 +164,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _showOnline = false; // toggle to show online images screen when connected
   Future<List<String>>? _onlineImagesFuture; // cached future for online images
   String? _selectedOnlineImageUrl; // selected online image URL
-  Uint8List? _selectedOnlineImageBytes; // downloaded bytes of selected online image
+  bool _isLoadingOnlineImage = false; // loading state for Use in Editor
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -972,62 +972,66 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }
   }
 
-  // Select an online image and download it for preview
-  Future<void> _selectOnlineImage(String imageUrl) async {
+  // Select an online image (just track selection, don't download yet)
+  void _selectOnlineImage(String imageUrl) {
     if (_selectedOnlineImageUrl == imageUrl) {
       // If already selected, deselect
       setState(() {
         _selectedOnlineImageUrl = null;
-        _selectedOnlineImageBytes = null;
+        _isLoadingOnlineImage = false;
       });
       return;
     }
 
     setState(() {
       _selectedOnlineImageUrl = imageUrl;
-      _selectedOnlineImageBytes = null; // Clear previous bytes
+      _isLoadingOnlineImage = false; // Reset loading state when selecting new image
     });
+    
+    _updateStatus('Image selected - press "Use in Editor" to load');
+  }
 
+  // Use the selected online image in the editor (download and load)
+  Future<void> _useSelectedOnlineImage() async {
+    if (_selectedOnlineImageUrl == null) return;
+    
+    setState(() {
+      _isLoadingOnlineImage = true;
+    });
+    
     try {
-      _updateStatus('Downloading image preview...');
+      _updateStatus('Downloading image...');
       
       // Convert thumbnail URL to full-resolution download URL
-      String fullResUrl = imageUrl;
-      if (imageUrl.contains('thumbnail?id=')) {
-        final fileId = imageUrl.split('id=')[1].split('&')[0];
+      String fullResUrl = _selectedOnlineImageUrl!;
+      if (_selectedOnlineImageUrl!.contains('thumbnail?id=')) {
+        final fileId = _selectedOnlineImageUrl!.split('id=')[1].split('&')[0];
         fullResUrl = 'https://drive.google.com/uc?export=download&id=$fileId';
       }
       
       final response = await http.get(Uri.parse(fullResUrl));
-      if (response.statusCode == 200) {
+      if (response.statusCode != 200) {
+        _updateStatus('Failed to download image (HTTP ${response.statusCode})');
         setState(() {
-          _selectedOnlineImageBytes = response.bodyBytes;
+          _isLoadingOnlineImage = false;
         });
-        _updateStatus('Image ready to use in editor');
-      } else {
-        _updateStatus('Failed to download image');
-        setState(() {
-          _selectedOnlineImageUrl = null;
-        });
+        return;
       }
-    } catch (e) {
-      _updateStatus('Error downloading image: $e');
-      setState(() {
-        _selectedOnlineImageUrl = null;
-      });
-    }
-  }
-
-  // Use the selected online image in the editor
-  Future<void> _useSelectedOnlineImage() async {
-    if (_selectedOnlineImageBytes == null) return;
-    
-    try {
+      
       // Create a temporary file
       final tempDir = await getTemporaryDirectory();
-      final fileName = _selectedOnlineImageUrl!.split('/').last;
+      String fileName = 'image';
+      try {
+        fileName = _selectedOnlineImageUrl!.split('/').last;
+        if (fileName.isEmpty || !fileName.contains('.')) {
+          fileName = 'online_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        }
+      } catch (_) {
+        fileName = 'online_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      }
+      
       final tempFile = File('${tempDir.path}/online_${DateTime.now().millisecondsSinceEpoch}_$fileName');
-      await tempFile.writeAsBytes(_selectedOnlineImageBytes!);
+      await tempFile.writeAsBytes(response.bodyBytes);
       
       // Set as current image
       setState(() {
@@ -1039,13 +1043,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _showOnline = false; // Return to main view
         _viewInitialized = false; // Force frame recompute
         _selectedOnlineImageUrl = null; // Clear selection
-        _selectedOnlineImageBytes = null;
       });
       
       await _loadUiImage();
       _updateStatus('Online image loaded into editor');
     } catch (e) {
       _updateStatus('Failed to load online image: $e');
+    } finally {
+      setState(() {
+        _isLoadingOnlineImage = false;
+      });
     }
   }
 
@@ -1300,12 +1307,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               Row(
                 children: [
                   _smallBtn('Use in Editor', 
-                    (_selectedOnlineImageUrl != null && _selectedOnlineImageBytes != null) ? _useSelectedOnlineImage : null, 
+                    (_selectedOnlineImageUrl != null && !_isLoadingOnlineImage) ? _useSelectedOnlineImage : null, 
                     icon: Icons.open_in_new, backgroundColor: Colors.green.shade600),
                   const Spacer(),
-                  if (_selectedOnlineImageUrl != null)
-                    Text(_selectedOnlineImageBytes != null ? 'Ready to use' : 'Loading...', 
-                      style: const TextStyle(fontSize: 12))
+                  if (_isLoadingOnlineImage)
+                    const Text('Loading...', 
+                      style: TextStyle(fontSize: 12))
+                  else if (_selectedOnlineImageUrl != null)
+                    const Text('Selected - press button to download and load', 
+                      style: TextStyle(fontSize: 12))
                   else
                     const Text('Select an image to use in editor', 
                       style: TextStyle(fontSize: 12, color: Colors.grey)),
