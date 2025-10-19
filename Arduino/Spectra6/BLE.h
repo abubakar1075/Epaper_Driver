@@ -7,6 +7,9 @@
 #include <SPIFFS.h>
 // OTA update support will be implemented in BLE.cpp using Update.h
 
+// External firmware version from main file
+extern const char* FIRMWARE_VERSION;
+
 // Constants for BLE acknowledgements
 #define ACK_SIZE_RECEIVED 0x01   // Size acknowledgment
 #define ACK_PROGRESS 0x02        // Progress update

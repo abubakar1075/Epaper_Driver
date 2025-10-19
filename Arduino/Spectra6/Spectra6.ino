@@ -1,6 +1,9 @@
  // 30 seconds branch
 //#define TEST_IMAGE
 
+// Firmware version - update this when you create new OTA files
+const char* FIRMWARE_VERSION = "1.2.011";
+
 // GPIO pin definitions
 #define CALIBRATION_BUTTON_PIN 27  // GPIO 27 for threshold calibration
 

@@ -187,6 +187,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Track which action should auto-resume after connect when the popup was shown
   _PendingSend _pendingSend = _PendingSend.none;
 
+  // =============================================================
+  // OTA VERSION CHECKING
+  // =============================================================
+  String? _deviceFirmwareVersion; // version from ESP32
+  String? _otaFileVersion; // version from OTA file (embedded in filename or metadata)
+  bool _otaButtonEnabled = false; // enable OTA button only if versions differ
+  bool _isCheckingVersion = false; // loading state for version check
+
   Widget _smallBtn(String label, VoidCallback? onPressed, {IconData? icon, Color? backgroundColor}){
     final bgColor = backgroundColor ?? Colors.blue.shade600;
     final shadowColor = backgroundColor?.withOpacity(0.3) ?? Colors.blue.withOpacity(0.3);
@@ -222,6 +230,55 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       style: buttonStyle,
       onPressed: onPressed,
       child: Text(label, style: TextStyle(fontSize: 15)),
+    );
+  }
+
+  Widget _buildOtaButton() {
+    // Show loading state while checking version
+    if (_isCheckingVersion) {
+      return Container(
+        width: 60,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade400,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // Build version tooltip text
+    String tooltip = 'OTA Update';
+    if (_deviceFirmwareVersion != null && _otaFileVersion != null) {
+      if (_otaButtonEnabled) {
+        tooltip = 'Update: v$_deviceFirmwareVersion → v$_otaFileVersion';
+      } else {
+        tooltip = 'Up-to-date: v$_deviceFirmwareVersion';
+      }
+    }
+    
+    // Choose button color based on availability
+    Color backgroundColor = _otaButtonEnabled 
+        ? Colors.orange.shade600  // Orange when update available
+        : Colors.grey.shade500;   // Grey when up-to-date
+    
+    return Tooltip(
+      message: tooltip,
+      child: _smallBtn(
+        'OTA', 
+        _otaButtonEnabled ? _sendOtaFile : null, // Disable callback when up-to-date
+        icon: Icons.system_update_alt, 
+        backgroundColor: backgroundColor,
+      ),
     );
   }
 
@@ -722,7 +779,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         // Right side controls
         Row(children:[
           const SizedBox(width:2),
-          _smallBtn('OTA', _sendOtaFile, icon: Icons.system_update_alt, backgroundColor: Colors.orange.shade600),
+          _buildOtaButton(),
+          const SizedBox(width:2),
+          _smallBtn('Ver', _checkFirmwareVersion, icon: Icons.info_outline, backgroundColor: Colors.teal.shade600),
           const SizedBox(width:2),
           _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app, backgroundColor: Colors.red.shade600),
         ])
@@ -970,6 +1029,168 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     }catch(_){
       _updateStatus('Failed to load AI image');
     }
+  }
+
+  // =============================================================
+  // OTA VERSION CHECKING FUNCTIONS
+  // =============================================================
+  
+  Future<void> _checkFirmwareVersion() async {
+    if (_connectedDevice == null || _rxCharacteristic == null) return;
+    
+    setState(() => _isCheckingVersion = true);
+    
+    try {
+      // Query firmware version from ESP32
+      String? deviceVersion = await _queryDeviceFirmwareVersion();
+      
+      // Get OTA file version
+      String? otaVersion = await _getOtaFileVersion();
+      
+      setState(() {
+        _deviceFirmwareVersion = deviceVersion;
+        _otaFileVersion = otaVersion;
+        _otaButtonEnabled = _shouldEnableOtaButton(deviceVersion, otaVersion);
+        _isCheckingVersion = false;
+      });
+      
+      if (deviceVersion != null && otaVersion != null) {
+        if (_otaButtonEnabled) {
+          _updateStatus('OTA available: Device v$deviceVersion → v$otaVersion');
+        } else {
+          _updateStatus('Firmware up-to-date: v$deviceVersion');
+        }
+      } else {
+        _updateStatus('Version check completed');
+      }
+    } catch (e) {
+      setState(() {
+        _isCheckingVersion = false;
+        _otaButtonEnabled = true; // Enable by default on error
+      });
+      _updateStatus('Version check failed: $e');
+    }
+  }
+  
+  Future<String?> _queryDeviceFirmwareVersion() async {
+    if (_connectedDevice == null || _rxCharacteristic == null) return null;
+    
+    try {
+      // Create a completer to wait for the version response
+      Completer<String?> versionCompleter = Completer<String?>();
+      
+      // Set up a temporary listener for version response
+      late StreamSubscription subscription;
+      subscription = _connectedDevice!.connectionState.listen((_) {});
+      
+      // Listen for version response on TX characteristic
+      BluetoothCharacteristic? txChar;
+      
+      List<BluetoothService> services = await _connectedDevice!.discoverServices();
+      for (BluetoothService service in services) {
+        if (service.uuid.toString().toUpperCase() == UART_SERVICE_UUID.toUpperCase()) {
+          for (BluetoothCharacteristic characteristic in service.characteristics) {
+            if (characteristic.uuid.toString().toUpperCase() == UART_TX_CHAR_UUID.toUpperCase()) {
+              txChar = characteristic;
+              break;
+            }
+          }
+          break;
+        }
+      }
+      
+      if (txChar == null) throw Exception("TX characteristic not found");
+      
+      // Set up version response listener
+      subscription = txChar.onValueReceived.listen((value) {
+        if (value.isNotEmpty && value[0] == 0x30) {
+          // Version response received
+          String version = String.fromCharCodes(value.sublist(1));
+          if (!versionCompleter.isCompleted) {
+            versionCompleter.complete(version.trim());
+          }
+          subscription.cancel();
+        }
+      });
+      
+      // Send version query command (0x30)
+      await _rxCharacteristic!.write(Uint8List.fromList([0x30]));
+      
+      // Wait for response with timeout
+      String? version = await versionCompleter.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          subscription.cancel();
+          return null;
+        },
+      );
+      
+      return version;
+    } catch (e) {
+      print('Error querying device version: $e');
+      return null;
+    }
+  }
+  
+  Future<String?> _getOtaFileVersion() async {
+    try {
+      // Try to read version from OTA filename or embedded metadata
+      // For now, we'll check if the file exists and extract version from filename
+      final otaPath = 'OTAFile/Spectra6.ino.bin';
+      
+      // Load the asset to check if it exists
+      try {
+        await rootBundle.load(otaPath);
+        // If we can load it, it exists
+        
+        // For now, extract version from filename or use a default
+        // You can modify this to embed version in the binary or filename
+        String filename = otaPath.split('/').last;
+        
+        // Check if filename contains version pattern like "v1.0.0" or "1.0.0"
+        RegExp versionRegex = RegExp(r'v?(\d+\.\d+\.\d+)');
+        Match? match = versionRegex.firstMatch(filename);
+        
+        if (match != null) {
+          return match.group(1); // Return version without 'v' prefix
+        }
+        
+        // If no version in filename, you could read it from binary metadata
+        // For now, return a default version that you should update manually
+        return "1.2.01"; // Update this when you create new OTA files
+        
+      } catch (e) {
+        print('OTA file not found: $e');
+        return null;
+      }
+    } catch (e) {
+      print('Error getting OTA file version: $e');
+      return null;
+    }
+  }
+  
+  bool _shouldEnableOtaButton(String? deviceVersion, String? otaVersion) {
+    if (deviceVersion == null || otaVersion == null) {
+      return true; // Enable by default if we can't determine versions
+    }
+    
+    // Compare versions
+    return _compareVersions(deviceVersion, otaVersion) < 0; // Device version < OTA version
+  }
+  
+  int _compareVersions(String version1, String version2) {
+    List<int> v1Parts = version1.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    List<int> v2Parts = version2.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    
+    // Pad with zeros if needed
+    while (v1Parts.length < 3) v1Parts.add(0);
+    while (v2Parts.length < 3) v2Parts.add(0);
+    
+    for (int i = 0; i < 3; i++) {
+      if (v1Parts[i] < v2Parts[i]) return -1;
+      if (v1Parts[i] > v2Parts[i]) return 1;
+    }
+    return 0; // Equal
   }
 
   // Select an online image (just track selection, don't download yet)
@@ -2490,6 +2711,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       });
       
       _updateStatus("Connected to ${device.advName}");
+      
+      // Check firmware version after successful connection
+      _checkFirmwareVersion();
     } catch (e) {
       _updateStatus("Connection failed: $e");
       setState(() {

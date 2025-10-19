@@ -164,6 +164,57 @@ class BleManager {
     }
   }
   
+  // Query firmware version from ESP32
+  Future<String?> queryFirmwareVersion() async {
+    if (_device == null || !_device!.isConnected || _rxCharacteristic == null) {
+      _notifyError("Not connected to a device");
+      return null;
+    }
+    
+    try {
+      _notifyStatus("Querying firmware version...");
+      
+      // Create a completer to wait for the version response
+      Completer<String?> versionCompleter = Completer<String?>();
+      
+      // Set up a temporary listener for version response
+      late StreamSubscription subscription;
+      subscription = _txCharacteristic!.onValueReceived.listen((value) {
+        if (value.isNotEmpty && value[0] == 0x30) {
+          // Version response received
+          String version = String.fromCharCodes(value.sublist(1));
+          if (!versionCompleter.isCompleted) {
+            versionCompleter.complete(version);
+          }
+          subscription.cancel();
+        }
+      });
+      
+      // Send version query command (0x30)
+      await _rxCharacteristic!.write(Uint8List.fromList([0x30]));
+      
+      // Wait for response with timeout
+      String? version = await versionCompleter.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          subscription.cancel();
+          return null;
+        },
+      );
+      
+      if (version != null) {
+        _notifyStatus("Firmware version: $version");
+        return version.trim();
+      } else {
+        _notifyError("Version query timeout");
+        return null;
+      }
+    } catch (e) {
+      _notifyError("Error querying version: $e");
+      return null;
+    }
+  }
+  
   // Send image data to the device
   Future<bool> sendImageData(Uint8List data) async {
     if (_device == null || !_device!.isConnected || _rxCharacteristic == null) {
