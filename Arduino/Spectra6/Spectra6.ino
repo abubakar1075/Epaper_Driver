@@ -127,6 +127,13 @@ void setup() {
   delay(1000);
  // while (!Serial && millis() < 5000); // Wait for serial or timeout
 
+  // Print firmware version with asterisks
+  Serial.println("*************************************************************************");
+  Serial.print("***************** ");
+  Serial.print(FIRMWARE_VERSION);
+  Serial.println(" *****************");
+  Serial.println("*************************************************************************");
+
   Serial.printf("Going to deep sleep... touch GPIO%d to wake up\n", TOUCH_PIN);
   touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
 
