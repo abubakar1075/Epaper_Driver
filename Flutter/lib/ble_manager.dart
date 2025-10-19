@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:math';
+import 'dart:convert';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 // Constants for BLE acknowledgements
@@ -35,6 +36,8 @@ class BleManager {
   int _totalSize = 0;
   int _bytesSent = 0;
   int _startTime = 0;
+  Timer? _ackTimer;
+  static const int _ackTimeoutSeconds = 30; // watchdog to avoid permanent lock
   
   // Getters
   BluetoothDevice? get connectedDevice => _device;
@@ -218,6 +221,9 @@ class BleManager {
       }
       
       // We don't set _isTransferring to false here - wait for ACK_COMPLETE
+      // Start ACK watchdog: if ACK_COMPLETE isn't received within timeout,
+      // clear transfer state so the UI remains responsive.
+      _startAckWatchdog();
       return true;
     } catch (e) {
       _notifyError("Error sending data: $e");
@@ -251,13 +257,14 @@ class BleManager {
         break;
         
       case ACK_COMPLETE:
+        _cancelAckWatchdog();
         _isTransferring = false;
         _notifyStatus("Transfer completed successfully");
         
         if (onTransferComplete != null) {
           onTransferComplete!();
         }
-        break;
+  break;
         
       case ACK_ERROR:
         _isTransferring = false;
@@ -265,7 +272,39 @@ class BleManager {
         break;
         
       default:
+        // Some firmware sends human-readable ASCII status messages (e.g. "Touch(15) = 69...")
+        // In that case the first byte will be an ASCII character (like 'T' == 84).
+        // Try to decode printable ASCII/UTF-8 and surface as status; otherwise log unknown ack.
+        try {
+          String msg = utf8.decode(data);
+          // If decoded string contains printable characters, treat as status
+          bool printable = msg.runes.every((r) => (r >= 32 && r <= 126) || r == 10 || r == 13);
+          if (printable && msg.trim().isNotEmpty) {
+            _notifyStatus(msg.trim());
+            break;
+          }
+        } catch (_) {
+          // ignore decode errors
+        }
         _notifyStatus("Unknown acknowledgment type: $ackType");
+    }
+  }
+
+  void _startAckWatchdog() {
+    _cancelAckWatchdog();
+    _ackTimer = Timer(Duration(seconds: _ackTimeoutSeconds), () {
+      if (_isTransferring) {
+        _isTransferring = false;
+        _notifyStatus('ACK timeout: transfer reset after ${_ackTimeoutSeconds}s');
+        _notifyError('No completion ACK received from device');
+      }
+    });
+  }
+
+  void _cancelAckWatchdog() {
+    if (_ackTimer != null) {
+      _ackTimer!.cancel();
+      _ackTimer = null;
     }
   }
   

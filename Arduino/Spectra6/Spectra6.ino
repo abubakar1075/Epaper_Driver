@@ -224,24 +224,15 @@ void loop() {
   if (millis() - lastTouchPrint >= 500) {
     lastTouchPrint = millis();
     uint16_t touchVal = touchRead(TOUCH_PIN);
-  uint8_t battInline = getBatteryPercent();
-  Serial.print("Touch(");
-  Serial.print(TOUCH_PIN);
-  Serial.print(") = ");
-  Serial.print(touchVal);
-  Serial.print("  Battery=");
-  Serial.print(battInline);
-  Serial.println("%");
-    // If BLE is connected, send formatted touch + battery status over TX characteristic
-    if (BLE.connected()) {
-      uint8_t batt = battInline; // already read above
-      // Create a small human-readable message like: "Touch(15) = 69  Battery=85%"
-      char msg[64];
-      int len = snprintf(msg, sizeof(msg), "Touch(%d) = %u  Battery=%u%%", TOUCH_PIN, touchVal, batt);
-      if (len > 0) {
-        txCharacteristic.writeValue((const uint8_t*)msg, len);
-      }
-    }
+    uint8_t battInline = getBatteryPercent();
+    Serial.print("Touch(");
+    Serial.print(TOUCH_PIN);
+    Serial.print(") = ");
+    Serial.print(touchVal);
+    Serial.print("  Battery=");
+    Serial.print(battInline);
+    Serial.println("%");
+    // BLE transmission of touch messages removed to avoid interfering with app status
   }
   
   // Check for BLE connection status

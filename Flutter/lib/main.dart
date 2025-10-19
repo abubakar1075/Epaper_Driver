@@ -2510,7 +2510,46 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     
     // Parse the acknowledgment type
     int ackType = data[0];
-    
+
+    // First, try to decode as UTF-8 text message before treating as binary ACK.
+    // This handles ASCII status messages like "Touch(15) = 69  Battery=82%"  
+    // where the first byte (T=84) would otherwise be treated as unknown ACK.
+    bool handled = false;
+    try {
+      final String msg = utf8.decode(data).trim();
+      // Check if the decoded string contains mostly printable characters
+      if (msg.isNotEmpty && msg.length >= 3) {
+        bool isPrintable = true;
+        for (int rune in msg.runes) {
+          if (rune < 32 || rune > 126) {
+            // Allow common whitespace chars but reject control chars
+            if (rune != 9 && rune != 10 && rune != 13) {
+              isPrintable = false;
+              break;
+            }
+          }
+        }
+        
+        if (isPrintable) {
+          // Update battery if the message contains a "Battery=" token
+          final battMatch = RegExp(r'Battery\s*=\s*(\d{1,3})').firstMatch(msg);
+          if (battMatch != null) {
+            final int batt = int.parse(battMatch.group(1)!).clamp(0, 100);
+            setState((){ _batteryPercent = batt; });
+            _updateStatus('$msg');
+          } else {
+            _updateStatus(msg);
+          }
+          handled = true;
+        }
+      }
+    } catch (_) {
+      // UTF-8 decode failed, treat as binary data
+      handled = false;
+    }
+
+    if (handled) return;
+
     switch (ackType) {
       case ACK_BATTERY:
         if (data.length >= 2) {
