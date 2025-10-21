@@ -23,8 +23,17 @@ static unsigned long lastTouchPrint = 0;
 // Shared battery percent helper (ADC pin 1.60V ->0%, 1.936V ->100%)
 uint8_t getBatteryPercent() {
   analogReadResolution(12);
-  int raw = analogRead(BATTERY_PIN);
-  float vAdc = (raw / 4095.0f) * 3.3f; // ADC pin voltage
+  
+  // Take 10 samples and calculate average for stable reading
+  const int numSamples = 10;
+  long rawSum = 0;
+  for (int i = 0; i < numSamples; i++) {
+    rawSum += analogRead(BATTERY_PIN);
+    delay(1); // Small delay between readings for stability
+  }
+  float rawAverage = rawSum / (float)numSamples;
+  
+  float vAdc = (rawAverage / 4095.0f) * 3.3f; // ADC pin voltage from average
   const float VADC_EMPTY = 1.60f;
   const float VADC_FULL  = 1.936f;  // Adjusted to show 100% at current full battery voltage
   float percent = (vAdc - VADC_EMPTY) * 100.0f / (VADC_FULL - VADC_EMPTY);
