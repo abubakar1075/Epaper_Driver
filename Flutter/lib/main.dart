@@ -2644,9 +2644,29 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         }
       }
       
-      // Discover services
+      // Discover services with timeout to prevent hanging
       _updateStatus("Discovering services...");
-      List<BluetoothService> services = await device.discoverServices();
+      List<BluetoothService> services;
+      try {
+        services = await device.discoverServices().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            throw Exception("Service discovery timed out after 5 seconds");
+          },
+        );
+      } catch (e) {
+        // If service discovery fails, try reconnecting once
+        _updateStatus("Service discovery failed, retrying connection...");
+        await device.disconnect();
+        await Future.delayed(const Duration(milliseconds: 500));
+        await device.connect();
+        services = await device.discoverServices().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            throw Exception("Service discovery timed out on retry");
+          },
+        );
+      }
       
       // Find our UART service
       BluetoothService? uartService;
