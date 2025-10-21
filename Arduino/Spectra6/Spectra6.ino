@@ -20,7 +20,7 @@ void handleLedBlinking();
 // Print touch reading every 500ms
 static unsigned long lastTouchPrint = 0;
 
-// Shared battery percent helper (ADC pin 1.60V ->0%, 1.936V ->100%)
+// Shared battery percent helper (ADC pin 1.60V ->0%, 1.909V ->100%)
 uint8_t getBatteryPercent() {
   analogReadResolution(12);
   
@@ -35,7 +35,7 @@ uint8_t getBatteryPercent() {
   
   float vAdc = (rawAverage / 4095.0f) * 3.3f; // ADC pin voltage from average
   const float VADC_EMPTY = 1.60f;
-  const float VADC_FULL  = 1.936f;  // Adjusted to show 100% at current full battery voltage
+  const float VADC_FULL  = 1.909f;  // Adjusted to show 100% at current full battery voltage (was 1.936f, showing 86%)
   float percent = (vAdc - VADC_EMPTY) * 100.0f / (VADC_FULL - VADC_EMPTY);
   // Cap at 100% to prevent overcharge indication
   if (percent > 100.0f) percent = 100.0f;
