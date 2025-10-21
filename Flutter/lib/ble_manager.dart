@@ -9,6 +9,7 @@ const int ACK_SIZE_RECEIVED = 0x01;
 const int ACK_PROGRESS = 0x02;
 const int ACK_COMPLETE = 0x03;
 const int ACK_ERROR = 0xFF;
+const int ACK_BATTERY = 0xB0; // battery status from device (ignored here)
 
 // BLE UUIDs - match with Arduino code
 const String UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
@@ -16,8 +17,10 @@ const String UART_RX_CHAR_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"; // To A
 const String UART_TX_CHAR_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"; // From Arduino
 
 // Transfer parameters
-const int BLE_CHUNK_SIZE = 512;
+const int BLE_CHUNK_SIZE = 512; // target max; will adapt to MTU at runtime
 const int BLE_ACK_THRESHOLD = 200;
+const int TRANSFER_TYPE_IMAGE = 0x10; // typed header: image
+const int TRANSFER_TYPE_OTA = 0x20;   // typed header: OTA
 
 class BleManager {
   // BLE device and service
@@ -38,6 +41,8 @@ class BleManager {
   int _startTime = 0;
   Timer? _ackTimer;
   static const int _ackTimeoutSeconds = 30; // watchdog to avoid permanent lock
+  Completer<void>? _sizeAckCompleter; // completes when device ACKs size/header
+  Completer<void>? _completeAckCompleter; // completes on ACK_COMPLETE
   
   // Getters
   BluetoothDevice? get connectedDevice => _device;
@@ -103,6 +108,14 @@ class BleManager {
       // Connect to the device
       await device.connect();
       
+      // Try to negotiate a larger MTU for faster transfers (Android only; iOS ignores)
+      try {
+        await device.requestMtu(512);
+        _notifyStatus("Requested MTU 512");
+      } catch (_) {
+        // Not supported or failed; we'll adapt chunk size dynamically later
+      }
+
       // Discover services
       _notifyStatus("Discovering services...");
       List<BluetoothService> services = await device.discoverServices();
@@ -231,50 +244,101 @@ class BleManager {
     _totalSize = data.length;
     _bytesSent = 0;
     _startTime = DateTime.now().millisecondsSinceEpoch;
+    _sizeAckCompleter = Completer<void>();
+    _completeAckCompleter = Completer<void>();
     
     try {
       _notifyStatus("Preparing to send ${data.length} bytes...");
-      
-      // First send the total size as a 4-byte value
-      Uint8List sizeBytes = Uint8List(4);
-      sizeBytes[0] = _totalSize & 0xFF;
-      sizeBytes[1] = (_totalSize >> 8) & 0xFF;
-      sizeBytes[2] = (_totalSize >> 16) & 0xFF;
-      sizeBytes[3] = (_totalSize >> 24) & 0xFF;
-      
-      // Send the size
-      await _rxCharacteristic!.write(sizeBytes);
-      _notifyStatus("Sent size: $_totalSize bytes");
-      
-      // Small delay to ensure Arduino processes the size
-      await Future.delayed(const Duration(milliseconds: 50));
-      
-      // Split data into chunks and send
-      List<Uint8List> chunks = [];
-      for (int i = 0; i < data.length; i += BLE_CHUNK_SIZE) {
-        int end = min(i + BLE_CHUNK_SIZE, data.length);
-        chunks.add(Uint8List.fromList(data.sublist(i, end)));
+
+      // Build typed header: [type=0x10 image, little-endian size (4 bytes)]
+      final header = Uint8List(5);
+      header[0] = TRANSFER_TYPE_IMAGE;
+      header[1] = _totalSize & 0xFF;
+      header[2] = (_totalSize >> 8) & 0xFF;
+      header[3] = (_totalSize >> 16) & 0xFF;
+      header[4] = (_totalSize >> 24) & 0xFF;
+
+      // Send header WITH response for reliability
+      await _rxCharacteristic!.write(header, withoutResponse: false);
+      _notifyStatus("Sent header (type 0x10) with size: $_totalSize bytes");
+
+      // Wait for ACK_SIZE_RECEIVED or timeout
+      try {
+        await _sizeAckCompleter!.future.timeout(const Duration(seconds: 5));
+      } on TimeoutException {
+        throw Exception("Timeout waiting for device to ACK size");
       }
+
+      // Try to use a large MTU; if not available, adapt chunk size dynamically
+      int negotiatedMtu = 23; // default
+      // We can't reliably query current MTU on all platforms via API here; assume desired if no error earlier
+      negotiatedMtu = 512; // optimistic; chunk sizing will still be guarded and retried
+      int maxPayload = max(20, min(BLE_CHUNK_SIZE, negotiatedMtu - 3));
       
-      _notifyStatus("Sending ${chunks.length} chunks...");
-      
-      for (int i = 0; i < chunks.length; i++) {
-        // Only show status updates occasionally to reduce overhead
-        if (i % 20 == 0 || i == chunks.length - 1) {
-          _notifyStatus("Sending chunk ${i+1}/${chunks.length}");
+      _notifyStatus("Starting transfer with chunk payload up to $maxPayload bytes");
+
+      // Send data in adaptive chunks with retries and light throttling
+      int offset = 0;
+      int chunkIndex = 0;
+      int throttleCounter = 0;
+      while (offset < data.length) {
+        final int remaining = data.length - offset;
+        int sendLen = min(maxPayload, remaining);
+
+        // Retry strategy for this chunk size
+        int attempts = 0;
+        while (true) {
+          try {
+            // Only show status updates occasionally to reduce overhead
+            if (chunkIndex % 20 == 0 || (offset + sendLen) >= data.length) {
+              final totalChunks = (data.length + maxPayload - 1) ~/ maxPayload;
+              _notifyStatus("Sending chunk ${chunkIndex + 1}/$totalChunks (len=$sendLen)");
+            }
+            await _rxCharacteristic!.write(
+              Uint8List.sublistView(data, offset, offset + sendLen),
+              withoutResponse: true,
+            );
+            break; // success
+          } catch (e) {
+            attempts++;
+            // Reduce payload and retry a few times before failing hard
+            if (sendLen > 20) {
+              sendLen = max(20, sendLen ~/ 2);
+            }
+            // Also reduce maxPayload so subsequent chunks adapt
+            maxPayload = max(20, sendLen);
+            if (attempts >= 3) {
+              throw Exception("BLE write failed after retries: $e");
+            }
+            // tiny backoff
+            await Future.delayed(const Duration(milliseconds: 10));
+            continue;
+          }
         }
-        
-        await _rxCharacteristic!.write(chunks[i]);
-        _bytesSent += chunks[i].length;
-        
-        // Calculate and update progress
+
+        offset += sendLen;
+        chunkIndex++;
+        throttleCounter++;
+        _bytesSent += sendLen;
         _updateProgress();
+
+        // Light throttling to avoid flooding some stacks
+        if (throttleCounter >= 32) {
+          throttleCounter = 0;
+          await Future.delayed(const Duration(milliseconds: 2));
+        }
       }
-      
-      // We don't set _isTransferring to false here - wait for ACK_COMPLETE
-      // Start ACK watchdog: if ACK_COMPLETE isn't received within timeout,
-      // clear transfer state so the UI remains responsive.
+
+      // Wait for completion ACK with watchdog running
       _startAckWatchdog();
+      // Optionally await completion to surface errors earlier
+      unawaited(() async {
+        try {
+          await _completeAckCompleter!.future.timeout(Duration(seconds: _ackTimeoutSeconds));
+        } catch (_) {
+          // handled by watchdog / error callbacks
+        }
+      }());
       return true;
     } catch (e) {
       _notifyError("Error sending data: $e");
@@ -293,6 +357,9 @@ class BleManager {
     switch (ackType) {
       case ACK_SIZE_RECEIVED:
         _notifyStatus("Size received by device");
+        if (_sizeAckCompleter != null && !_sizeAckCompleter!.isCompleted) {
+          _sizeAckCompleter!.complete();
+        }
         break;
         
       case ACK_PROGRESS:
@@ -311,6 +378,9 @@ class BleManager {
         _cancelAckWatchdog();
         _isTransferring = false;
         _notifyStatus("Transfer completed successfully");
+        if (_completeAckCompleter != null && !_completeAckCompleter!.isCompleted) {
+          _completeAckCompleter!.complete();
+        }
         
         if (onTransferComplete != null) {
           onTransferComplete!();
@@ -320,6 +390,9 @@ class BleManager {
       case ACK_ERROR:
         _isTransferring = false;
         _notifyError("Error reported by device");
+        if (_completeAckCompleter != null && !_completeAckCompleter!.isCompleted) {
+          _completeAckCompleter!.completeError(Exception('Device reported error'));
+        }
         break;
         
       default:
