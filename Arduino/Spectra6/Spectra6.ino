@@ -92,6 +92,70 @@ static const uint64_t REFRESH_INTERVAL_US = 5ULL * 24ULL * 60ULL * 60ULL * 10000
 // Serial command buffer
 String serialCommand = "";
 
+// Touch tap detection variables
+const unsigned long TAP_TIMEOUT = 500;  // Maximum time between taps (ms)
+const unsigned long TAP_DURATION = 200; // Maximum duration of a single tap (ms)
+unsigned long lastTapTime = 0;
+int tapCount = 0;
+bool touchActive = false;
+unsigned long touchStartTime = 0;
+
+/**
+ * Detect double and triple taps on the capacitive touch sensor
+ */
+void handleTapDetection() {
+  uint16_t touchVal = touchRead(TOUCH_PIN);
+  unsigned long currentTime = millis();
+  
+  // Check if touch is currently active (below threshold)
+  bool isTouched = (touchVal < touchThreshold);
+  
+  // Detect touch press (transition from not touched to touched)
+  if (isTouched && !touchActive) {
+    touchActive = true;
+    touchStartTime = currentTime;
+    
+    // Check if this tap is within the timeout window from last tap
+    if (currentTime - lastTapTime < TAP_TIMEOUT) {
+      tapCount++;
+    } else {
+      // Too much time passed, start new tap sequence
+      tapCount = 1;
+    }
+    
+    lastTapTime = currentTime;
+  }
+  
+  // Detect touch release (transition from touched to not touched)
+  if (!isTouched && touchActive) {
+    touchActive = false;
+    unsigned long tapDuration = currentTime - touchStartTime;
+    
+    // Only count as valid tap if it was quick enough
+    if (tapDuration > TAP_DURATION) {
+      // Too long - this was a hold, not a tap. Reset sequence.
+      tapCount = 0;
+    }
+  }
+  
+  // Check if tap sequence has completed (timeout expired after last tap)
+  if (tapCount > 0 && !touchActive && (currentTime - lastTapTime > TAP_TIMEOUT)) {
+    // Tap sequence complete - process it
+    if (tapCount == 2) {
+      Serial.println("*** DOUBLE TAP DETECTED ***");
+    } else if (tapCount == 3) {
+      Serial.println("*** TRIPLE TAP DETECTED ***");
+    } else if (tapCount > 3) {
+      Serial.print("*** ");
+      Serial.print(tapCount);
+      Serial.println(" TAPS DETECTED ***");
+    }
+    
+    // Reset tap counter
+    tapCount = 0;
+  }
+}
+
 /**
  * Process serial commands received from terminal
  */
@@ -346,6 +410,9 @@ void setup() {
 void loop() {
   // Handle serial commands from terminal
   handleSerialCommands();
+  
+  // Handle tap detection (double tap / triple tap)
+  handleTapDetection();
   
   // Handle LED2 blinking
   handleLedBlinking();
