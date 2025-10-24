@@ -356,12 +356,50 @@ void handleSerialCommands() {
           }
           
           Serial.println("========================================\n");
+        } else if (serialCommand == "cleanspiffs") {
+          Serial.println("\n========== CLEAN SPIFFS ==========");
+          if (!spiffsReady) {
+            Serial.println("SPIFFS not mounted, attempting to mount...");
+            spiffsReady = SPIFFS.begin(true);
+          }
+          // Avoid formatting while an image payload is in progress
+          if (!receivingSize) {
+            Serial.println("ERROR: Image transfer in progress. Try again after it completes.");
+            Serial.println("===================================\n");
+          } else {
+            // Optionally unmount before format
+            Serial.println("Formatting SPIFFS partition (this may take a few seconds)...");
+            bool ok = SPIFFS.format();
+            if (!ok) {
+              Serial.println("ERROR: SPIFFS.format() failed.");
+              Serial.println("===================================\n");
+            } else {
+              // Re-mount and recreate defaults
+              spiffsReady = SPIFFS.begin(true);
+              if (!spiffsReady) {
+                Serial.println("ERROR: SPIFFS mount failed after format.");
+                Serial.println("===================================\n");
+              } else {
+                Serial.println("SPIFFS formatted and mounted.");
+                bool created = ensureDefaultImagesCreated();
+                currentImageIndex = loadCurrentImageIndex();
+                Serial.printf("Current Image after clean: Image_%d (%s)\n", currentImageIndex, getCurrentImagePath());
+                if (created) {
+                  Serial.println("Default images recreated.");
+                }
+                // Display the current image
+                displayImageFromSPIFFS();
+                Serial.println("===================================\n");
+              }
+            }
+          }
           
         } else if (serialCommand == "help") {
           Serial.println("\n========== AVAILABLE COMMANDS ==========");
           Serial.println("status  - Display device status");
           Serial.println("spiffs  - Show SPIFFS filesystem info");
           Serial.println("help    - Show this help message");
+          Serial.println("cleanspiffs - Format SPIFFS and recreate default images");
           Serial.println("========================================\n");
           
         } else {
