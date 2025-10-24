@@ -26,8 +26,8 @@
 //#define BOARD_ESP32E  // ESP32E board (default) FireBeatle
 //#define BOARD_FRAME   // Frame board
 //#define BOARD_C3      // C3 board XIAO
-#define BOARD_ESP32E // LOLIN LITE board (uncomment to use)
-//#define BOARD_FIRSTPCB // FirstPCB custom board
+//#define BOARD_ESP32E // LOLIN LITE board (uncomment to use)
+#define BOARD_FIRSTPCB // FirstPCB custom board
 
 #if defined(BOARD_FRAME)
     // Frame board pin definitions
