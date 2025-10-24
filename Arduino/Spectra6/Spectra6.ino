@@ -89,6 +89,139 @@ bool bleConnected = false;
 // Periodic refresh interval: 5 days in microseconds
 static const uint64_t REFRESH_INTERVAL_US = 5ULL * 24ULL * 60ULL * 60ULL * 1000000ULL;
 
+// Serial command buffer
+String serialCommand = "";
+
+/**
+ * Process serial commands received from terminal
+ */
+void handleSerialCommands() {
+  while (Serial.available() > 0) {
+    char inChar = (char)Serial.read();
+    
+    // Check for newline (Enter key)
+    if (inChar == '\n' || inChar == '\r') {
+      // Trim whitespace
+      serialCommand.trim();
+      
+      if (serialCommand.length() > 0) {
+        // Convert to lowercase for case-insensitive matching
+        serialCommand.toLowerCase();
+        
+        // Process commands
+        if (serialCommand == "status") {
+          Serial.println("\n========== DEVICE STATUS ==========");
+          
+          // Battery voltage and percentage (using existing function)
+          uint8_t battPercent = getBatteryPercent();
+          Serial.printf("Battery: %u%%\n", battPercent);
+          
+          // Capacitive touch threshold from SPIFFS (already loaded in touchThreshold variable)
+          Serial.printf("Touch Threshold (from SPIFFS): %d\n", touchThreshold);
+          Serial.printf("Current Touch Reading: %u\n", (uint16_t)touchRead(TOUCH_PIN));
+          
+          // 5-day refresh timer (configured interval for deep sleep)
+          uint64_t refreshDays = REFRESH_INTERVAL_US / (24ULL * 60ULL * 60ULL * 1000000ULL);
+          uint64_t refreshHours = (REFRESH_INTERVAL_US / (60ULL * 60ULL * 1000000ULL)) % 24ULL;
+          Serial.printf("5-Day Refresh Timer: %llu days %llu hours\n", refreshDays, refreshHours);
+          Serial.printf("  (Interval: %llu seconds)\n", REFRESH_INTERVAL_US / 1000000ULL);
+          
+          // Additional useful info
+          Serial.printf("Firmware Version: %s\n", FIRMWARE_VERSION);
+          Serial.printf("BLE Status: %s\n", BLE.connected() ? "Connected" : "Disconnected");
+          Serial.printf("SPIFFS: %s\n", spiffsReady ? "Mounted" : "Not Mounted");
+          
+          Serial.println("===================================\n");
+          
+        } else if (serialCommand == "spiffs") {
+          Serial.println("\n========== SPIFFS INFORMATION ==========");
+          
+          if (!spiffsReady) {
+            Serial.println("ERROR: SPIFFS not mounted!");
+            Serial.println("========================================\n");
+          } else {
+            // Get filesystem info
+            size_t totalBytes = SPIFFS.totalBytes();
+            size_t usedBytes = SPIFFS.usedBytes();
+            size_t freeBytes = totalBytes - usedBytes;
+            float usedPercent = (totalBytes > 0) ? (usedBytes * 100.0f / totalBytes) : 0.0f;
+            
+            Serial.printf("Total Size: %u bytes (%.2f KB)\n", totalBytes, totalBytes / 1024.0f);
+            Serial.printf("Used: %u bytes (%.2f KB) [%.1f%%]\n", usedBytes, usedBytes / 1024.0f, usedPercent);
+            Serial.printf("Free: %u bytes (%.2f KB)\n", freeBytes, freeBytes / 1024.0f);
+            Serial.println("----------------------------------------");
+            
+            // List all files in SPIFFS
+            Serial.println("Files in SPIFFS:");
+            File root = SPIFFS.open("/");
+            if (!root) {
+              Serial.println("ERROR: Failed to open root directory");
+            } else if (!root.isDirectory()) {
+              Serial.println("ERROR: Root is not a directory");
+            } else {
+              int fileCount = 0;
+              size_t totalFileSize = 0;
+              
+              File file = root.openNextFile();
+              while (file) {
+                fileCount++;
+                size_t fileSize = file.size();
+                totalFileSize += fileSize;
+                
+                Serial.printf("  [%d] %s\n", fileCount, file.name());
+                Serial.printf("      Size: %u bytes (%.2f KB)\n", fileSize, fileSize / 1024.0f);
+                
+                // Show content preview for small text files
+                if (fileSize > 0 && fileSize < 200 && String(file.name()).endsWith(".txt")) {
+                  Serial.print("      Content: ");
+                  while (file.available()) {
+                    char c = file.read();
+                    if (c == '\n' || c == '\r') {
+                      Serial.print(" ");
+                    } else {
+                      Serial.print(c);
+                    }
+                  }
+                  Serial.println();
+                }
+                
+                file = root.openNextFile();
+              }
+              
+              Serial.println("----------------------------------------");
+              Serial.printf("Total Files: %d\n", fileCount);
+              Serial.printf("Total File Size: %u bytes (%.2f KB)\n", totalFileSize, totalFileSize / 1024.0f);
+              
+              if (fileCount == 0) {
+                Serial.println("(No files found in SPIFFS)");
+              }
+            }
+          }
+          
+          Serial.println("========================================\n");
+          
+        } else if (serialCommand == "help") {
+          Serial.println("\n========== AVAILABLE COMMANDS ==========");
+          Serial.println("status  - Display device status");
+          Serial.println("spiffs  - Show SPIFFS filesystem info");
+          Serial.println("help    - Show this help message");
+          Serial.println("========================================\n");
+          
+        } else {
+          Serial.print("Unknown command: ");
+          Serial.println(serialCommand);
+          Serial.println("Type 'help' for available commands");
+        }
+        
+        // Clear the command buffer
+        serialCommand = "";
+      }
+    } else {
+      // Add character to command buffer
+      serialCommand += inChar;
+    }
+  }
+}
 
 void setup() {
 
@@ -211,6 +344,9 @@ void setup() {
 }
 
 void loop() {
+  // Handle serial commands from terminal
+  handleSerialCommands();
+  
   // Handle LED2 blinking
   handleLedBlinking();
 
