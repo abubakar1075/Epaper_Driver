@@ -51,7 +51,7 @@ bool bleActive = false;
 bool dataReceived = false;
 
 // SPIFFS related globals
-const char* IMAGE_PATH = "/ble_image.bin"; // Path to store incoming image data
+const char* IMAGE_PATH = "/ble_image.bin"; // Legacy path (unused now, kept for compatibility)
 File imageFile;
 bool spiffsReady = false;
 // OTA file path and transfer mode flag
@@ -110,13 +110,13 @@ bool initSPIFFS() {
 // Display Functions
 //===============================================================
 
-void displayImageFromSPIFFS() {
-  if (!spiffsReady || !SPIFFS.exists(IMAGE_PATH)) {
+void displayImageFromSPIFFSPath(const char* path) {
+  if (!spiffsReady || !path || !SPIFFS.exists(path)) {
     Serial.println("No image file found in SPIFFS to display");
     return;
   }
   
-  File f = SPIFFS.open(IMAGE_PATH, FILE_READ);
+  File f = SPIFFS.open(path, FILE_READ);
   if (!f) {
     Serial.println("Failed to open image file for display");
     return;
@@ -126,6 +126,8 @@ void displayImageFromSPIFFS() {
   Serial.print("SPIFFS image file size: ");
   Serial.print(fileSize);
   Serial.println(" bytes");
+  Serial.print("Displaying from: ");
+  Serial.println(path);
   
   // Initialize display
   Serial.println("Initializing display for showing stored image...");
@@ -188,6 +190,12 @@ void displayImageFromSPIFFS() {
   f.close();
   EPD_sleep();
   Serial.println("Image displayed successfully from SPIFFS");
+}
+
+void displayImageFromSPIFFS() {
+  // Display the current image slot file
+  const char* path = getCurrentImagePath();
+  displayImageFromSPIFFSPath(path);
 }
 
 void displayTransferError() {
@@ -449,7 +457,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
 
     // Prepare SPIFFS file for writing incoming data (image or OTA)
     if (spiffsReady) {
-      const char* path = isOtaTransfer ? OTA_PATH : IMAGE_PATH;
+      const char* path = isOtaTransfer ? OTA_PATH : getCurrentImagePath();
       if (SPIFFS.exists(path)) {
         SPIFFS.remove(path);
         Serial.print("Old file removed from SPIFFS: ");
@@ -462,6 +470,10 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       } else {
         Serial.print("Created file in SPIFFS for incoming data: ");
         Serial.println(path);
+        if (!isOtaTransfer) {
+          Serial.print("Writing into current image slot (index): ");
+          Serial.println(currentImageIndex);
+        }
       }
     } else {
       Serial.println("SPIFFS not ready - cannot store incoming data.");
@@ -577,7 +589,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
             }
           } else {
             Serial.print("Image data stored in SPIFFS at ");
-            Serial.println(IMAGE_PATH);
+            Serial.println(getCurrentImagePath());
             dataReceived = true;
             sendAcknowledgment(ACK_COMPLETE);
           }
@@ -771,7 +783,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
           }
         } else {
           Serial.print("Image data stored in SPIFFS at ");
-          Serial.println(IMAGE_PATH);
+          Serial.println(getCurrentImagePath());
           // Set flag for main loop to display the image
           dataReceived = true;
           // Send completion acknowledgment for image

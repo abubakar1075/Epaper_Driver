@@ -20,6 +20,87 @@ void handleLedBlinking();
 // Print touch reading every 500ms
 static unsigned long lastTouchPrint = 0;
 
+// ============================
+// SPIFFS image slot management
+// ============================
+static const char* IMAGE1_PATH = "/Image_1";
+static const char* IMAGE2_PATH = "/Image_2";
+static const char* IMAGE3_PATH = "/Image_3";
+static const char* CURRENT_IMAGE_FILE = "/current.txt";
+
+int currentImageIndex = 1; // 1..3
+
+static const char* getImagePathForIndex(int idx) {
+  switch (idx) {
+    case 1: return IMAGE1_PATH;
+    case 2: return IMAGE2_PATH;
+    case 3: return IMAGE3_PATH;
+    default: return IMAGE1_PATH;
+  }
+}
+
+const char* getCurrentImagePath() {
+  return getImagePathForIndex(currentImageIndex);
+}
+
+void saveCurrentImageIndex(int index) {
+  if (!spiffsReady) return;
+  File f = SPIFFS.open(CURRENT_IMAGE_FILE, FILE_WRITE);
+  if (f) {
+    f.printf("%d\n", index);
+    f.close();
+  }
+}
+
+int loadCurrentImageIndex() {
+  if (!spiffsReady) return 1;
+  if (!SPIFFS.exists(CURRENT_IMAGE_FILE)) return 1;
+  File f = SPIFFS.open(CURRENT_IMAGE_FILE, FILE_READ);
+  if (!f) return 1;
+  int idx = f.parseInt();
+  f.close();
+  if (idx < 1 || idx > 3) idx = 1;
+  return idx;
+}
+
+static bool createImageFileFilled(const char* path, uint8_t fillByte) {
+  if (!spiffsReady) return false;
+  File f = SPIFFS.open(path, FILE_WRITE);
+  if (!f) return false;
+  const size_t total = BLE_IMAGE_SIZE; // 800*480/2 = 192000 bytes
+  const size_t chunk = 4096;
+  uint8_t buf[chunk];
+  memset(buf, fillByte, sizeof(buf));
+  size_t written = 0;
+  while (written < total) {
+    size_t n = (total - written) < chunk ? (total - written) : chunk;
+    size_t w = f.write(buf, n);
+    if (w != n) { f.close(); return false; }
+    written += w;
+  }
+  f.close();
+  return true;
+}
+
+static bool ensureDefaultImagesCreated() {
+  if (!spiffsReady) return false;
+  bool needCreate = !SPIFFS.exists(IMAGE1_PATH) || !SPIFFS.exists(IMAGE2_PATH) || !SPIFFS.exists(IMAGE3_PATH);
+  if (!needCreate) return false;
+  Serial.println("Creating default SPIFFS images (first boot)...");
+  bool ok1 = createImageFileFilled(IMAGE1_PATH, 0x33); // Red
+  bool ok2 = createImageFileFilled(IMAGE2_PATH, 0x55); // Blue
+  bool ok3 = createImageFileFilled(IMAGE3_PATH, 0x02); // Yellow
+  if (ok1 && ok2 && ok3) {
+    currentImageIndex = 1;
+    saveCurrentImageIndex(currentImageIndex);
+    Serial.println("Default images created successfully.");
+    return true;
+  } else {
+    Serial.println("Failed to create default images.");
+    return false;
+  }
+}
+
 // Shared battery percent helper (ADC pin 1.60V ->0%, 1.909V ->100%)
 uint8_t getBatteryPercent() {
   analogReadResolution(12);
@@ -143,8 +224,18 @@ void handleTapDetection() {
     // Tap sequence complete - process it
     if (tapCount == 2) {
       Serial.println("*** DOUBLE TAP DETECTED ***");
+      // Next image (1->2->3->1)
+      currentImageIndex = (currentImageIndex % 3) + 1;
+      saveCurrentImageIndex(currentImageIndex);
+      Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
+      displayImageFromSPIFFS();
     } else if (tapCount == 3) {
       Serial.println("*** TRIPLE TAP DETECTED ***");
+      // Remaining image (skip next): +2 modulo 3
+      currentImageIndex = ((currentImageIndex + 1) % 3) + 1;
+      saveCurrentImageIndex(currentImageIndex);
+      Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
+      displayImageFromSPIFFS();
     } else if (tapCount > 3) {
       Serial.print("*** ");
       Serial.print(tapCount);
@@ -189,6 +280,8 @@ void handleSerialCommands() {
           uint64_t refreshHours = (REFRESH_INTERVAL_US / (60ULL * 60ULL * 1000000ULL)) % 24ULL;
           Serial.printf("5-Day Refresh Timer: %llu days %llu hours\n", refreshDays, refreshHours);
           Serial.printf("  (Interval: %llu seconds)\n", REFRESH_INTERVAL_US / 1000000ULL);
+          // Current image slot
+          Serial.printf("Current Image: Image_%d (%s)\n", currentImageIndex, getCurrentImagePath());
           
           // Additional useful info
           Serial.printf("Firmware Version: %s\n", FIRMWARE_VERSION);
@@ -361,6 +454,14 @@ void setup() {
     Serial.println("SPIFFS mounted successfully.");
     touchThreshold = loadThreshold();
     Serial.printf("Touch threshold: %d\n", touchThreshold);
+    // Setup default images if not present and load current slot
+    bool createdDefaults = ensureDefaultImagesCreated();
+    currentImageIndex = loadCurrentImageIndex();
+    Serial.print("Current image slot: Image_"); Serial.println(currentImageIndex);
+    if (createdDefaults) {
+      // Show the first image after initial programming
+      displayImageFromSPIFFS();
+    }
   }
   
   // Setup calibration button for threshold calibration

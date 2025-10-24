@@ -9,6 +9,13 @@
 
 // External firmware version from main file
 extern const char* FIRMWARE_VERSION;
+// Current image slot management (defined in Spectra6.ino)
+extern int currentImageIndex;              // 1..3
+const char* getCurrentImagePath();         // Returns SPIFFS path for current image slot
+void saveCurrentImageIndex(int index);     // Persist current slot
+int loadCurrentImageIndex();               // Load persisted slot
+void displayImageFromSPIFFS();             // Display current slot image
+void displayImageFromSPIFFSPath(const char* path); // Display specific image path
 
 // Constants for BLE acknowledgements
 #define ACK_SIZE_RECEIVED 0x01   // Size acknowledgment
@@ -80,7 +87,6 @@ void startBLE();
 void onBLEConnected(BLEDevice central);
 void onBLEDisconnected(BLEDevice central);
 void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic);
-void displayImageFromSPIFFS();
 bool initSPIFFS();
 void requestMTUIncrease();
 // No periodic BLE tasks (battery sent once at start of image data)
