@@ -630,14 +630,7 @@ void loop() {
   
   // If we have new data received via BLE, display it
   if (dataReceived) {
-    Serial.println("New data received via BLE. Turning off BLE to save power, then displaying...");
-
-    // Turn off BLE before driving the e-paper to save battery
-    if (bleActive) {
-      BLE.end();
-      bleActive = false;
-      Serial.println("BLE turned off.");
-    }
+    Serial.println("New data received via BLE. Displaying image while keeping BLE active...");
 
     // Now display the image from SPIFFS
     displayImageFromSPIFFS();
@@ -645,13 +638,7 @@ void loop() {
     // Reset idle timer so device stays awake for 30s after successful upload
     connectionStartTime = millis();
     Serial.println("Idle timer reset after BLE image upload (no immediate sleep)");
-
-    // Turn BLE back on for the remainder of the 30s window
-    if (!bleActive) {
-      startBLE();
-      bleActive = true;
-      Serial.println("BLE restarted after display; advertising during idle window");
-    }
+    // BLE remains ON and connected during the 30s idle window; it will be turned off in goToSleep().
   }
   
   // Small delay to avoid hogging CPU
