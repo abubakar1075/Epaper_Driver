@@ -228,14 +228,20 @@ void handleTapDetection() {
       currentImageIndex = (currentImageIndex % 3) + 1;
       saveCurrentImageIndex(currentImageIndex);
       Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
-      displayImageFromSPIFFS();
+  displayImageFromSPIFFS();
+  // Reset idle timer so device stays awake for 30s after user action
+  connectionStartTime = millis();
+  Serial.println("Idle timer reset after double-tap image change");
     } else if (tapCount == 3) {
       Serial.println("*** TRIPLE TAP DETECTED ***");
       // Remaining image (skip next): +2 modulo 3
       currentImageIndex = ((currentImageIndex + 1) % 3) + 1;
       saveCurrentImageIndex(currentImageIndex);
       Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
-      displayImageFromSPIFFS();
+  displayImageFromSPIFFS();
+  // Reset idle timer so device stays awake for 30s after user action
+  connectionStartTime = millis();
+  Serial.println("Idle timer reset after triple-tap image change");
     } else if (tapCount > 3) {
       Serial.print("*** ");
       Serial.print(tapCount);
@@ -636,9 +642,16 @@ void loop() {
     // Now display the image from SPIFFS
     displayImageFromSPIFFS();
     dataReceived = false; // Reset flag
-    Serial.println("Going to sleep...");
-    delay(1000);
-    goToSleep();
+    // Reset idle timer so device stays awake for 30s after successful upload
+    connectionStartTime = millis();
+    Serial.println("Idle timer reset after BLE image upload (no immediate sleep)");
+
+    // Turn BLE back on for the remainder of the 30s window
+    if (!bleActive) {
+      startBLE();
+      bleActive = true;
+      Serial.println("BLE restarted after display; advertising during idle window");
+    }
   }
   
   // Small delay to avoid hogging CPU
