@@ -29,15 +29,19 @@ static unsigned long lastTouchPrint = 0;
 static const char* IMAGE1_PATH = "/Image_1";
 static const char* IMAGE2_PATH = "/Image_2";
 static const char* IMAGE3_PATH = "/Image_3";
+static const char* IMAGE4_PATH = "/Image_4";
+static const char* IMAGE5_PATH = "/Image_5";
 static const char* CURRENT_IMAGE_FILE = "/current.txt";
 
-int currentImageIndex = 1; // 1..3
+int currentImageIndex = 1; // 1..5
 
 static const char* getImagePathForIndex(int idx) {
   switch (idx) {
     case 1: return IMAGE1_PATH;
     case 2: return IMAGE2_PATH;
     case 3: return IMAGE3_PATH;
+    case 4: return IMAGE4_PATH;
+    case 5: return IMAGE5_PATH;
     default: return IMAGE1_PATH;
   }
 }
@@ -62,7 +66,7 @@ int loadCurrentImageIndex() {
   if (!f) return 1;
   int idx = f.parseInt();
   f.close();
-  if (idx < 1 || idx > 3) idx = 1;
+  if (idx < 1 || idx > 5) idx = 1;
   return idx;
 }
 
@@ -87,21 +91,40 @@ static bool createImageFileFilled(const char* path, uint8_t fillByte) {
 
 static bool ensureDefaultImagesCreated() {
   if (!spiffsReady) return false;
-  bool needCreate = !SPIFFS.exists(IMAGE1_PATH) || !SPIFFS.exists(IMAGE2_PATH) || !SPIFFS.exists(IMAGE3_PATH);
-  if (!needCreate) return false;
-  Serial.println("Creating default SPIFFS images (first boot)...");
-  bool ok1 = createImageFileFilled(IMAGE1_PATH, 0x33); // Red
-  bool ok2 = createImageFileFilled(IMAGE2_PATH, 0x55); // Blue
-  bool ok3 = createImageFileFilled(IMAGE3_PATH, 0x02); // Yellow
-  if (ok1 && ok2 && ok3) {
-    currentImageIndex = 1;
-    saveCurrentImageIndex(currentImageIndex);
-    Serial.println("Default images created successfully.");
-    return true;
-  } else {
-    Serial.println("Failed to create default images.");
-    return false;
+  bool createdAny = false;
+
+  // Create missing defaults without overwriting existing user images
+  if (!SPIFFS.exists(IMAGE1_PATH)) {
+    Serial.println("Creating default for Image_1 (Red)...");
+    if (createImageFileFilled(IMAGE1_PATH, 0x33)) createdAny = true; else Serial.println("Failed to create Image_1");
   }
+  if (!SPIFFS.exists(IMAGE2_PATH)) {
+    Serial.println("Creating default for Image_2 (Blue)...");
+    if (createImageFileFilled(IMAGE2_PATH, 0x55)) createdAny = true; else Serial.println("Failed to create Image_2");
+  }
+  if (!SPIFFS.exists(IMAGE3_PATH)) {
+    Serial.println("Creating default for Image_3 (Yellow)...");
+    if (createImageFileFilled(IMAGE3_PATH, 0x02)) createdAny = true; else Serial.println("Failed to create Image_3");
+  }
+  if (!SPIFFS.exists(IMAGE4_PATH)) {
+    Serial.println("Creating default for Image_4 (Black)...");
+    if (createImageFileFilled(IMAGE4_PATH, 0x00)) createdAny = true; else Serial.println("Failed to create Image_4");
+  }
+  if (!SPIFFS.exists(IMAGE5_PATH)) {
+    Serial.println("Creating default for Image_5 (Green)...");
+    if (createImageFileFilled(IMAGE5_PATH, 0x66)) createdAny = true; else Serial.println("Failed to create Image_5");
+  }
+
+  if (createdAny) {
+    Serial.println("Default images created for missing slots.");
+    // Only set current slot to 1 if not previously set
+    if (!SPIFFS.exists(CURRENT_IMAGE_FILE)) {
+      currentImageIndex = 1;
+      saveCurrentImageIndex(currentImageIndex);
+      Serial.println("Initialized current image slot to 1.");
+    }
+  }
+  return createdAny;
 }
 
 // Shared battery percent helper (ADC pin 1.60V ->0%, 1.909V ->100%)
@@ -227,8 +250,8 @@ void handleTapDetection() {
     // Tap sequence complete - process it
     if (tapCount == 2) {
       Serial.println("*** DOUBLE TAP DETECTED ***");
-      // Next image (1->2->3->1)
-      currentImageIndex = (currentImageIndex % 3) + 1;
+    // Next image (1->2->3->4->5->1)
+    currentImageIndex = (currentImageIndex % 5) + 1;
       saveCurrentImageIndex(currentImageIndex);
       Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
   displayImageFromSPIFFS();
@@ -237,8 +260,8 @@ void handleTapDetection() {
   Serial.println("Idle timer reset after double-tap image change");
     } else if (tapCount == 3) {
       Serial.println("*** TRIPLE TAP DETECTED ***");
-      // Remaining image (skip next): +2 modulo 3
-      currentImageIndex = ((currentImageIndex + 1) % 3) + 1;
+      // Previous image (wrap 1->5)
+      currentImageIndex = ((currentImageIndex + 3) % 5) + 1;
       saveCurrentImageIndex(currentImageIndex);
       Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
   displayImageFromSPIFFS();

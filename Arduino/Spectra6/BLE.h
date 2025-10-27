@@ -10,7 +10,7 @@
 // External firmware version from main file
 extern const char* FIRMWARE_VERSION;
 // Current image slot management (defined in Spectra6.ino)
-extern int currentImageIndex;              // 1..3
+extern int currentImageIndex;              // 1..5
 const char* getCurrentImagePath();         // Returns SPIFFS path for current image slot
 void saveCurrentImageIndex(int index);     // Persist current slot
 int loadCurrentImageIndex();               // Load persisted slot
