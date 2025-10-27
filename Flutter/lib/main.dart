@@ -321,7 +321,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     });
     // Prompt user to turn on Bluetooth at app start if needed
     WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
-  // Load header/logo asset named CanvasBT in FramePic/ or FramePics/
+  // Load header/logo asset named CanvasBT in FramePic/ or SamplePics/
   _loadHeaderAsset();
     // Periodically update connection status text every second
     _connectionStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
@@ -405,7 +405,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try{
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifestMap = json.decode(manifestJson);
-      final keys = manifestMap.keys.where((k)=> (k.startsWith('FramePic/') || k.startsWith('FramePics/')) ).toList();
+  final keys = manifestMap.keys.where((k)=> (k.startsWith('FramePic/') || k.startsWith('SamplePics/')) ).toList();
       String? chosen;
       for(final k in keys){
         final base = k.split('/').last.toLowerCase();
@@ -502,9 +502,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try{
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifestMap = json.decode(manifestJson);
-      // list of candidate image assets under FramePic(s)/
+      // list of candidate image assets under FramePic/ or SamplePics/
       final keys = manifestMap.keys.where((k){
-        if(!(k.startsWith('FramePic/') || k.startsWith('FramePics/'))) return false;
+        if(!(k.startsWith('FramePic/') || k.startsWith('SamplePics/'))) return false;
         final kl = k.toLowerCase();
         return kl.endsWith('.png') || kl.endsWith('.jpg') || kl.endsWith('.jpeg');
       }).toList();
@@ -3364,10 +3364,10 @@ class _LibraryEntry {
   const _LibraryEntry({required this.id, required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasVertical, required this.isDefaultAsset, required this.title});
 }
 
-// Default asset list (landscape). Updated to new "cat" and "leaves" images (remove old portrait lion/umbrella).
+// Default asset list (landscape). Updated to new "Cat" and "Leaves" images under SamplePics.
 const List<String> kDefaultAssetImages = [
-  'FramePics/cat.png',
-  'FramePics/leaves.png',
+  'SamplePics/Cat.png',
+  'SamplePics/Leaves.png',
 ];
 
 extension _LibraryPersistence on _EPaperImageSenderState {
@@ -3494,12 +3494,12 @@ extension _LibraryPersistence on _EPaperImageSenderState {
     }catch(e){ _updateStatus('Delete file error: $e'); }
   }
 
-  // Discover asset images under FramePics/ by reading the AssetManifest (handles arbitrary filenames)
+  // Discover asset images under SamplePics/ by reading the AssetManifest (handles arbitrary filenames)
   Future<List<String>> _discoverAssetManifestImages() async {
     try{
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifestMap = jsonDecode(manifestJson);
-      final list = manifestMap.keys.where((k)=> k.startsWith('FramePics/') && (k.endsWith('.png')||k.endsWith('.jpg')||k.endsWith('.jpeg'))).toList();
+      final list = manifestMap.keys.where((k)=> k.startsWith('SamplePics/') && (k.endsWith('.png')||k.endsWith('.jpg')||k.endsWith('.jpeg'))).toList();
       list.sort();
       return list;
     }catch(_){ return const []; }
@@ -3511,7 +3511,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
     final set = <String>{};
     for(final p in kDefaultAssetImages){ set.add(p); }
     for(final p in discovered){ set.add(p); }
-    return set.where((p)=> p.startsWith('FramePics/')).toList();
+    return set.where((p)=> p.startsWith('SamplePics/')).toList();
   }
 
   // Add any missing default assets not already in library (id uses filename)

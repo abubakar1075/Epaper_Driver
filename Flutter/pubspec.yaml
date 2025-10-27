@@ -74,7 +74,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - FramePics/
+    - SamplePics/
     - FramePic/
     - Framepic/
     - OTAFile/
