@@ -17,6 +17,9 @@ const char* FIRMWARE_VERSION = "1.2.0";
 #include "image.h"
 #include "BLE.h"
 void handleLedBlinking();
+// LED aliases for readability
+const int pcbLED = LED2;   // board LED (e.g., GPIO4 on FirstPCB)
+const int userLED = 26;    // user LED on GPIO32 (mirrors pcbLED)
 // Print touch reading every 500ms
 static unsigned long lastTouchPrint = 0;
 
@@ -465,9 +468,11 @@ void setup() {
   }
 
   pinMode(GND, OUTPUT); // Will be ignored if GPIO35 is input-only
-  pinMode(LED2, OUTPUT); // Will be ignored if GPIO34 is input-only
+  pinMode(pcbLED, OUTPUT); // LED on GPIO4
+  pinMode(userLED, OUTPUT);   // Mirror LED on GPIO32
   digitalWrite(GND, LOW);
-  digitalWrite(LED2, HIGH);
+  digitalWrite(pcbLED, HIGH);
+  digitalWrite(userLED, HIGH);
   Serial.begin(115200);
   delay(1000);
  // while (!Serial && millis() < 5000); // Wait for serial or timeout
@@ -484,7 +489,7 @@ void setup() {
 
   Serial.println("E-Paper Display + BLE Example");
   #if (LED2 == 34)
-    Serial.println("[Warning] LED2 assigned to GPIO34 (input-only on standard ESP32) - blinking will not function.");
+    Serial.println("[Warning] pcbLED assigned to GPIO34 (input-only on standard ESP32) - blinking will not function.");
   #endif
   Serial.println("==============================");
   // Print battery status once at startup
@@ -559,7 +564,7 @@ void loop() {
   // Handle tap detection (double tap / triple tap)
   handleTapDetection();
   
-  // Handle LED2 blinking
+  // Handle pcbLED/userLED blinking
   handleLedBlinking();
 
   // Simple calibration button check for threshold calibration
@@ -581,10 +586,10 @@ void loop() {
     if (touchThreshold < 10) touchThreshold = 10;
     saveThreshold(touchThreshold);
     Serial.printf("Threshold calibrated to: %d (was reading: %u)\n", touchThreshold, currentTouch);
-    // Flash LED 3 times
+    // Flash LEDs (pcbLED and userLED) 3 times
     for(int i=0; i<3; i++) {
-      digitalWrite(LED2, HIGH); delay(100);
-      digitalWrite(LED2, LOW); delay(100);
+      digitalWrite(pcbLED, HIGH); digitalWrite(userLED, HIGH); delay(100);
+      digitalWrite(pcbLED, LOW);  digitalWrite(userLED, LOW);  delay(100);
     }
   }
   lastButtonState = buttonState;
@@ -661,11 +666,11 @@ void goToSleep() {
   }
 
   
-  // Flash LED2 to indicate going to sleep
+  // Flash LEDs (pcbLED and userLED) to indicate going to sleep
   for (int i = 0; i < 5; i++) {
-    digitalWrite(LED2, HIGH);
+    digitalWrite(pcbLED, HIGH); digitalWrite(userLED, HIGH);
     delay(100);
-    digitalWrite(LED2, LOW);
+    digitalWrite(pcbLED, LOW);  digitalWrite(userLED, LOW);
     delay(100);
   }
   
@@ -687,7 +692,7 @@ void goToSleep() {
 
 
 /**
- * Handle the blinking of LED2 (50ms on, every second)
+ * Handle the blinking of pcbLED/userLED (50ms on, every second)
  * If touch value is below threshold, keep LED ON continuously
  * Otherwise, continue normal blinking behavior
  */
@@ -695,9 +700,10 @@ void handleLedBlinking() {
   unsigned long currentMillis = millis();
   uint16_t touchVal = touchRead(TOUCH_PIN);
   
-  // If touch value is less than threshold, keep LED ON continuously
+  // If touch value is less than threshold, keep LEDs ON continuously
   if (touchVal < touchThreshold) {
-    digitalWrite(LED2, HIGH);
+    digitalWrite(pcbLED, HIGH);
+    digitalWrite(userLED, HIGH);
     return; // Exit early, no blinking needed
   }
   
@@ -707,12 +713,14 @@ void handleLedBlinking() {
     // Save the time when we started the blink cycle
     previousMillis = currentMillis;
     
-    // Turn LED on for blinkDuration
-    digitalWrite(LED2, HIGH);
+    // Turn LEDs on for blinkDuration
+    digitalWrite(pcbLED, HIGH);
+    digitalWrite(userLED, HIGH);
   } 
   // Check if it's time to turn the LED off
   else if (currentMillis - previousMillis >= blinkDuration && 
            currentMillis - previousMillis < blinkInterval) {
-    digitalWrite(LED2, LOW);
+    digitalWrite(pcbLED, LOW);
+    digitalWrite(userLED, LOW);
   }
 }
