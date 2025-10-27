@@ -70,7 +70,7 @@
     #define EPD_SPI_MOSI  23   // SDI (MOSI)
     #define EPD_SPI_MISO  -1   // not used.
     //Changed for FirstPCB board
-    const int BATTERY_PIN = 34; // ADC1 channel; 2:1 divider (two 1MΩ resistors)
+    const int BATTERY_PIN = 36; // GPIO36 (ADC1_CH0); 2:1 divider (two 1MΩ resistors)
     const int GND = 12;   
     const int LED2 = 4;   
     const int TOUCH_PIN = 27;   // GPIO32 for touch (was 15)
