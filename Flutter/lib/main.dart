@@ -2871,33 +2871,25 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try {
       _updateStatus("Preparing image data...");
       
-      // If the user selected LANDSCAPE frame, rotate 180° before sending (per request).
-      // If PORTRAIT was selected, send as-is (no 180° rotation).
+      // Rotate 180° before sending for BOTH landscape and portrait (per request).
       final int w = IMAGE_WIDTH;
       final int h = IMAGE_HEIGHT;
       final Uint8List src = _processedBytes!; // raw codes length w*h
-      Uint8List toSend;
-      if (!_verticalFrame) {
-        // Landscape selected -> rotate 180° (vertical + horizontal flip)
-        final Uint8List vFlipped = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int srcOffset = y * w;
-          final int dstOffset = (h - 1 - y) * w;
-          vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
-        }
-        final Uint8List vhFlipped = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int row = y * w;
-          for (int x = 0; x < w; x++) {
-            vhFlipped[row + (w - 1 - x)] = vFlipped[row + x];
-          }
-        }
-        toSend = vhFlipped;
-        _updateStatus("Applied 180° rotation for landscape selection");
-      } else {
-        // Portrait selected -> no rotation
-        toSend = src;
+      // Always apply 180° rotation (vertical + horizontal flip)
+      final Uint8List vFlipped = Uint8List(src.length);
+      for (int y = 0; y < h; y++) {
+        final int srcOffset = y * w;
+        final int dstOffset = (h - 1 - y) * w;
+        vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
       }
+      final Uint8List toSend = Uint8List(src.length);
+      for (int y = 0; y < h; y++) {
+        final int row = y * w;
+        for (int x = 0; x < w; x++) {
+          toSend[row + (w - 1 - x)] = vFlipped[row + x];
+        }
+      }
+      _updateStatus("Applied 180° rotation");
   Uint8List packedData = _packPixels(toSend);
   _updateStatus("Packed data size: ${packedData.length} bytes", force: true);
       
