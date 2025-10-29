@@ -1923,9 +1923,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
   
 
-  
-
-
   // Load an online image and set it as the current image
   // Preview: show only "In Frame" (left); processing happens on Send
   Widget _buildPreviewAndSliders(){
@@ -1954,8 +1951,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               frameW = frameH * (IMAGE_WIDTH / IMAGE_HEIGHT);
             }
           }
-          final Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
-          return _previewPanel('In Frame', _croppedOriginalPreviewSized(frameW, frameH, origin));
+          _frameOrigin = Offset(
+            (workspaceW - frameW)/2,
+            (workspaceH - frameH)/2,
+          );
+          return _previewPanel('In Frame', _croppedOriginalPreviewSized(frameW, frameH, _frameOrigin));
         },
       ),
     ),
@@ -2062,7 +2062,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                   tooltip: 'Reset View',
                   icon: const Icon(Icons.refresh, size: 18),
                   padding: const EdgeInsets.all(6),
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(minHeight: 28, minWidth: 28),
                 ),
               ),
             ],
@@ -2871,40 +2871,91 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     try {
       _updateStatus("Preparing image data...");
       
-      // Rotate 180° before sending for BOTH landscape and portrait (per request).
-      final int w = IMAGE_WIDTH;
-      final int h = IMAGE_HEIGHT;
       final Uint8List src = _processedBytes!; // raw codes length w*h
-      // Always apply 180° rotation (vertical + horizontal flip)
-      final Uint8List vFlipped = Uint8List(src.length);
-      for (int y = 0; y < h; y++) {
-        final int srcOffset = y * w;
-        final int dstOffset = (h - 1 - y) * w;
-        vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
-      }
-      final Uint8List toSend = Uint8List(src.length);
-      for (int y = 0; y < h; y++) {
-        final int row = y * w;
-        for (int x = 0; x < w; x++) {
-          toSend[row + (w - 1 - x)] = vFlipped[row + x];
+      Uint8List toSend = src;
+      
+      const int w = IMAGE_WIDTH;
+      const int h = IMAGE_HEIGHT;
+      
+      if (!_verticalFrame) {
+        // LANDSCAPE: Apply double 180° rotation (360° total = no rotation)
+        // This effectively means we send landscape images without rotation
+        // If you want landscape to be rotated 180°, keep the rotation below
+        
+        // Vertical flip first
+        final Uint8List vFlipped = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int srcOffset = y * w;
+          final int dstOffset = (h - 1 - y) * w;
+          vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
         }
+        
+        // Then horizontal flip (combined = 180° rotation)
+        final Uint8List hFlipped = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int row = y * w;
+          for (int x = 0; x < w; x++) {
+            hFlipped[row + (w - 1 - x)] = vFlipped[row + x];
+          }
+        }
+        
+        // Apply another 180° rotation for landscape (additional rotation)
+        // Vertical flip again
+        final Uint8List vFlipped2 = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int srcOffset = y * w;
+          final int dstOffset = (h - 1 - y) * w;
+          vFlipped2.setRange(dstOffset, dstOffset + w, hFlipped, srcOffset);
+        }
+        
+        // Then horizontal flip again (total = 360° for landscape)
+        toSend = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int row = y * w;
+          for (int x = 0; x < w; x++) {
+            toSend[row + (w - 1 - x)] = vFlipped2[row + x];
+          }
+        }
+        
+        _updateStatus("Applied double 180° rotation for landscape (360° total)");
+      } else {
+        // PORTRAIT: Apply single 180° rotation
+        
+        // Vertical flip first
+        final Uint8List vFlipped = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int srcOffset = y * w;
+          final int dstOffset = (h - 1 - y) * w;
+          vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
+        }
+        
+        // Then horizontal flip (combined = 180° rotation)
+        toSend = Uint8List(src.length);
+        for (int y = 0; y < h; y++) {
+          final int row = y * w;
+          for (int x = 0; x < w; x++) {
+            toSend[row + (w - 1 - x)] = vFlipped[row + x];
+          }
+        }
+        
+        _updateStatus("Applied 180° rotation for portrait");
       }
-      _updateStatus("Applied 180° rotation");
-  Uint8List packedData = _packPixels(toSend);
-  _updateStatus("Packed data size: ${packedData.length} bytes", force: true);
       
-  // First send a 1-byte type + 4-byte little-endian size header
-  int totalSize = packedData.length;
-  final header = Uint8List(5);
-  header[0] = TRANSFER_TYPE_IMAGE;
-  final bd = ByteData.view(header.buffer);
-  bd.setUint32(1, totalSize, Endian.little);
-  // Send the header
-  await _rxCharacteristic!.write(header);
-  _updateStatus("Sent image header: $totalSize bytes", force: true);
+      Uint8List packedData = _packPixels(toSend);
+      _updateStatus("Packed data size: ${packedData.length} bytes", force: true);
       
-  // Short delay to ensure Arduino processes the header
-  await Future.delayed(const Duration(milliseconds: 12));
+      // First send a 1-byte type + 4-byte little-endian size header
+      int totalSize = packedData.length;
+      final header = Uint8List(5);
+      header[0] = TRANSFER_TYPE_IMAGE;
+      final bd = ByteData.view(header.buffer);
+      bd.setUint32(1, totalSize, Endian.little);
+      // Send the header
+      await _rxCharacteristic!.write(header);
+      _updateStatus("Sent image header: $totalSize bytes", force: true);
+      
+      // Short delay to ensure Arduino processes the header
+      await Future.delayed(const Duration(milliseconds: 12));
       
       // Start the transfer timer
       int startTime = DateTime.now().millisecondsSinceEpoch;
@@ -2967,8 +3018,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       double totalTime = (endTime - startTime) / 1000;
       double avgSpeed = (totalSize / 1024) / totalTime;
       
-  _updateStatus("Data transfer complete: $totalSize bytes in ${totalTime.toStringAsFixed(2)} seconds", force: true);
-  _updateStatus("Average speed: ${avgSpeed.toStringAsFixed(2)} KB/s", force: true);
+      _updateStatus("Data transfer complete: $totalSize bytes in ${totalTime.toStringAsFixed(2)} seconds", force: true);
+      _updateStatus("Average speed: ${avgSpeed.toStringAsFixed(2)} KB/s", force: true);
       
       // We don't set _isSending to false here - wait for ACK_COMPLETE
     } catch (e) {
@@ -3181,7 +3232,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           _frameHeight = _frameWidth * (IMAGE_HEIGHT / IMAGE_WIDTH); // landscape 480/800
         }
         if (_frameHeight > workspaceH) {
-          _frameHeight = workspaceH * 0.5; // fallback based on height
+          _frameHeight = workspaceH * 0.5;
           if (_verticalFrame) {
             _frameWidth = _frameHeight * (IMAGE_HEIGHT / IMAGE_WIDTH);
           } else {
@@ -3195,7 +3246,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         if (!_viewInitialized && _uiOriginal != null) {
           final iw = _uiOriginal!.width.toDouble();
           final ih = _uiOriginal!.height.toDouble();
-          // scale so entire image fits within frame (fit rather than cover)
+          // scale so entire image fits within frame and center translation
           final fitScale = math.min(_frameWidth / iw, _frameHeight / ih);
           _viewScale = fitScale;
           // Allow zooming out to a small fraction of fit scale, in, to large magnification
