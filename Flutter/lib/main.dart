@@ -1019,30 +1019,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Future<void> _useAiImage() async {
     if(_aiPngBytes==null) return;
     try{
-      // Decode image to detect orientation
+      // Decode image to detect orientation AND load UI image - all before setState
       final img.Image? decodedImage = img.decodeImage(_aiPngBytes!);
       bool isPortrait = false;
       if (decodedImage != null) {
         isPortrait = decodedImage.height > decodedImage.width;
       }
       
-      // Write PNG to a temp file and use as original image to allow full editing pipeline
+      // Write PNG to a temp file
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/ai_${DateTime.now().millisecondsSinceEpoch}.png');
       await file.writeAsBytes(_aiPngBytes!);
-      setState((){
-        _originalImage = file;
-        _processedImage = null;
-        _processedBytes = null;
-        _processedPngBytes = null;
-        _uiOriginal = null;
-        _viewInitialized = false;
-        _showAi = false;
-        _verticalFrame = isPortrait; // Auto-select orientation based on image
-      });
-      await _loadUiImage();
-      // Ensure frame dimensions are calculated immediately for preview sync
+      
+      // Load UI image before setState to prevent flicker
+      final codec = await ui.instantiateImageCodec(_aiPngBytes!);
+      final frame = await codec.getNextFrame();
+      final uiImage = frame.image;
+      
+      // Single setState with everything ready
       if (mounted) {
+        setState((){
+          _originalImage = file;
+          _processedImage = null;
+          _processedBytes = null;
+          _processedPngBytes = null;
+          _uiOriginal = uiImage;
+          _viewInitialized = false;
+          _showAi = false;
+          _verticalFrame = isPortrait; // Auto-select orientation based on image
+        });
+        
+        // Calculate frame dimensions after first render
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             _recomputeViewForCurrentFrame(context);
@@ -1280,29 +1287,33 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       final tempFile = File('${tempDir.path}/online_${DateTime.now().millisecondsSinceEpoch}_$fileName');
       await tempFile.writeAsBytes(response.bodyBytes);
       
-      // Decode image to detect orientation
+      // Decode image to detect orientation AND load UI image - all before setState
       final img.Image? decodedImage = img.decodeImage(response.bodyBytes);
       bool isPortrait = false;
       if (decodedImage != null) {
         isPortrait = decodedImage.height > decodedImage.width;
       }
       
-      // Set as current image
-      setState(() {
-        _originalImage = tempFile;
-        _uiOriginal = null;
-        _processedImage = null;
-        _processedBytes = null;
-        _processedPngBytes = null;
-        _showOnline = false; // Return to main view
-        _viewInitialized = false; // Force frame recompute
-        _selectedOnlineImageUrl = null; // Clear selection
-        _verticalFrame = isPortrait; // Auto-select orientation based on image
-      });
+      // Load UI image before setState to prevent flicker
+      final codec = await ui.instantiateImageCodec(response.bodyBytes);
+      final frame = await codec.getNextFrame();
+      final uiImage = frame.image;
       
-      await _loadUiImage();
-      // Ensure frame dimensions are calculated immediately for preview sync
+      // Single setState with everything ready
       if (mounted) {
+        setState(() {
+          _originalImage = tempFile;
+          _uiOriginal = uiImage;
+          _processedImage = null;
+          _processedBytes = null;
+          _processedPngBytes = null;
+          _showOnline = false; // Return to main view
+          _viewInitialized = false; // Force frame recompute
+          _selectedOnlineImageUrl = null; // Clear selection
+          _verticalFrame = isPortrait; // Auto-select orientation based on image
+        });
+        
+        // Calculate frame dimensions after first render
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             _recomputeViewForCurrentFrame(context);
@@ -2191,43 +2202,43 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     
     if (pickedFile != null) {
-      // Detect image orientation before loading
-      final bytes = await File(pickedFile.path).readAsBytes();
+      // Load and process everything BEFORE setState to prevent flicker
+      final file = File(pickedFile.path);
+      final bytes = await file.readAsBytes();
+      
+      // Decode to detect orientation
       final img.Image? decodedImage = img.decodeImage(bytes);
       bool isPortrait = false;
       if (decodedImage != null) {
         isPortrait = decodedImage.height > decodedImage.width;
       }
       
-      setState(() { 
-        _originalImage = File(pickedFile.path); 
-        _processedImage = null; 
-        _processedBytes = null; 
-        _processedPngBytes = null; 
-        _transferProgress = 0; 
-        _uiOriginal = null; 
-        _viewInitialized = false;
-        _verticalFrame = isPortrait; // Auto-select orientation based on image
-      });
-      await _loadUiImage();
-      // Ensure frame dimensions are calculated immediately for preview sync
+      // Load UI image
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final uiImage = frame.image;
+      
+      // Now do a single setState with everything ready
       if (mounted) {
+        setState(() { 
+          _originalImage = file; 
+          _processedImage = null; 
+          _processedBytes = null; 
+          _processedPngBytes = null; 
+          _transferProgress = 0; 
+          _uiOriginal = uiImage;
+          _viewInitialized = false;
+          _verticalFrame = isPortrait; // Auto-select orientation based on image
+        });
+        
+        // Calculate frame dimensions after first render
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             _recomputeViewForCurrentFrame(context);
           }
         });
       }
-      // After selecting, adjust view then press Send
     }
-  }
-
-  Future<void> _loadUiImage() async {
-    if (_originalImage == null) return;
-    final bytes = await _originalImage!.readAsBytes();
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    setState(() { _uiOriginal = frame.image; });
   }
 
   // Process the selected image with current settings (generation-aware to avoid stale updates)
