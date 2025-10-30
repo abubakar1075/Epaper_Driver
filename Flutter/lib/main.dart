@@ -614,7 +614,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.collections, size: 11),
+                  Icon(Icons.bookmark, size: 11),
                   SizedBox(width: 2),
                   Text('Saved', style: TextStyle(fontSize: 15)),
                 ],
