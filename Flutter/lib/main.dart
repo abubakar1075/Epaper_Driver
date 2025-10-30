@@ -616,7 +616,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 children: [
                   Icon(Icons.collections, size: 11),
                   SizedBox(width: 2),
-                  Text('Lib', style: TextStyle(fontSize: 15)),
+                  Text('Saved', style: TextStyle(fontSize: 15)),
                 ],
               ),
             ),
@@ -670,7 +670,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 children: [
                   Icon(Icons.cloud_download, size: 11),
                   SizedBox(width: 2),
-                  Text('Online', style: TextStyle(fontSize: 15)),
+                  Text('Library', style: TextStyle(fontSize: 15)),
                 ],
               ),
             ),
@@ -1412,8 +1412,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           _smallBtn('Delete', _selectedLibraryIndex==null ? null : _deleteSelectedLibraryItem, icon: Icons.delete, backgroundColor: Colors.red.shade600),
           const SizedBox(width:6),
           _smallBtn(_isSending? 'Sending' : 'Send', _selectedLibraryIndex==null ? null : _sendSelectedLibraryItem, icon: Icons.send, backgroundColor: Colors.blue.shade600),
-          const SizedBox(width:8),
-          Expanded(child: Text('Library (${_library.length})', style: const TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
         ]),
         const SizedBox(height:8),
         Expanded(
