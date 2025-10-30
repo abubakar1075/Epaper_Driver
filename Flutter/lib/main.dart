@@ -2872,75 +2872,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _updateStatus("Preparing image data...");
       
       final Uint8List src = _processedBytes!; // raw codes length w*h
-      Uint8List toSend = src;
+      Uint8List toSend;
       
-      const int w = IMAGE_WIDTH;
-      const int h = IMAGE_HEIGHT;
-      
-      if (!_verticalFrame) {
-        // LANDSCAPE: Apply double 180° rotation (360° total = no rotation)
-        // This effectively means we send landscape images without rotation
-        // If you want landscape to be rotated 180°, keep the rotation below
-        
-        // Vertical flip first
-        final Uint8List vFlipped = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int srcOffset = y * w;
-          final int dstOffset = (h - 1 - y) * w;
-          vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
-        }
-        
-        // Then horizontal flip (combined = 180° rotation)
-        final Uint8List hFlipped = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int row = y * w;
-          for (int x = 0; x < w; x++) {
-            hFlipped[row + (w - 1 - x)] = vFlipped[row + x];
-          }
-        }
-        
-        // Apply another 180° rotation for landscape (additional rotation)
-        // Vertical flip again
-        final Uint8List vFlipped2 = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int srcOffset = y * w;
-          final int dstOffset = (h - 1 - y) * w;
-          vFlipped2.setRange(dstOffset, dstOffset + w, hFlipped, srcOffset);
-        }
-        
-        // Then horizontal flip again (total = 360° for landscape)
-        toSend = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int row = y * w;
-          for (int x = 0; x < w; x++) {
-            toSend[row + (w - 1 - x)] = vFlipped2[row + x];
-          }
-        }
-        
-        _updateStatus("Applied double 180° rotation for landscape (360° total)");
+      // Apply appropriate rotation based on orientation mode
+      // Hardware displays require specific rotation for correct rendering
+      if (_verticalFrame) {
+        // PORTRAIT MODE: Apply standard 180° rotation
+        toSend = _applyPortraitModeRotation(src);
+        _updateStatus("Applied portrait mode rotation (180°)");
       } else {
-        // PORTRAIT: Apply single 180° rotation
-        
-        // Vertical flip first
-        final Uint8List vFlipped = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int srcOffset = y * w;
-          final int dstOffset = (h - 1 - y) * w;
-          vFlipped.setRange(dstOffset, dstOffset + w, src, srcOffset);
-        }
-        
-        // Then horizontal flip (combined = 180° rotation)
-        toSend = Uint8List(src.length);
-        for (int y = 0; y < h; y++) {
-          final int row = y * w;
-          for (int x = 0; x < w; x++) {
-            toSend[row + (w - 1 - x)] = vFlipped[row + x];
-          }
-        }
-        
-        _updateStatus("Applied 180° rotation for portrait");
+        // LANDSCAPE MODE: Apply special landscape rotation
+        toSend = _applyLandscapeModeRotation(src);
+        _updateStatus("Applied landscape mode rotation");
       }
       
+      // Pack the rotated image data for efficient BLE transfer (2 pixels per byte)
       Uint8List packedData = _packPixels(toSend);
       _updateStatus("Packed data size: ${packedData.length} bytes", force: true);
       
@@ -3029,6 +2975,129 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       });
     }
   }
+
+  // =====================================================================
+  // IMAGE ROTATION HELPERS
+  // =====================================================================
+  // These methods handle the hardware-specific rotation requirements for
+  // the e-paper display. The display hardware expects images in specific
+  // orientations depending on the display mode.
+  // =====================================================================
+
+  /// Applies rotation for PORTRAIT mode images
+  /// Portrait images need a standard 180° rotation to display correctly
+  /// on the e-paper hardware.
+  /// 
+  /// The 180° rotation is achieved by:
+  /// 1. Vertical flip (mirror along horizontal axis)
+  /// 2. Horizontal flip (mirror along vertical axis)
+  /// 
+  /// @param src The source image data as raw color codes (800x480 pixels)
+  /// @return Rotated image data ready for display
+  Uint8List _applyPortraitModeRotation(Uint8List src) {
+    const int imageWidth = IMAGE_WIDTH;   // 800 pixels
+    const int imageHeight = IMAGE_HEIGHT; // 480 pixels
+    
+    // Step 1: Vertical flip - flip the image upside down
+    // This mirrors the image along the horizontal axis
+    final Uint8List verticallyFlipped = _flipImageVertically(src, imageWidth, imageHeight);
+    
+    // Step 2: Horizontal flip - flip the image left to right
+    // This mirrors the image along the vertical axis
+    // Combined with vertical flip, this achieves 180° rotation
+    final Uint8List fullyRotated = _flipImageHorizontally(verticallyFlipped, imageWidth, imageHeight);
+    
+    return fullyRotated;
+  }
+
+  /// Applies rotation for LANDSCAPE mode images
+  /// Landscape images may need different rotation based on hardware requirements.
+  /// 
+  /// Current implementation applies double 180° rotation (360° total) which
+  /// effectively results in no rotation. This can be modified based on
+  /// specific hardware display requirements.
+  /// 
+  /// @param src The source image data as raw color codes (800x480 pixels)
+  /// @return Rotated image data ready for display
+  Uint8List _applyLandscapeModeRotation(Uint8List src) {
+    const int imageWidth = IMAGE_WIDTH;   // 800 pixels
+    const int imageHeight = IMAGE_HEIGHT; // 480 pixels
+    
+    // For landscape mode, we apply double rotation (360° total)
+    // This can be modified to apply single 180° rotation if needed
+    
+    // First 180° rotation
+    Uint8List rotated180 = _rotate180Degrees(src, imageWidth, imageHeight);
+    
+    // Second 180° rotation (total 360°)
+    // Comment out the next line if you want only 180° rotation for landscape
+    Uint8List rotated360 = _rotate180Degrees(rotated180, imageWidth, imageHeight);
+    
+    return rotated360;
+  }
+
+  /// Performs a complete 180° rotation on image data
+  /// Combines vertical and horizontal flips to achieve rotation
+  /// 
+  /// @param src Source image data
+  /// @param width Image width in pixels
+  /// @param height Image height in pixels
+  /// @return 180° rotated image
+  Uint8List _rotate180Degrees(Uint8List src, int width, int height) {
+    // First flip vertically
+    Uint8List verticallyFlipped = _flipImageVertically(src, width, height);
+    // Then flip horizontally to complete 180° rotation
+    return _flipImageHorizontally(verticallyFlipped, width, height);
+  }
+
+  /// Flips an image vertically (upside down)
+  /// Mirrors the image along the horizontal axis
+  /// 
+  /// @param src Source image data
+  /// @param width Image width in pixels  
+  /// @param height Image height in pixels
+  /// @return Vertically flipped image
+  Uint8List _flipImageVertically(Uint8List src, int width, int height) {
+    final Uint8List result = Uint8List(src.length);
+    
+    // Swap rows: first row becomes last, second becomes second-to-last, etc.
+    for (int y = 0; y < height; y++) {
+      final int sourceRowStart = y * width;
+      final int targetRowStart = (height - 1 - y) * width;
+      
+      // Copy entire row from source position to target position
+      result.setRange(targetRowStart, targetRowStart + width, src, sourceRowStart);
+    }
+    
+    return result;
+  }
+
+  /// Flips an image horizontally (left to right)
+  /// Mirrors the image along the vertical axis
+  /// 
+  /// @param src Source image data
+  /// @param width Image width in pixels
+  /// @param height Image height in pixels  
+  /// @return Horizontally flipped image
+  Uint8List _flipImageHorizontally(Uint8List src, int width, int height) {
+    final Uint8List result = Uint8List(src.length);
+    
+    // For each row, reverse the order of pixels
+    for (int y = 0; y < height; y++) {
+      final int rowStart = y * width;
+      
+      // Swap pixels within the row: first becomes last, etc.
+      for (int x = 0; x < width; x++) {
+        result[rowStart + (width - 1 - x)] = src[rowStart + x];
+      }
+    }
+    
+    return result;
+  }
+
+  // =====================================================================
+  // END OF IMAGE ROTATION HELPERS
+  // =====================================================================
 
   Future<void> _sendOtaFile() async {
     if (!await _isReallyConnected()) {
