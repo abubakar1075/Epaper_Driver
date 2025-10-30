@@ -842,7 +842,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(children:[
-          // Generate first, with green color
+          // Back first, aligned left
+          _smallBtn('Back', (){ setState((){ _showAi = false; }); }, icon: Icons.arrow_back),
+          const SizedBox(width: 8),
+          // Use in Editor next
+          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage, icon: Icons.open_in_new),
+          const Spacer(),
+          // Generate last, with green color, aligned right
           ElevatedButton.icon(
             onPressed: _aiIsGenerating ? null : _generateAiImage,
             style: ElevatedButton.styleFrom(
@@ -854,12 +860,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
             icon: const Icon(Icons.auto_awesome, size: 18),
             label: Text(_aiIsGenerating ? 'Generating...' : 'Generate'),
           ),
-          const SizedBox(width: 8),
-          // Use in Editor next
-          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage, icon: Icons.open_in_new),
-          const Spacer(),
-          // Back last, aligned right
-          _smallBtn('Back', (){ setState((){ _showAi = false; }); }, icon: Icons.arrow_back),
         ]),
         const SizedBox(height: 8),
         TextField(
@@ -1409,9 +1409,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         Row(children:[
           _smallBtn('Back', ()=> setState(()=> _showLibrary=false), icon: Icons.arrow_back, backgroundColor: Colors.grey.shade600),
           const SizedBox(width:6),
-          _smallBtn(_isSending? 'Sending' : 'Send', _selectedLibraryIndex==null ? null : _sendSelectedLibraryItem, icon: Icons.send, backgroundColor: Colors.blue.shade600),
+          _smallBtn('Delete', _selectedLibraryIndex==null ? null : _deleteSelectedLibraryItem, icon: Icons.delete, backgroundColor: Colors.red.shade600),
           const SizedBox(width:6),
-            _smallBtn('Delete', _selectedLibraryIndex==null ? null : _deleteSelectedLibraryItem, icon: Icons.delete, backgroundColor: Colors.red.shade600),
+          _smallBtn(_isSending? 'Sending' : 'Send', _selectedLibraryIndex==null ? null : _sendSelectedLibraryItem, icon: Icons.send, backgroundColor: Colors.blue.shade600),
           const SizedBox(width:8),
           Expanded(child: Text('Library (${_library.length})', style: const TextStyle(fontSize:13,fontWeight: FontWeight.w600))),
         ]),
