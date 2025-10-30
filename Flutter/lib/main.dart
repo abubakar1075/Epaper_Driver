@@ -1019,6 +1019,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   Future<void> _useAiImage() async {
     if(_aiPngBytes==null) return;
     try{
+      // Decode image to detect orientation
+      final img.Image? decodedImage = img.decodeImage(_aiPngBytes!);
+      bool isPortrait = false;
+      if (decodedImage != null) {
+        isPortrait = decodedImage.height > decodedImage.width;
+      }
+      
       // Write PNG to a temp file and use as original image to allow full editing pipeline
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/ai_${DateTime.now().millisecondsSinceEpoch}.png');
@@ -1031,6 +1038,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _uiOriginal = null;
         _viewInitialized = false;
         _showAi = false;
+        _verticalFrame = isPortrait; // Auto-select orientation based on image
       });
       await _loadUiImage();
       _updateStatus('AI image loaded into editor');
@@ -1264,6 +1272,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       final tempFile = File('${tempDir.path}/online_${DateTime.now().millisecondsSinceEpoch}_$fileName');
       await tempFile.writeAsBytes(response.bodyBytes);
       
+      // Decode image to detect orientation
+      final img.Image? decodedImage = img.decodeImage(response.bodyBytes);
+      bool isPortrait = false;
+      if (decodedImage != null) {
+        isPortrait = decodedImage.height > decodedImage.width;
+      }
+      
       // Set as current image
       setState(() {
         _originalImage = tempFile;
@@ -1274,6 +1289,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _showOnline = false; // Return to main view
         _viewInitialized = false; // Force frame recompute
         _selectedOnlineImageUrl = null; // Clear selection
+        _verticalFrame = isPortrait; // Auto-select orientation based on image
       });
       
       await _loadUiImage();
