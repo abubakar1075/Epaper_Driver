@@ -706,9 +706,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                   _buildCropFrame()
                 else
                   Padding(
-                    padding: EdgeInsets.only(bottom: _isSending ? 6 : 0),
+                    padding: EdgeInsets.zero,
                     child: SizedBox(
-                      height: _isSending ? 290 : 300, // match crop frame height so it fits the existing window
+                      height: 300, // match crop frame height - keep constant to prevent shift
                       child: Center(
                         child: _processedPngBytes != null
                           ? FittedBox(
@@ -766,7 +766,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 _verticalFrame = !_verticalFrame;
                 _processedImage = null;
                 _processedBytes = null;
-                _viewInitialized = false;
+                // Don't reset _viewInitialized - preserve user's image position/zoom
               });
               _recomputeViewForCurrentFrame(context);
             } : null,
@@ -798,7 +798,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final imgObj = _uiOriginal; if(imgObj==null) return;
     // These match sizes used in crop frame and preview
     final double workspaceW = MediaQuery.of(context).size.width - 24; // body horizontal padding is 12 each side
-    final double workspaceH = _isSending ? 290 : 300; // crop frame height
+    final double workspaceH = 300; // crop frame height - keep constant to prevent image shift
     // Compute frame size same as _buildCropFrame
     double frameW = workspaceW * 0.5;
     double frameH;
@@ -816,7 +816,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       }
     }
     final Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
-    // Compute fit scale to show entire image within frame and center translation
+    // Compute fit scale for min/max scale limits only, don't auto-adjust user's view
     final iw = imgObj.width.toDouble();
     final ih = imgObj.height.toDouble();
     final fitScale = math.min(frameW / iw, frameH / ih);
@@ -824,15 +824,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       _frameWidth = frameW;
       _frameHeight = frameH;
       _frameOrigin = origin;
-      _viewScale = fitScale;
+      // Only set initial view if not yet initialized, otherwise preserve user's adjustments
+      if (!_viewInitialized) {
+        _viewScale = fitScale;
+        _viewRotation = 0.0;
+        _viewTranslation = Offset(
+          (workspaceW - iw*fitScale)/2,
+          (workspaceH - ih*fitScale)/2,
+        );
+        _viewInitialized = true;
+      }
+      // Always update scale limits based on new frame size
       _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
       _maxScale = fitScale * 80;
-      _viewRotation = 0.0; // keep upright when switching orientation
-      _viewTranslation = Offset(
-        (workspaceW - iw*fitScale)/2,
-        (workspaceH - ih*fitScale)/2,
-      );
-      _viewInitialized = true;
     });
   }
 
@@ -1933,7 +1937,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         builder: (context){
           // Compute the same frame geometry used by the crop workspace so the preview updates instantly
           final double workspaceW = MediaQuery.of(context).size.width - 24; // body padding is 12 on both sides
-          final double workspaceH = _isSending ? 290 : 300; // same as _buildCropFrame height
+          final double workspaceH = 300; // same as _buildCropFrame height - keep constant
           double frameW = workspaceW * 0.5;
           double frameH;
           if (_verticalFrame) {
@@ -3287,7 +3291,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   Widget _buildCropFrame() {
     return SizedBox(
-      height: _isSending ? 290 : 300, // reduced heights to avoid bottom overflow
+      height: 300, // keep constant to prevent image shift during sending
       child: LayoutBuilder(builder: (context, constraints) {
         final workspaceW = constraints.maxWidth;
         final workspaceH = constraints.maxHeight;
