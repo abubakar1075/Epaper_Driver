@@ -83,18 +83,18 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "Logo/Applogo.png"
+  image_path: "Logo/Applogo.jpg"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "Logo/Applogo.png"
+  adaptive_icon_foreground: "Logo/Applogo.jpg"
   web:
     generate: true
-    image_path: "Logo/Applogo.png"
+    image_path: "Logo/Applogo.jpg"
   windows:
     generate: true
-    image_path: "Logo/Applogo.png"
+    image_path: "Logo/Applogo.jpg"
   macos:
     generate: true
-    image_path: "Logo/Applogo.png"
+    image_path: "Logo/Applogo.jpg"
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
