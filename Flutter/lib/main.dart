@@ -2191,9 +2191,34 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     
     if (pickedFile != null) {
-  setState(() { _originalImage = File(pickedFile.path); _processedImage = null; _processedBytes = null; _processedPngBytes=null; _transferProgress = 0; _uiOriginal = null; _viewInitialized = false; });
-    await _loadUiImage();
-    // After selecting, adjust view then press Send
+      // Detect image orientation before loading
+      final bytes = await File(pickedFile.path).readAsBytes();
+      final img.Image? decodedImage = img.decodeImage(bytes);
+      bool isPortrait = false;
+      if (decodedImage != null) {
+        isPortrait = decodedImage.height > decodedImage.width;
+      }
+      
+      setState(() { 
+        _originalImage = File(pickedFile.path); 
+        _processedImage = null; 
+        _processedBytes = null; 
+        _processedPngBytes = null; 
+        _transferProgress = 0; 
+        _uiOriginal = null; 
+        _viewInitialized = false;
+        _verticalFrame = isPortrait; // Auto-select orientation based on image
+      });
+      await _loadUiImage();
+      // Ensure frame dimensions are calculated immediately for preview sync
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _recomputeViewForCurrentFrame(context);
+          }
+        });
+      }
+      // After selecting, adjust view then press Send
     }
   }
 
