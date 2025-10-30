@@ -1041,6 +1041,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         _verticalFrame = isPortrait; // Auto-select orientation based on image
       });
       await _loadUiImage();
+      // Ensure frame dimensions are calculated immediately for preview sync
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _recomputeViewForCurrentFrame(context);
+          }
+        });
+      }
       _updateStatus('AI image loaded into editor');
     }catch(_){
       _updateStatus('Failed to load AI image');
@@ -1293,6 +1301,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       });
       
       await _loadUiImage();
+      // Ensure frame dimensions are calculated immediately for preview sync
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _recomputeViewForCurrentFrame(context);
+          }
+        });
+      }
       _updateStatus('Online image loaded into editor');
     } catch (e) {
       _updateStatus('Failed to load online image: $e');
@@ -1951,29 +1967,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     Expanded(
       child: Builder(
         builder: (context){
-          // Compute the same frame geometry used by the crop workspace so the preview updates instantly
-          final double workspaceW = MediaQuery.of(context).size.width - 24; // body padding is 12 on both sides
-          final double workspaceH = 300; // same as _buildCropFrame height - keep constant
-          double frameW = workspaceW * 0.5;
-          double frameH;
-          if (_verticalFrame) {
-            frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
-          } else {
-            frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
-          }
-          if (frameH > workspaceH) {
-            frameH = workspaceH * 0.5;
+          // Always recalculate to ensure preview is in sync, especially after loading from library
+          // Use the state variables if they're valid, otherwise calculate fresh
+          double frameW = _frameWidth;
+          double frameH = _frameHeight;
+          Offset frameOrigin = _frameOrigin;
+          
+          // If frame dimensions are not initialized, calculate them
+          if (frameW == 0 || frameH == 0) {
+            final double workspaceW = MediaQuery.of(context).size.width - 24;
+            final double workspaceH = 300;
+            frameW = workspaceW * 0.5;
             if (_verticalFrame) {
-              frameW = frameH * (IMAGE_HEIGHT / IMAGE_WIDTH);
+              frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
             } else {
-              frameW = frameH * (IMAGE_WIDTH / IMAGE_HEIGHT);
+              frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
             }
+            if (frameH > workspaceH) {
+              frameH = workspaceH * 0.5;
+              if (_verticalFrame) {
+                frameW = frameH * (IMAGE_HEIGHT / IMAGE_WIDTH);
+              } else {
+                frameW = frameH * (IMAGE_WIDTH / IMAGE_HEIGHT);
+              }
+            }
+            frameOrigin = Offset(
+              (workspaceW - frameW)/2,
+              (workspaceH - frameH)/2,
+            );
           }
-          _frameOrigin = Offset(
-            (workspaceW - frameW)/2,
-            (workspaceH - frameH)/2,
-          );
-          return _previewPanel('In Frame', _croppedOriginalPreviewSized(frameW, frameH, _frameOrigin));
+          
+          return _previewPanel('In Frame', _croppedOriginalPreviewSized(frameW, frameH, frameOrigin));
         },
       ),
     ),
