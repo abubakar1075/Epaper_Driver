@@ -71,6 +71,26 @@ bool warnedSizePacking = false;
 // Battery send flag per transfer
 static bool batterySentForThisTransfer = false;
 
+// Add conservative delays around SPIFFS operations to ensure commits complete on busy systems
+#ifndef SPIFFS_DELAY_OPEN_MS
+#define SPIFFS_DELAY_OPEN_MS 10
+#endif
+#ifndef SPIFFS_DELAY_REMOVE_MS
+#define SPIFFS_DELAY_REMOVE_MS 5
+#endif
+#ifndef SPIFFS_DELAY_WRITE_MS
+#define SPIFFS_DELAY_WRITE_MS 1
+#endif
+#ifndef SPIFFS_DELAY_FLUSH_MS
+#define SPIFFS_DELAY_FLUSH_MS 2
+#endif
+#ifndef SPIFFS_DELAY_CLOSE_MS
+#define SPIFFS_DELAY_CLOSE_MS 20
+#endif
+#ifndef SPIFFS_FLUSH_EVERY_WRITE
+#define SPIFFS_FLUSH_EVERY_WRITE 1
+#endif
+
 // getBatteryPercent() implemented in Spectra6.ino
 
 // Periodic BLE tasks
@@ -460,10 +480,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       const char* path = isOtaTransfer ? OTA_PATH : getCurrentImagePath();
       if (SPIFFS.exists(path)) {
         SPIFFS.remove(path);
+        delay(SPIFFS_DELAY_REMOVE_MS);
         Serial.print("Old file removed from SPIFFS: ");
         Serial.println(path);
       }
       imageFile = SPIFFS.open(path, FILE_WRITE);
+      if (imageFile) {
+        delay(SPIFFS_DELAY_OPEN_MS);
+      }
       if (!imageFile) {
         Serial.print("Failed to create file in SPIFFS: ");
         Serial.println(path);
@@ -508,7 +532,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         displayInitialized = true;
       }
       if (imageFile) {
-        imageFile.write(payload, leftover);
+  imageFile.write(payload, leftover);
+#if SPIFFS_FLUSH_EVERY_WRITE
+  imageFile.flush();
+  delay(SPIFFS_DELAY_FLUSH_MS);
+#else
+  delay(SPIFFS_DELAY_WRITE_MS);
+#endif
+  yield();
       }
       receivedDataSize += leftover;
 
@@ -644,7 +675,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         
         // Process this buffer (write to SPIFFS)
         if (imageFile) {
-          imageFile.write(bufferQueue.data[readIdx], size);
+    imageFile.write(bufferQueue.data[readIdx], size);
+  #if SPIFFS_FLUSH_EVERY_WRITE
+    imageFile.flush();
+    delay(SPIFFS_DELAY_FLUSH_MS);
+  #else
+    delay(SPIFFS_DELAY_WRITE_MS);
+  #endif
+    yield();
         }
         
         // Update received count
@@ -664,7 +702,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       characteristic.readValue(buffer, dataLength);
       
       if (imageFile) {
-        imageFile.write(buffer, dataLength);
+  imageFile.write(buffer, dataLength);
+#if SPIFFS_FLUSH_EVERY_WRITE
+  imageFile.flush();
+  delay(SPIFFS_DELAY_FLUSH_MS);
+#else
+  delay(SPIFFS_DELAY_WRITE_MS);
+#endif
+  yield();
       }
       
       receivedDataSize += dataLength;
@@ -682,6 +727,8 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     // Only flush the SPIFFS file at the very end to greatly improve performance
     if (imageFile && (receivedDataSize >= expectedDataSize)) {
       imageFile.flush();
+      delay(SPIFFS_DELAY_FLUSH_MS);
+      yield();
     }
     
     // Calculate progress percentage and only send acknowledgment periodically
@@ -738,7 +785,8 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
           bufferQueue.count = tmp;
         }
         
-        imageFile.close();
+  imageFile.close();
+  delay(SPIFFS_DELAY_CLOSE_MS);
         if (isOtaTransfer) {
           Serial.print("OTA data stored in SPIFFS at ");
           Serial.println(OTA_PATH);
@@ -808,6 +856,10 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       sendAcknowledgment(ACK_ERROR);
       
       // Reset state
+      if (imageFile) {
+        imageFile.close();
+        delay(SPIFFS_DELAY_CLOSE_MS);
+      }
       receivingSize = true;
       receivedDataSize = 0;
       displayInitialized = false;
