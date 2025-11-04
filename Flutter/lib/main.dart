@@ -3306,16 +3306,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      image: DecorationImage(
-        image: AssetImage('FramePic/backgroundImage.png'),
-        fit: BoxFit.cover,
-        alignment: Alignment.center,
-      ),
-    ),
-    child: Scaffold(
-      backgroundColor: Colors.transparent,
+  Widget build(BuildContext context) => Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: const SizedBox.shrink(),
@@ -3324,20 +3316,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         elevation: 0,
         flexibleSpace: (_headerAsset!=null)
             ? SafeArea(
+                top: false,
                 bottom: false,
                 child: SizedBox.expand(
                   child: Image.asset(
                     _headerAsset!,
                     fit: BoxFit.fitWidth,
-                    alignment: Alignment.center,
+                    alignment: Alignment.topCenter,
                   ),
                 ),
               )
             : null,
       ),
       body: Padding(padding: const EdgeInsets.all(12), child: _buildConnected()),
-    ),
-  );
+    );
 
   // First window removed; no _buildDisconnected() screen.
 
