@@ -1190,7 +1190,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         
         // If no version in filename, you could read it from binary metadata
         // For now, return a default version that you should update manually
-        return "1.2.0"; // Update this when you create new OTA files
+        return "1.3.0"; // Update this when you create new OTA files
         
       } catch (e) {
         print('OTA file not found: $e');
