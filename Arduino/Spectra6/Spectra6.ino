@@ -179,13 +179,17 @@ String serialCommand = "";
 // Touch tap detection variables
 const unsigned long TAP_TIMEOUT = 500;  // Maximum time between taps (ms)
 const unsigned long TAP_DURATION = 200; // Maximum duration of a single tap (ms)
+const unsigned long LONG_PRESS_DURATION = 2000; // Long press duration (2 seconds)
 unsigned long lastTapTime = 0;
 int tapCount = 0;
 bool touchActive = false;
 unsigned long touchStartTime = 0;
+bool longPressTriggered = false;
 
 /**
- * Detect double and triple taps on the capacitive touch sensor
+ * Detect long press (2 seconds) and double taps on the capacitive touch sensor
+ * Long press = Next image (1->2->3->1)
+ * Double tap = Remaining image (skip next)
  */
 void handleTapDetection() {
   uint16_t touchVal = touchRead(TOUCH_PIN);
@@ -198,6 +202,7 @@ void handleTapDetection() {
   if (isTouched && !touchActive) {
     touchActive = true;
     touchStartTime = currentTime;
+    longPressTriggered = false;
     
     // Check if this tap is within the timeout window from last tap
     if (currentTime - lastTapTime < TAP_TIMEOUT) {
@@ -210,13 +215,39 @@ void handleTapDetection() {
     lastTapTime = currentTime;
   }
   
+  // Check for long press while touch is still active
+  if (isTouched && touchActive && !longPressTriggered) {
+    unsigned long pressDuration = currentTime - touchStartTime;
+    
+    if (pressDuration >= LONG_PRESS_DURATION) {
+      // Long press detected - Next image
+      Serial.println("*** LONG PRESS DETECTED (2s) ***");
+      longPressTriggered = true;
+      tapCount = 0; // Reset tap counter
+      
+      // Next image (1->2->3->1)
+      currentImageIndex = (currentImageIndex % 3) + 1;
+      saveCurrentImageIndex(currentImageIndex);
+      Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
+      displayImageFromSPIFFS();
+      // Reset idle timer so device stays awake for 30s after user action
+      connectionStartTime = millis();
+      Serial.println("Idle timer reset after long-press image change");
+    }
+  }
+  
   // Detect touch release (transition from touched to not touched)
   if (!isTouched && touchActive) {
     touchActive = false;
     unsigned long tapDuration = currentTime - touchStartTime;
     
+    // If long press was triggered, don't process as tap
+    if (longPressTriggered) {
+      tapCount = 0;
+      longPressTriggered = false;
+    }
     // Only count as valid tap if it was quick enough
-    if (tapDuration > TAP_DURATION) {
+    else if (tapDuration > TAP_DURATION) {
       // Too long - this was a hold, not a tap. Reset sequence.
       tapCount = 0;
     }
@@ -227,25 +258,15 @@ void handleTapDetection() {
     // Tap sequence complete - process it
     if (tapCount == 2) {
       Serial.println("*** DOUBLE TAP DETECTED ***");
-      // Next image (1->2->3->1)
-      currentImageIndex = (currentImageIndex % 3) + 1;
-      saveCurrentImageIndex(currentImageIndex);
-      Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
-  displayImageFromSPIFFS();
-  // Reset idle timer so device stays awake for 30s after user action
-  connectionStartTime = millis();
-  Serial.println("Idle timer reset after double-tap image change");
-    } else if (tapCount == 3) {
-      Serial.println("*** TRIPLE TAP DETECTED ***");
       // Remaining image (skip next): +2 modulo 3
       currentImageIndex = ((currentImageIndex + 1) % 3) + 1;
       saveCurrentImageIndex(currentImageIndex);
       Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
-  displayImageFromSPIFFS();
-  // Reset idle timer so device stays awake for 30s after user action
-  connectionStartTime = millis();
-  Serial.println("Idle timer reset after triple-tap image change");
-    } else if (tapCount > 3) {
+      displayImageFromSPIFFS();
+      // Reset idle timer so device stays awake for 30s after user action
+      connectionStartTime = millis();
+      Serial.println("Idle timer reset after double-tap image change");
+    } else if (tapCount > 2) {
       Serial.print("*** ");
       Serial.print(tapCount);
       Serial.println(" TAPS DETECTED ***");
