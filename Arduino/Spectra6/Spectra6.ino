@@ -654,17 +654,17 @@ void loop() {
   // Poll BLE for events
   BLE.poll();
   
-  // If we have new data received via BLE, display it
+  // If we have new data received via BLE, display it and go to sleep immediately
   if (dataReceived) {
-    Serial.println("New data received via BLE. Displaying image while keeping BLE active...");
+    Serial.println("New data received via BLE. Displaying image and going to sleep...");
 
     // Now display the image from SPIFFS
     displayImageFromSPIFFS();
     dataReceived = false; // Reset flag
-    // Reset idle timer so device stays awake for 30s after successful upload
-    connectionStartTime = millis();
-    Serial.println("Idle timer reset after BLE image upload (no immediate sleep)");
-    // BLE remains ON and connected during the 30s idle window; it will be turned off in goToSleep().
+    
+    // Go to sleep immediately after displaying the image
+    Serial.println("Image displayed. Going to sleep immediately...");
+    goToSleep();
   }
   
   // Small delay to avoid hogging CPU
