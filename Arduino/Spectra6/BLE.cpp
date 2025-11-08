@@ -46,6 +46,12 @@ unsigned long receivedDataSize = 0;
 bool receivingSize = true;
 bool displayInitialized = false;
 
+// Detailed byte tracking for debugging
+unsigned long bytesReceivedFromBLE = 0;
+unsigned long bytesWrittenToSPIFFS = 0;
+unsigned long bytesReadFromSPIFFS = 0;
+unsigned long bytesSentToDisplay = 0;
+
 // BLE states
 bool bleActive = false;
 bool dataReceived = false;
@@ -150,6 +156,10 @@ void displayImageFromSPIFFSPath(const char* path) {
   size_t fileSize = f.size();
   Serial.printf("[DISPLAY] Showing %s (%u bytes)\n", path, fileSize);
   
+  // Reset display tracking counters
+  bytesReadFromSPIFFS = 0;
+  bytesSentToDisplay = 0;
+  
   // Initialize display
   EPD_init();
   
@@ -159,13 +169,21 @@ void displayImageFromSPIFFSPath(const char* path) {
     if (fileSize <= 65536) {  // Only for files under 64KB
       uint8_t* fileBuffer = (uint8_t*)malloc(fileSize);
       if (fileBuffer) {
-        f.read(fileBuffer, fileSize);
+        size_t bytesRead = f.read(fileBuffer, fileSize);
+        bytesReadFromSPIFFS += bytesRead;
         
         // Display the data directly without processing
         PIC_display_fast(fileBuffer, fileSize);
+        bytesSentToDisplay += fileSize;
         
         free(fileBuffer);
         f.close();
+        
+        // Print display summary
+        Serial.println("\n========== DISPLAY SUMMARY ==========");
+        Serial.printf("Bytes read from SPIFFS:  %lu\n", bytesReadFromSPIFFS);
+        Serial.printf("Bytes sent to display:   %lu\n", bytesSentToDisplay);
+        Serial.println("=====================================\n");
         Serial.println("[DISPLAY] Complete");
         return;
       }
@@ -182,10 +200,13 @@ void displayImageFromSPIFFSPath(const char* path) {
       size_t bytesRead = f.read(readBuffer, CHUNK_SIZE);
       if (bytesRead <= 0) break;
       
+      bytesReadFromSPIFFS += bytesRead;
+      
       // Write directly to the display
       for (size_t i = 0; i < bytesRead; i++) {
         EPD_W21_WriteDATA(readBuffer[i]);
       }
+      bytesSentToDisplay += bytesRead;
       
       totalBytesRead += bytesRead;
     }
@@ -196,6 +217,11 @@ void displayImageFromSPIFFSPath(const char* path) {
     delay(1);
     lcd_chkstatus();
     
+    // Print display summary
+    Serial.println("\n========== DISPLAY SUMMARY ==========");
+    Serial.printf("Bytes read from SPIFFS:  %lu\n", bytesReadFromSPIFFS);
+    Serial.printf("Bytes sent to display:   %lu\n", bytesSentToDisplay);
+    Serial.println("=====================================\n");
     Serial.println("[DISPLAY] Complete");
   } else {
     Serial.println("[DISPLAY] ERROR: File too large");
@@ -288,6 +314,12 @@ void onBLEConnected(BLEDevice central) {
   headerCollected = 0;
   headerExpectedLen = 0;
   headerHasType = false;
+  
+  // Reset byte tracking counters
+  bytesReceivedFromBLE = 0;
+  bytesWrittenToSPIFFS = 0;
+  bytesReadFromSPIFFS = 0;
+  bytesSentToDisplay = 0;
   
   // For ArduinoBLE, we can't directly request MTU changes, but we can
   // optimize our settings for the fastest possible transfer
@@ -519,6 +551,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       }
       if (imageFile) {
         imageFile.write(payload, leftover);
+        bytesWrittenToSPIFFS += leftover;
         // Periodic flush every 32KB instead of every write (prevents fragmentation delays)
         if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
           imageFile.flush();
@@ -528,6 +561,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         yield();
       }
       receivedDataSize += leftover;
+      bytesReceivedFromBLE += leftover;
 
       // Minimal progress/ack updates matching main path
       uint8_t progress = (receivedDataSize * 100) / expectedDataSize;
@@ -662,6 +696,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         // Process this buffer (write to SPIFFS)
         if (imageFile) {
           imageFile.write(bufferQueue.data[readIdx], size);
+          bytesWrittenToSPIFFS += size;
           // Periodic flush every 32KB to prevent fragmentation delays
           if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
             imageFile.flush();
@@ -673,6 +708,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         
         // Update received count
         receivedDataSize += size;
+        bytesReceivedFromBLE += size;
         
         // Update queue state
         bufferQueue.readIndex = (readIdx + 1) % BLE_BUFFER_COUNT;
@@ -689,6 +725,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       
       if (imageFile) {
         imageFile.write(buffer, dataLength);
+        bytesWrittenToSPIFFS += dataLength;
         // Periodic flush every 32KB to prevent fragmentation delays
         if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
           imageFile.flush();
@@ -699,6 +736,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       }
       
       receivedDataSize += dataLength;
+      bytesReceivedFromBLE += dataLength;
     }
     
     // Print progress information every 64KB (less frequent for better speed)
@@ -823,6 +861,13 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
               Serial.printf("[VERIFY] ERROR: Expected %lu, got %u bytes\n", expectedDataSize, fileSize);
             }
           }
+          
+          // Print detailed byte tracking summary
+          Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
+          Serial.printf("Expected bytes:          %lu\n", expectedDataSize);
+          Serial.printf("Bytes received from BLE: %lu\n", bytesReceivedFromBLE);
+          Serial.printf("Bytes written to SPIFFS: %lu\n", bytesWrittenToSPIFFS);
+          Serial.println("===========================================\n");
           
           // Set flag for main loop to display the image
           dataReceived = true;
