@@ -494,8 +494,10 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                  isOtaTransfer ? "OTA" : "IMAGE", 
                  expectedDataSize, expectedDataSize / 1024.0);
 
-    // Reset counters for data and start timing the transfer
+    // Reset ALL counters for data and start timing the transfer
     receivedDataSize = 0;
+    bytesReceivedFromBLE = 0;
+    bytesWrittenToSPIFFS = 0;
     receivingSize = false;
     displayInitialized = false;
     transferStartTime = millis();
@@ -560,19 +562,28 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         }
         displayInitialized = true;
       }
-      if (imageFile) {
-        imageFile.write(payload, leftover);
-        bytesWrittenToSPIFFS += leftover;
-        // Periodic flush every 32KB instead of every write (prevents fragmentation delays)
-        if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
-          imageFile.flush();
-          delay(SPIFFS_DELAY_FLUSH_MS);
-          lastFlushSize = receivedDataSize;
+      if (imageFile && leftover > 0) {
+        // Prevent overflow: only write what we need
+        size_t bytesToWrite = leftover;
+        if (receivedDataSize + bytesToWrite > expectedDataSize) {
+          bytesToWrite = expectedDataSize - receivedDataSize;
         }
-        yield();
+        
+        if (bytesToWrite > 0) {
+          imageFile.write(payload, bytesToWrite);
+          bytesWrittenToSPIFFS += bytesToWrite;
+          receivedDataSize += bytesToWrite;
+          bytesReceivedFromBLE += bytesToWrite;
+          
+          // Periodic flush every 32KB instead of every write (prevents fragmentation delays)
+          if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
+            imageFile.flush();
+            delay(SPIFFS_DELAY_FLUSH_MS);
+            lastFlushSize = receivedDataSize;
+          }
+          yield();
+        }
       }
-      receivedDataSize += leftover;
-      bytesReceivedFromBLE += leftover;
 
       // Minimal progress/ack updates matching main path
       uint8_t progress = (receivedDataSize * 100) / expectedDataSize;
@@ -680,63 +691,23 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       Serial.println("[DISPLAY] Ready for data");
     }
     
-    // Add the new data to our buffer queue for faster processing
-    if (bufferQueue.count < BLE_BUFFER_COUNT) {
-      // We have room in the queue, add the data
-      int writeIdx = bufferQueue.writeIndex;
-      
-      // Read data directly into the queue buffer
-      characteristic.readValue(bufferQueue.data[writeIdx], dataLength);
-      bufferQueue.sizes[writeIdx] = dataLength;
-      
-      // Update queue state
-      bufferQueue.writeIndex = (writeIdx + 1) % BLE_BUFFER_COUNT;
-      // Avoid using ++ on volatile-qualified type (deprecated).
-      // Use a temporary local and assign back to ensure a single write.
-      {
-        int tmp = bufferQueue.count;
-        tmp = tmp + 1;
-        bufferQueue.count = tmp;
+    // Read data directly and write immediately (no queue buffering to prevent double-write bug)
+    characteristic.readValue(buffer, dataLength);
+    
+    // Write data to SPIFFS immediately
+    if (imageFile && receivedDataSize < expectedDataSize) {
+      // Calculate how much we can actually write (prevent overflow)
+      size_t bytesToWrite = dataLength;
+      if (receivedDataSize + bytesToWrite > expectedDataSize) {
+        bytesToWrite = expectedDataSize - receivedDataSize;
       }
       
-      // Process any available buffers while we're receiving more
-      if (bufferQueue.count > 0) {
-        int readIdx = bufferQueue.readIndex;
-        int size = bufferQueue.sizes[readIdx];
+      if (bytesToWrite > 0) {
+        imageFile.write(buffer, bytesToWrite);
+        bytesWrittenToSPIFFS += bytesToWrite;
+        receivedDataSize += bytesToWrite;
+        bytesReceivedFromBLE += bytesToWrite;
         
-        // Process this buffer (write to SPIFFS)
-        if (imageFile) {
-          imageFile.write(bufferQueue.data[readIdx], size);
-          bytesWrittenToSPIFFS += size;
-          // Periodic flush every 32KB to prevent fragmentation delays
-          if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
-            imageFile.flush();
-            delay(SPIFFS_DELAY_FLUSH_MS);
-            lastFlushSize = receivedDataSize;
-          }
-          yield();
-        }
-        
-        // Update received count
-        receivedDataSize += size;
-        bytesReceivedFromBLE += size;
-        
-        // Update queue state
-        bufferQueue.readIndex = (readIdx + 1) % BLE_BUFFER_COUNT;
-        // Avoid using -- on volatile-qualified type (deprecated).
-        {
-          int tmp = bufferQueue.count;
-          tmp = tmp - 1;
-          bufferQueue.count = tmp;
-        }
-      }
-    } else {
-      // Queue is full, read directly into main buffer and process immediately
-      characteristic.readValue(buffer, dataLength);
-      
-      if (imageFile) {
-        imageFile.write(buffer, dataLength);
-        bytesWrittenToSPIFFS += dataLength;
         // Periodic flush every 32KB to prevent fragmentation delays
         if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
           imageFile.flush();
@@ -745,9 +716,6 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         }
         yield();
       }
-      
-      receivedDataSize += dataLength;
-      bytesReceivedFromBLE += dataLength;
     }
     
     // Print progress information every 64KB (less frequent for better speed)
@@ -803,17 +771,6 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       
       // Close the file after writing all data
       if (imageFile) {
-        // Process any remaining buffers in the queue
-        while (bufferQueue.count > 0) {
-          int readIdx = bufferQueue.readIndex;
-          imageFile.write(bufferQueue.data[readIdx], bufferQueue.sizes[readIdx]);
-          bufferQueue.readIndex = (readIdx + 1) % BLE_BUFFER_COUNT;
-          // Decrement count without using -- on volatile
-          int tmp = bufferQueue.count;
-          tmp = tmp - 1;
-          bufferQueue.count = tmp;
-        }
-        
         // Critical: Ensure all data is flushed and synced before closing
         Serial.println("[SPIFFS] Flushing final data...");
         imageFile.flush();
