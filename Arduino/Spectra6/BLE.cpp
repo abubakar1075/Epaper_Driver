@@ -71,25 +71,30 @@ bool warnedSizePacking = false;
 // Battery send flag per transfer
 static bool batterySentForThisTransfer = false;
 
-// Add conservative delays around SPIFFS operations to ensure commits complete on busy systems
+// Delay values (in milliseconds) for SPIFFS operations (reduced for performance)
 #ifndef SPIFFS_DELAY_OPEN_MS
-#define SPIFFS_DELAY_OPEN_MS 10
+#define SPIFFS_DELAY_OPEN_MS 5
 #endif
 #ifndef SPIFFS_DELAY_REMOVE_MS
 #define SPIFFS_DELAY_REMOVE_MS 5
 #endif
 #ifndef SPIFFS_DELAY_WRITE_MS
-#define SPIFFS_DELAY_WRITE_MS 1
+#define SPIFFS_DELAY_WRITE_MS 0
 #endif
 #ifndef SPIFFS_DELAY_FLUSH_MS
-#define SPIFFS_DELAY_FLUSH_MS 2
+#define SPIFFS_DELAY_FLUSH_MS 20
 #endif
 #ifndef SPIFFS_DELAY_CLOSE_MS
-#define SPIFFS_DELAY_CLOSE_MS 20
+#define SPIFFS_DELAY_CLOSE_MS 10
 #endif
-#ifndef SPIFFS_FLUSH_EVERY_WRITE
-#define SPIFFS_FLUSH_EVERY_WRITE 1
-#endif
+
+// Flush strategy: Don't flush on every write, instead flush every 32KB
+// This greatly reduces SPIFFS fragmentation delays (pauses at 24%, 50%, 83%, etc.)
+#define SPIFFS_FLUSH_EVERY_WRITE 0
+#define SPIFFS_FLUSH_INTERVAL 32768  // Flush every 32 KB (only 6 times for 192KB image)
+
+// Global tracking for periodic flushing
+unsigned long lastFlushSize = 0;
 
 // getBatteryPercent() implemented in Spectra6.ino
 
@@ -460,6 +465,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     receivingSize = false;
     displayInitialized = false;
     transferStartTime = millis();
+    lastFlushSize = 0;  // Reset flush tracking for new transfer
 
     // Prepare SPIFFS file for writing incoming data (image or OTA)
     if (spiffsReady) {
@@ -512,14 +518,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         displayInitialized = true;
       }
       if (imageFile) {
-  imageFile.write(payload, leftover);
-#if SPIFFS_FLUSH_EVERY_WRITE
-  imageFile.flush();
-  delay(SPIFFS_DELAY_FLUSH_MS);
-#else
-  delay(SPIFFS_DELAY_WRITE_MS);
-#endif
-  yield();
+        imageFile.write(payload, leftover);
+        // Periodic flush every 32KB instead of every write (prevents fragmentation delays)
+        if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
+          imageFile.flush();
+          delay(SPIFFS_DELAY_FLUSH_MS);
+          lastFlushSize = receivedDataSize;
+        }
+        yield();
       }
       receivedDataSize += leftover;
 
@@ -655,14 +661,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         
         // Process this buffer (write to SPIFFS)
         if (imageFile) {
-    imageFile.write(bufferQueue.data[readIdx], size);
-  #if SPIFFS_FLUSH_EVERY_WRITE
-    imageFile.flush();
-    delay(SPIFFS_DELAY_FLUSH_MS);
-  #else
-    delay(SPIFFS_DELAY_WRITE_MS);
-  #endif
-    yield();
+          imageFile.write(bufferQueue.data[readIdx], size);
+          // Periodic flush every 32KB to prevent fragmentation delays
+          if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
+            imageFile.flush();
+            delay(SPIFFS_DELAY_FLUSH_MS);
+            lastFlushSize = receivedDataSize;
+          }
+          yield();
         }
         
         // Update received count
@@ -682,14 +688,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       characteristic.readValue(buffer, dataLength);
       
       if (imageFile) {
-  imageFile.write(buffer, dataLength);
-#if SPIFFS_FLUSH_EVERY_WRITE
-  imageFile.flush();
-  delay(SPIFFS_DELAY_FLUSH_MS);
-#else
-  delay(SPIFFS_DELAY_WRITE_MS);
-#endif
-  yield();
+        imageFile.write(buffer, dataLength);
+        // Periodic flush every 32KB to prevent fragmentation delays
+        if ((receivedDataSize / SPIFFS_FLUSH_INTERVAL) > (lastFlushSize / SPIFFS_FLUSH_INTERVAL)) {
+          imageFile.flush();
+          delay(SPIFFS_DELAY_FLUSH_MS);
+          lastFlushSize = receivedDataSize;
+        }
+        yield();
       }
       
       receivedDataSize += dataLength;
