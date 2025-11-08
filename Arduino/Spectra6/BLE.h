@@ -76,6 +76,7 @@ void updateTransferSpeed();
 void sendAcknowledgment(uint8_t type);
 void sendProgressUpdate(uint8_t progress);
 extern bool spiffsReady;
+extern bool skipDisplay;  // Flag to skip display if image is corrupted
 
 // Image sizes
 #define IMAGE_WIDTH  800

@@ -87,21 +87,50 @@ static bool createImageFileFilled(const char* path, uint8_t fillByte) {
 
 static bool ensureDefaultImagesCreated() {
   if (!spiffsReady) return false;
-  bool needCreate = !SPIFFS.exists(IMAGE1_PATH) || !SPIFFS.exists(IMAGE2_PATH) || !SPIFFS.exists(IMAGE3_PATH);
-  if (!needCreate) return false;
-  Serial.println("Creating default SPIFFS images (first boot)...");
-  bool ok1 = createImageFileFilled(IMAGE1_PATH, 0x33); // Red
-  bool ok2 = createImageFileFilled(IMAGE2_PATH, 0x55); // Blue
-  bool ok3 = createImageFileFilled(IMAGE3_PATH, 0x02); // Yellow
-  if (ok1 && ok2 && ok3) {
-    currentImageIndex = 1;
-    saveCurrentImageIndex(currentImageIndex);
-    Serial.println("Default images created successfully.");
-    return true;
-  } else {
-    Serial.println("Failed to create default images.");
-    return false;
+  
+  // Check each slot individually and only recreate missing ones
+  bool anyCreated = false;
+  
+  if (!SPIFFS.exists(IMAGE1_PATH)) {
+    Serial.println("Creating default image for Image_1 (Red)...");
+    if (createImageFileFilled(IMAGE1_PATH, 0x33)) {
+      Serial.println("Image_1 created successfully.");
+      anyCreated = true;
+    } else {
+      Serial.println("Failed to create Image_1.");
+    }
   }
+  
+  if (!SPIFFS.exists(IMAGE2_PATH)) {
+    Serial.println("Creating default image for Image_2 (Blue)...");
+    if (createImageFileFilled(IMAGE2_PATH, 0x55)) {
+      Serial.println("Image_2 created successfully.");
+      anyCreated = true;
+    } else {
+      Serial.println("Failed to create Image_2.");
+    }
+  }
+  
+  if (!SPIFFS.exists(IMAGE3_PATH)) {
+    Serial.println("Creating default image for Image_3 (Yellow)...");
+    if (createImageFileFilled(IMAGE3_PATH, 0x02)) {
+      Serial.println("Image_3 created successfully.");
+      anyCreated = true;
+    } else {
+      Serial.println("Failed to create Image_3.");
+    }
+  }
+  
+  if (anyCreated) {
+    // Only reset currentImageIndex if it's not valid
+    int savedIndex = loadCurrentImageIndex();
+    if (savedIndex < 1 || savedIndex > 3) {
+      currentImageIndex = 1;
+      saveCurrentImageIndex(currentImageIndex);
+    }
+  }
+  
+  return anyCreated;
 }
 
 // Shared battery percent helper (ADC pin 1.60V ->0%, 1.909V ->100%)
@@ -639,14 +668,21 @@ void loop() {
   
   // If we have new data received via BLE, display it and go to sleep immediately
   if (dataReceived) {
-    Serial.println("New data received via BLE. Displaying image and going to sleep...");
-
-    // Now display the image from SPIFFS
-    displayImageFromSPIFFS();
+    if (!skipDisplay) {
+      // Image verified OK - display it
+      Serial.println("New data received via BLE. Displaying image and going to sleep...");
+      displayImageFromSPIFFS();
+      Serial.println("Image displayed. Going to sleep immediately...");
+    } else {
+      // Image corrupted - skip display, SPIFFS already fixed
+      Serial.println("Image corrupted - skipping display. SPIFFS auto-recovered.");
+      Serial.println("Ready for next image transfer. Going to sleep...");
+      skipDisplay = false;  // Reset flag for next transfer
+    }
+    
     dataReceived = false; // Reset flag
     
-    // Go to sleep immediately after displaying the image
-    Serial.println("Image displayed. Going to sleep immediately...");
+    // Go to sleep after handling the transfer
     goToSleep();
   }
   

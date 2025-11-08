@@ -55,6 +55,7 @@ unsigned long bytesSentToDisplay = 0;
 // BLE states
 bool bleActive = false;
 bool dataReceived = false;
+bool skipDisplay = false;  // Flag to skip display if image is corrupted
 
 // SPIFFS related globals
 const char* IMAGE_PATH = "/ble_image.bin"; // Legacy path (unused now, kept for compatibility)
@@ -309,6 +310,7 @@ void onBLEConnected(BLEDevice central) {
   expectedDataSize = 0;
   displayInitialized = false;
   dataReceived = false;
+  skipDisplay = false;  // Reset skip flag for new transfer
   batterySentForThisTransfer = false;
   isOtaTransfer = false;
   headerCollected = 0;
@@ -503,19 +505,28 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     if (spiffsReady) {
       const char* path = isOtaTransfer ? OTA_PATH : getCurrentImagePath();
       
+      // Critical: Ensure file is fully removed before creating new one
+      // This prevents SPIFFS corruption after multiple overwrites (~20+ times)
       if (SPIFFS.exists(path)) {
+        Serial.printf("[SPIFFS] Removing old file: %s\n", path);
         SPIFFS.remove(path);
         delay(SPIFFS_DELAY_REMOVE_MS);
+        
+        // Verify deletion succeeded
+        if (SPIFFS.exists(path)) {
+          Serial.println("[SPIFFS] WARNING: File still exists after remove, trying again...");
+          SPIFFS.remove(path);
+          delay(SPIFFS_DELAY_REMOVE_MS * 2);
+        }
       }
       
+      // Open file for writing (creates new file)
       imageFile = SPIFFS.open(path, FILE_WRITE);
       if (imageFile) {
         delay(SPIFFS_DELAY_OPEN_MS);
-      }
-      if (!imageFile) {
-        Serial.println("[SPIFFS] ERROR: Failed to create file");
+        Serial.printf("[SPIFFS] File created: %s\n", path);
       } else {
-        Serial.printf("[SPIFFS] File ready: %s\n", path);
+        Serial.println("[SPIFFS] ERROR: Failed to create file");
       }
     } else {
       Serial.println("SPIFFS not ready - cannot store incoming data.");
@@ -803,8 +814,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
           bufferQueue.count = tmp;
         }
         
-  imageFile.close();
-  delay(SPIFFS_DELAY_CLOSE_MS);
+        // Critical: Ensure all data is flushed and synced before closing
+        Serial.println("[SPIFFS] Flushing final data...");
+        imageFile.flush();
+        delay(SPIFFS_DELAY_FLUSH_MS * 2);
+        imageFile.close();
+        delay(SPIFFS_DELAY_CLOSE_MS * 2);
+        Serial.println("[SPIFFS] File closed");
+        
         if (isOtaTransfer) {
           Serial.print("OTA data stored in SPIFFS at ");
           Serial.println(OTA_PATH);
@@ -850,27 +867,85 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         } else {
           Serial.printf("[SPIFFS] Saved to %s\n", getCurrentImagePath());
           
-          // Verify file size
+          // Verify file size immediately after writing
+          delay(50); // Give SPIFFS time to finalize write
           File verifyFile = SPIFFS.open(getCurrentImagePath(), FILE_READ);
+          bool fileCorrupted = false;
           if (verifyFile) {
             size_t fileSize = verifyFile.size();
             verifyFile.close();
+            
+            // Print detailed byte tracking summary first
+            Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
+            Serial.printf("Expected bytes:          %lu\n", expectedDataSize);
+            Serial.printf("Bytes received from BLE: %lu\n", bytesReceivedFromBLE);
+            Serial.printf("Bytes written to SPIFFS: %lu\n", bytesWrittenToSPIFFS);
+            Serial.printf("Bytes in SPIFFS file:    %u\n", fileSize);
+            
             if (fileSize == expectedDataSize) {
-              Serial.println("[VERIFY] File OK");
+              Serial.println("STATUS:                  OK - File verified");
+              Serial.println("===========================================\n");
+              Serial.println("[VERIFY] ✓ File size matches, image will be displayed");
             } else {
-              Serial.printf("[VERIFY] ERROR: Expected %lu, got %u bytes\n", expectedDataSize, fileSize);
+              Serial.println("STATUS:                  CORRUPTED - Auto-recovery applied");
+              Serial.println("===========================================\n");
+              
+              Serial.printf("[VERIFY] ✗ ERROR: Expected %lu, got %u bytes - SPIFFS CORRUPTION!\n", expectedDataSize, fileSize);
+              fileCorrupted = true;
+              
+              // ========================================================================
+              // AUTO-RECOVERY: Only delete the corrupted file (NEVER format entire SPIFFS)
+              // This ensures other image slots (Image_2, Image_3) remain untouched
+              // ========================================================================
+              
+              Serial.println("[AUTO-RECOVERY] Deleting corrupted file to fix this slot...");
+              const char* corruptedPath = getCurrentImagePath();
+              
+              if (SPIFFS.remove(corruptedPath)) {
+                Serial.printf("[AUTO-RECOVERY] ✓ Deleted corrupted file: %s\n", corruptedPath);
+                Serial.println("[AUTO-RECOVERY] ✓ Other image slots remain intact and unaffected");
+                delay(100);
+                
+                // Test if SPIFFS can allocate a new file
+                File testFile = SPIFFS.open(corruptedPath, FILE_WRITE);
+                if (testFile) {
+                  testFile.write(0xFF); // Write 1 byte test
+                  testFile.close();
+                  SPIFFS.remove(corruptedPath); // Clean up test file
+                  Serial.println("[AUTO-RECOVERY] ✓ SPIFFS allocation test passed - next transfer will work");
+                } else {
+                  Serial.println("[AUTO-RECOVERY] ⚠ SPIFFS allocation test failed");
+                  Serial.println("[AUTO-RECOVERY] ⚠ This slot may still have issues");
+                  Serial.println("[AUTO-RECOVERY] ⚠ If problem persists, type 'cleanspiffs' in Serial terminal");
+                }
+              } else {
+                Serial.println("[AUTO-RECOVERY] ✗ ERROR: Could not delete corrupted file");
+                Serial.println("[AUTO-RECOVERY] ⚠ If problem persists, type 'cleanspiffs' in Serial terminal");
+              }
+              
+              Serial.println("[SKIP] Corrupted image will NOT be displayed");
+              Serial.println("[SKIP] Send image again to this slot - next transfer should work");
             }
+          } else {
+            Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
+            Serial.printf("Expected bytes:          %lu\n", expectedDataSize);
+            Serial.printf("Bytes received from BLE: %lu\n", bytesReceivedFromBLE);
+            Serial.printf("Bytes written to SPIFFS: %lu\n", bytesWrittenToSPIFFS);
+            Serial.println("STATUS:                  ERROR - Cannot verify");
+            Serial.println("===========================================\n");
+            Serial.println("[VERIFY] ✗ ERROR: Cannot open file for verification");
+            fileCorrupted = true;
           }
           
-          // Print detailed byte tracking summary
-          Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
-          Serial.printf("Expected bytes:          %lu\n", expectedDataSize);
-          Serial.printf("Bytes received from BLE: %lu\n", bytesReceivedFromBLE);
-          Serial.printf("Bytes written to SPIFFS: %lu\n", bytesWrittenToSPIFFS);
-          Serial.println("===========================================\n");
-          
-          // Set flag for main loop to display the image
-          dataReceived = true;
+          // Set flags for main loop
+          if (!fileCorrupted) {
+            dataReceived = true;
+            skipDisplay = false;  // Image is good, display it
+          } else {
+            dataReceived = true;   // Still set to trigger main loop
+            skipDisplay = true;    // But skip the display step
+            Serial.println("[SKIP] Corrupted image will NOT be displayed. Send image again - next transfer should work.");
+          }
           sendAcknowledgment(ACK_COMPLETE);
         }
       } else {
