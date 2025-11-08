@@ -666,24 +666,42 @@ void loop() {
   // Poll BLE for events
   BLE.poll();
   
-  // If we have new data received via BLE, display it and go to sleep immediately
+  // If we have new data received via BLE, display it and wait 3s before sleep
   if (dataReceived) {
     if (!skipDisplay) {
       // Image verified OK - display it
-      Serial.println("New data received via BLE. Displaying image and going to sleep...");
+      Serial.println("New data received via BLE. Displaying image...");
       displayImageFromSPIFFS();
-      Serial.println("Image displayed. Going to sleep immediately...");
+      Serial.println("Image displayed. Keeping BLE active for 3 seconds...");
     } else {
-      // Image corrupted - skip display, SPIFFS already fixed
-      Serial.println("Image corrupted - skipping display. SPIFFS auto-recovered.");
-      Serial.println("Ready for next image transfer. Going to sleep...");
+      // Image corrupted - skip display
+      Serial.println("Image corrupted - skipping display.");
+      Serial.println("Keeping BLE active for 3 seconds...");
       skipDisplay = false;  // Reset flag for next transfer
     }
     
     dataReceived = false; // Reset flag
     
-    // Go to sleep after handling the transfer
-    goToSleep();
+    // Keep BLE active for 3 seconds to allow another image transfer
+    unsigned long waitStart = millis();
+    while (millis() - waitStart < 3000) {
+      BLE.poll();  // Keep BLE responsive
+      
+      // If new data starts arriving, reset idle timer and break out
+      if (!receivingSize) {
+        Serial.println("New image transfer detected! Cancelling sleep...");
+        connectionStartTime = millis();
+        break;
+      }
+      
+      delay(10);
+    }
+    
+    // If no new transfer started, go to sleep
+    if (receivingSize) {
+      Serial.println("No new transfer. Going to sleep...");
+      goToSleep();
+    }
   }
   
   // Small delay to avoid hogging CPU

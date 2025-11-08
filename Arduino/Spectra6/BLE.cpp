@@ -875,7 +875,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
             size_t fileSize = verifyFile.size();
             verifyFile.close();
             
-            // Print detailed byte tracking summary first
+            // Print detailed byte tracking summary
             Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
             Serial.printf("Expected bytes:          %lu\n", expectedDataSize);
             Serial.printf("Bytes received from BLE: %lu\n", bytesReceivedFromBLE);
@@ -887,44 +887,12 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
               Serial.println("===========================================\n");
               Serial.println("[VERIFY] ✓ File size matches, image will be displayed");
             } else {
-              Serial.println("STATUS:                  CORRUPTED - Auto-recovery applied");
+              Serial.println("STATUS:                  CORRUPTED - Image skipped");
               Serial.println("===========================================\n");
               
               Serial.printf("[VERIFY] ✗ ERROR: Expected %lu, got %u bytes - SPIFFS CORRUPTION!\n", expectedDataSize, fileSize);
-              fileCorrupted = true;
-              
-              // ========================================================================
-              // AUTO-RECOVERY: Only delete the corrupted file (NEVER format entire SPIFFS)
-              // This ensures other image slots (Image_2, Image_3) remain untouched
-              // ========================================================================
-              
-              Serial.println("[AUTO-RECOVERY] Deleting corrupted file to fix this slot...");
-              const char* corruptedPath = getCurrentImagePath();
-              
-              if (SPIFFS.remove(corruptedPath)) {
-                Serial.printf("[AUTO-RECOVERY] ✓ Deleted corrupted file: %s\n", corruptedPath);
-                Serial.println("[AUTO-RECOVERY] ✓ Other image slots remain intact and unaffected");
-                delay(100);
-                
-                // Test if SPIFFS can allocate a new file
-                File testFile = SPIFFS.open(corruptedPath, FILE_WRITE);
-                if (testFile) {
-                  testFile.write(0xFF); // Write 1 byte test
-                  testFile.close();
-                  SPIFFS.remove(corruptedPath); // Clean up test file
-                  Serial.println("[AUTO-RECOVERY] ✓ SPIFFS allocation test passed - next transfer will work");
-                } else {
-                  Serial.println("[AUTO-RECOVERY] ⚠ SPIFFS allocation test failed");
-                  Serial.println("[AUTO-RECOVERY] ⚠ This slot may still have issues");
-                  Serial.println("[AUTO-RECOVERY] ⚠ If problem persists, type 'cleanspiffs' in Serial terminal");
-                }
-              } else {
-                Serial.println("[AUTO-RECOVERY] ✗ ERROR: Could not delete corrupted file");
-                Serial.println("[AUTO-RECOVERY] ⚠ If problem persists, type 'cleanspiffs' in Serial terminal");
-              }
-              
               Serial.println("[SKIP] Corrupted image will NOT be displayed");
-              Serial.println("[SKIP] Send image again to this slot - next transfer should work");
+              fileCorrupted = true;
             }
           } else {
             Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
@@ -944,7 +912,6 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
           } else {
             dataReceived = true;   // Still set to trigger main loop
             skipDisplay = true;    // But skip the display step
-            Serial.println("[SKIP] Corrupted image will NOT be displayed. Send image again - next transfer should work.");
           }
           sendAcknowledgment(ACK_COMPLETE);
         }
