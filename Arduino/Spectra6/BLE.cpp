@@ -651,6 +651,15 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                   Serial.println("OTA successful. Rebooting...");
                   sendAcknowledgment(ACK_COMPLETE);
                   delay(200);
+                  
+                  // Create OTA flag file to trigger cleanspiffs on next boot
+                  File flagFile = SPIFFS.open(OTA_FLAG_FILE, FILE_WRITE);
+                  if (flagFile) {
+                    flagFile.println("1");
+                    flagFile.close();
+                    Serial.println("OTA flag created for post-reboot cleanup.");
+                  }
+                  
                   ESP.restart();
                 } else {
                   Serial.print("OTA failed. Error #");
@@ -812,6 +821,15 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                 Serial.println("OTA successful. Rebooting...");
                 sendAcknowledgment(ACK_COMPLETE);
                 delay(200);
+                
+                // Create OTA flag file to trigger cleanspiffs on next boot
+                File flagFile = SPIFFS.open(OTA_FLAG_FILE, FILE_WRITE);
+                if (flagFile) {
+                  flagFile.println("1");
+                  flagFile.close();
+                  Serial.println("OTA flag created for post-reboot cleanup.");
+                }
+                
                 ESP.restart();
               } else {
                 Serial.print("OTA failed. Error #");
