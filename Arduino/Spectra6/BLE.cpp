@@ -132,32 +132,26 @@ bool initSPIFFS() {
 
 void displayImageFromSPIFFSPath(const char* path) {
   if (!spiffsReady || !path || !SPIFFS.exists(path)) {
-    Serial.println("No image file found in SPIFFS to display");
+    Serial.println("[DISPLAY] ERROR: No image file found");
     return;
   }
   
   File f = SPIFFS.open(path, FILE_READ);
   if (!f) {
-    Serial.println("Failed to open image file for display");
+    Serial.println("[DISPLAY] ERROR: Failed to open file");
     return;
   }
   
   size_t fileSize = f.size();
-  Serial.print("SPIFFS image file size: ");
-  Serial.print(fileSize);
-  Serial.println(" bytes");
-  Serial.print("Displaying from: ");
-  Serial.println(path);
+  Serial.printf("[DISPLAY] Showing %s (%u bytes)\n", path, fileSize);
   
   // Initialize display
-  Serial.println("Initializing display for showing stored image...");
   EPD_init();
   
   // Use our optimized fast display function that works directly with BLE data
   if (fileSize <= BLE_IMAGE_SIZE) {
     // Read the entire file into memory if it's small enough
     if (fileSize <= 65536) {  // Only for files under 64KB
-      // For smaller files, we can read the entire file at once
       uint8_t* fileBuffer = (uint8_t*)malloc(fileSize);
       if (fileBuffer) {
         f.read(fileBuffer, fileSize);
@@ -167,7 +161,7 @@ void displayImageFromSPIFFSPath(const char* path) {
         
         free(fileBuffer);
         f.close();
-        Serial.println("Image displayed using fast method");
+        Serial.println("[DISPLAY] Complete");
         return;
       }
     }
@@ -189,11 +183,6 @@ void displayImageFromSPIFFSPath(const char* path) {
       }
       
       totalBytesRead += bytesRead;
-      
-      // Show progress dots
-      if ((totalBytesRead % 32768) == 0) {
-        Serial.print(".");
-      }
     }
     
     // Complete the display refresh
@@ -202,14 +191,13 @@ void displayImageFromSPIFFSPath(const char* path) {
     delay(1);
     lcd_chkstatus();
     
-    Serial.println("\nImage displayed using chunked method");
+    Serial.println("[DISPLAY] Complete");
   } else {
-    Serial.println("File size exceeds maximum image size, cannot display");
+    Serial.println("[DISPLAY] ERROR: File too large");
   }
   
   f.close();
   EPD_sleep();
-  Serial.println("Image displayed successfully from SPIFFS");
 }
 
 void displayImageFromSPIFFS() {
@@ -463,11 +451,9 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       headerCollected = 0;
     }
 
-    Serial.print("Expected data size: ");
-    Serial.print(expectedDataSize);
-    Serial.print(" bytes (");
-    Serial.print(expectedDataSize / 1024.0, 1);
-    Serial.println(" KB)");
+    Serial.printf("[HEADER] %s transfer: %lu bytes (%.1f KB)\n", 
+                 isOtaTransfer ? "OTA" : "IMAGE", 
+                 expectedDataSize, expectedDataSize / 1024.0);
 
     // Reset counters for data and start timing the transfer
     receivedDataSize = 0;
@@ -478,26 +464,20 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     // Prepare SPIFFS file for writing incoming data (image or OTA)
     if (spiffsReady) {
       const char* path = isOtaTransfer ? OTA_PATH : getCurrentImagePath();
+      
       if (SPIFFS.exists(path)) {
         SPIFFS.remove(path);
         delay(SPIFFS_DELAY_REMOVE_MS);
-        Serial.print("Old file removed from SPIFFS: ");
-        Serial.println(path);
       }
+      
       imageFile = SPIFFS.open(path, FILE_WRITE);
       if (imageFile) {
         delay(SPIFFS_DELAY_OPEN_MS);
       }
       if (!imageFile) {
-        Serial.print("Failed to create file in SPIFFS: ");
-        Serial.println(path);
+        Serial.println("[SPIFFS] ERROR: Failed to create file");
       } else {
-        Serial.print("Created file in SPIFFS for incoming data: ");
-        Serial.println(path);
-        if (!isOtaTransfer) {
-          Serial.print("Writing into current image slot (index): ");
-          Serial.println(currentImageIndex);
-        }
+        Serial.printf("[SPIFFS] File ready: %s\n", path);
       }
     } else {
       Serial.println("SPIFFS not ready - cannot store incoming data.");
@@ -639,14 +619,14 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
   else {
     // If this is the first chunk for image transfer, initialize the display
     if (!isOtaTransfer && !displayInitialized) {
-      Serial.println("Initializing display for data reception");
+      Serial.println("[DISPLAY] Initializing e-paper display...");
       EPD_init_fast();
-      // Start writing old data (all white)
       EPD_W21_WriteCMD(0x10);
       for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT / 8; i++) {
         EPD_W21_WriteDATA(0xff);
       }
       displayInitialized = true;
+      Serial.println("[DISPLAY] Ready for data");
     }
     
     // Add the new data to our buffer queue for faster processing
@@ -715,13 +695,11 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       receivedDataSize += dataLength;
     }
     
-    // Print minimal information about the received chunk to reduce serial overhead
-    if ((receivedDataSize % 131072) == 0) { // Only show progress every 128KB to reduce overhead
-      Serial.print("Received: ");
-      Serial.print(receivedDataSize / 1024);
-      Serial.print("KB / ");
-      Serial.print(expectedDataSize / 1024);
-      Serial.println("KB");
+    // Print progress information every 64KB (less frequent for better speed)
+    if ((receivedDataSize % 65536) == 0) {
+      float percentComplete = (receivedDataSize * 100.0) / expectedDataSize;
+      Serial.printf("[RX] %lu KB / %lu KB (%.0f%%)\n", 
+                   receivedDataSize / 1024, expectedDataSize / 1024, percentComplete);
     }
       
     // Only flush the SPIFFS file at the very end to greatly improve performance
@@ -765,12 +743,8 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       unsigned long totalTime = millis() - transferStartTime;
       float speedKBps = (float)(expectedDataSize * 1000) / (float)(totalTime * 1024);
       
-      Serial.print("Transfer complete in ");
-      Serial.print(totalTime / 1000.0, 2);
-      Serial.println(" seconds");
-      Serial.print("Average transfer speed: ");
-      Serial.print(speedKBps, 2);
-      Serial.println(" KB/s");
+      Serial.printf("[COMPLETE] %lu bytes in %.1fs (%.1f KB/s)\n", 
+                   receivedDataSize, totalTime / 1000.0, speedKBps);
       
       // Close the file after writing all data
       if (imageFile) {
@@ -830,11 +804,22 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
             }
           }
         } else {
-          Serial.print("Image data stored in SPIFFS at ");
-          Serial.println(getCurrentImagePath());
+          Serial.printf("[SPIFFS] Saved to %s\n", getCurrentImagePath());
+          
+          // Verify file size
+          File verifyFile = SPIFFS.open(getCurrentImagePath(), FILE_READ);
+          if (verifyFile) {
+            size_t fileSize = verifyFile.size();
+            verifyFile.close();
+            if (fileSize == expectedDataSize) {
+              Serial.println("[VERIFY] File OK");
+            } else {
+              Serial.printf("[VERIFY] ERROR: Expected %lu, got %u bytes\n", expectedDataSize, fileSize);
+            }
+          }
+          
           // Set flag for main loop to display the image
           dataReceived = true;
-          // Send completion acknowledgment for image
           sendAcknowledgment(ACK_COMPLETE);
         }
       } else {

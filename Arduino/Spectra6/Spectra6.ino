@@ -510,11 +510,9 @@ void setup() {
 
   Serial.println("E-Paper Display + BLE Example");
   #if (LED2 == 34)
-    Serial.println("[Warning] pcbLED assigned to GPIO34 (input-only on standard ESP32) - blinking will not function.");
+    Serial.println("[Warning] LED on GPIO34 (input-only) - blinking disabled.");
   #endif
   Serial.println("==============================");
-  // Print battery status once at startup
-  printBatteryStatus();
   
   // Initialize SPIFFS (format on fail)
   spiffsReady = SPIFFS.begin(true);
@@ -536,8 +534,6 @@ void setup() {
   
   // Setup calibration button for threshold calibration
   pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP);
-  Serial.printf("GPIO %d configured as INPUT_PULLUP for threshold calibration\n", CALIBRATION_BUTTON_PIN);
-  Serial.printf("Connect GPIO %d to GND to calibrate threshold\n", CALIBRATION_BUTTON_PIN);
    
   // Initialize EPD pins - but don't run any display commands yet
   pinMode(PIN_EPD_BUSY, INPUT);  // BUSY (panel drives this)
@@ -590,23 +586,15 @@ void loop() {
 
   // Simple calibration button check for threshold calibration
   static bool lastButtonState = HIGH;
-  static unsigned long lastDebugPrint = 0;
   bool buttonState = digitalRead(CALIBRATION_BUTTON_PIN);
   
-  // Debug: Print calibration button state every 2 seconds
-  if (millis() - lastDebugPrint > 2000) {
-    lastDebugPrint = millis();
-    Serial.printf("GPIO%d state: %d\n", CALIBRATION_BUTTON_PIN, buttonState);
-  }
-  
   if (lastButtonState == HIGH && buttonState == LOW) {
-    Serial.printf("GPIO%d pressed! Calibrating...\n", CALIBRATION_BUTTON_PIN);
     // Button pressed - calibrate threshold
     uint16_t currentTouch = touchRead(TOUCH_PIN);
     touchThreshold = currentTouch - 4;
     if (touchThreshold < 10) touchThreshold = 10;
     saveThreshold(touchThreshold);
-    Serial.printf("Threshold calibrated to: %d (was reading: %u)\n", touchThreshold, currentTouch);
+    Serial.printf("Threshold calibrated to: %d\n", touchThreshold);
     // Flash LEDs (pcbLED and userLED) 3 times
     for(int i=0; i<3; i++) {
       digitalWrite(pcbLED, HIGH); digitalWrite(userLED, HIGH); delay(100);
@@ -614,21 +602,6 @@ void loop() {
     }
   }
   lastButtonState = buttonState;
-
-  // Periodically print capacitive touch reading for TOUCH_PIN
-  if (millis() - lastTouchPrint >= 500) {
-    lastTouchPrint = millis();
-    uint16_t touchVal = touchRead(TOUCH_PIN);
-    uint8_t battInline = getBatteryPercent();
-    Serial.print("Touch(");
-    Serial.print(TOUCH_PIN);
-    Serial.print(") = ");
-    Serial.print(touchVal);
-    Serial.print("  Battery=");
-    Serial.print(battInline);
-    Serial.println("%");
-    // BLE transmission of touch messages removed to avoid interfering with app status
-  }
   
   // Check for BLE connection status
   if (BLE.connected() && !bleConnected) {
@@ -645,9 +618,19 @@ void loop() {
     connectionStartTime = millis();
   }
 
+  // Show sleep countdown every 5 seconds
+  static unsigned long lastCountdownPrint = 0;
+  unsigned long timeElapsed = millis() - connectionStartTime;
+  unsigned long timeRemaining = connectionTimeout > timeElapsed ? (connectionTimeout - timeElapsed) / 1000 : 0;
+  
+  if (receivingSize && !dataReceived && (millis() - lastCountdownPrint >= 5000)) {
+    lastCountdownPrint = millis();
+    Serial.printf("Sleep in %lu seconds\n", timeRemaining);
+  }
+
   // Sleep after 30s of idle (no active image transfer), regardless of BLE connection state
   if ((millis() - connectionStartTime > connectionTimeout) && receivingSize && !dataReceived) {
-    Serial.println("Idle for 30 seconds without image activity. Going to sleep...");
+    Serial.println("Going to sleep...");
     goToSleep();
   }
   
