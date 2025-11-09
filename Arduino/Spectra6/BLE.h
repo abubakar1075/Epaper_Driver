@@ -17,9 +17,6 @@ int loadCurrentImageIndex();               // Load persisted slot
 void displayImageFromSPIFFS();             // Display current slot image
 void displayImageFromSPIFFSPath(const char* path); // Display specific image path
 
-// OTA flag file path (defined in Spectra6.ino)
-extern const char* OTA_FLAG_FILE;          // Flag file to trigger cleanspiffs after OTA
-
 // Constants for BLE acknowledgements
 #define ACK_SIZE_RECEIVED 0x01   // Size acknowledgment
 #define ACK_PROGRESS 0x02        // Progress update

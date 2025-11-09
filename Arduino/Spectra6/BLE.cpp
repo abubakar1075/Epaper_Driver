@@ -648,18 +648,50 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                 }
                 otaFile.close();
                 if (written == expectedDataSize && Update.end(true)) {
-                  Serial.println("OTA successful. Rebooting...");
+                  Serial.println("OTA update successful!");
                   sendAcknowledgment(ACK_COMPLETE);
                   delay(200);
                   
-                  // Create OTA flag file to trigger cleanspiffs on next boot
-                  File flagFile = SPIFFS.open(OTA_FLAG_FILE, FILE_WRITE);
-                  if (flagFile) {
-                    flagFile.println("1");
-                    flagFile.close();
-                    Serial.println("OTA flag created for post-reboot cleanup.");
+                  // Backup touch threshold before format
+                  int savedThreshold = 70; // Default fallback value
+                  if (SPIFFS.exists("/thresh.txt")) {
+                    File f = SPIFFS.open("/thresh.txt", "r");
+                    if (f) {
+                      int loadedValue = f.parseInt();
+                      f.close();
+                      if (loadedValue > 0) {
+                        savedThreshold = loadedValue;
+                        Serial.printf("Threshold backed up from SPIFFS: %d\n", savedThreshold);
+                      } else {
+                        Serial.printf("Threshold file empty, using default: %d\n", savedThreshold);
+                      }
+                    } else {
+                      Serial.printf("Failed to read threshold file, using default: %d\n", savedThreshold);
+                    }
+                  } else {
+                    Serial.printf("No saved threshold found, using default: %d\n", savedThreshold);
                   }
                   
+                  Serial.println("Cleaning up SPIFFS before restart...");
+                  if (SPIFFS.format()) {
+                    Serial.println("SPIFFS formatted successfully.");
+                    
+                    // Restore threshold to fresh SPIFFS
+                    File f = SPIFFS.open("/thresh.txt", "w");
+                    if (f) {
+                      f.println(savedThreshold);
+                      f.close();
+                      Serial.printf("Threshold restored to SPIFFS: %d\n", savedThreshold);
+                    } else {
+                      Serial.println("WARNING: Failed to restore threshold file.");
+                    }
+                  } else {
+                    Serial.println("WARNING: SPIFFS format failed, but continuing with restart.");
+                  }
+                  
+                  Serial.println("Restarting ESP32 to apply OTA update...");
+                  Serial.flush();
+                  delay(500);
                   ESP.restart();
                 } else {
                   Serial.print("OTA failed. Error #");
@@ -818,18 +850,50 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
               }
               otaFile.close();
               if (written == expectedDataSize && Update.end(true)) {
-                Serial.println("OTA successful. Rebooting...");
+                Serial.println("OTA update successful!");
                 sendAcknowledgment(ACK_COMPLETE);
                 delay(200);
                 
-                // Create OTA flag file to trigger cleanspiffs on next boot
-                File flagFile = SPIFFS.open(OTA_FLAG_FILE, FILE_WRITE);
-                if (flagFile) {
-                  flagFile.println("1");
-                  flagFile.close();
-                  Serial.println("OTA flag created for post-reboot cleanup.");
+                // Backup touch threshold before format
+                int savedThreshold = 70; // Default fallback value
+                if (SPIFFS.exists("/thresh.txt")) {
+                  File f = SPIFFS.open("/thresh.txt", "r");
+                  if (f) {
+                    int loadedValue = f.parseInt();
+                    f.close();
+                    if (loadedValue > 0) {
+                      savedThreshold = loadedValue;
+                      Serial.printf("Threshold backed up from SPIFFS: %d\n", savedThreshold);
+                    } else {
+                      Serial.printf("Threshold file empty, using default: %d\n", savedThreshold);
+                    }
+                  } else {
+                    Serial.printf("Failed to read threshold file, using default: %d\n", savedThreshold);
+                  }
+                } else {
+                  Serial.printf("No saved threshold found, using default: %d\n", savedThreshold);
                 }
                 
+                Serial.println("Cleaning up SPIFFS before restart...");
+                if (SPIFFS.format()) {
+                  Serial.println("SPIFFS formatted successfully.");
+                  
+                  // Restore threshold to fresh SPIFFS
+                  File f = SPIFFS.open("/thresh.txt", "w");
+                  if (f) {
+                    f.println(savedThreshold);
+                    f.close();
+                    Serial.printf("Threshold restored to SPIFFS: %d\n", savedThreshold);
+                  } else {
+                    Serial.println("WARNING: Failed to restore threshold file.");
+                  }
+                } else {
+                  Serial.println("WARNING: SPIFFS format failed, but continuing with restart.");
+                }
+                
+                Serial.println("Restarting ESP32 to apply OTA update...");
+                Serial.flush();
+                delay(500);
                 ESP.restart();
               } else {
                 Serial.print("OTA failed. Error #");

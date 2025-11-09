@@ -30,7 +30,6 @@ static const char* IMAGE1_PATH = "/Image_1";
 static const char* IMAGE2_PATH = "/Image_2";
 static const char* IMAGE3_PATH = "/Image_3";
 static const char* CURRENT_IMAGE_FILE = "/current.txt";
-const char* OTA_FLAG_FILE = "/ota_flag.txt"; // Flag to trigger cleanspiffs after OTA (extern accessible)
 
 int currentImageIndex = 1; // 1..3
 
@@ -132,53 +131,6 @@ static bool ensureDefaultImagesCreated() {
   }
   
   return anyCreated;
-}
-
-// Check if OTA flag exists (indicates first boot after OTA update)
-bool checkOtaFlag() {
-  if (!spiffsReady) return false;
-  return SPIFFS.exists(OTA_FLAG_FILE);
-}
-
-// Remove OTA flag after cleanspiffs is executed
-void clearOtaFlag() {
-  if (!spiffsReady) return;
-  if (SPIFFS.exists(OTA_FLAG_FILE)) {
-    SPIFFS.remove(OTA_FLAG_FILE);
-    Serial.println("OTA flag removed.");
-  }
-}
-
-// Perform automatic cleanspiffs after OTA (called once on first boot after OTA)
-void performPostOtaClean() {
-  Serial.println("\n========== AUTO CLEAN SPIFFS (POST-OTA) ==========");
-  Serial.println("Detected first boot after OTA update.");
-  Serial.println("Formatting SPIFFS partition (this may take a few seconds)...");
-  
-  bool ok = SPIFFS.format();
-  if (!ok) {
-    Serial.println("ERROR: SPIFFS.format() failed.");
-    Serial.println("===================================\n");
-  } else {
-    // Re-mount and recreate defaults
-    spiffsReady = SPIFFS.begin(true);
-    if (!spiffsReady) {
-      Serial.println("ERROR: SPIFFS mount failed after format.");
-      Serial.println("===================================\n");
-    } else {
-      Serial.println("SPIFFS formatted and mounted successfully.");
-      bool created = ensureDefaultImagesCreated();
-      currentImageIndex = loadCurrentImageIndex();
-      Serial.printf("Current Image after clean: Image_%d (%s)\n", currentImageIndex, getCurrentImagePath());
-      if (created) {
-        Serial.println("Default images recreated.");
-      }
-      // Display the current image
-      displayImageFromSPIFFS();
-      Serial.println("Post-OTA cleanup complete!");
-      Serial.println("===================================\n");
-    }
-  }
 }
 
 // Shared battery percent helper (ADC pin 1.60V ->0%, 1.909V ->100%)
@@ -598,24 +550,18 @@ void setup() {
   } else {
     Serial.println("SPIFFS mounted successfully.");
     
-    // Check if this is the first boot after OTA update
-    if (checkOtaFlag()) {
-      // Automatically run cleanspiffs after OTA
-      performPostOtaClean();
-      // Flag is NOT cleared here - it will be cleared after successful format in performPostOtaClean
-      // Actually, the flag is cleared by the format operation itself since SPIFFS is wiped
-    } else {
-      // Normal startup - no OTA cleanup needed
-      touchThreshold = loadThreshold();
-      Serial.printf("Touch threshold: %d\n", touchThreshold);
-      // Setup default images if not present and load current slot
-      bool createdDefaults = ensureDefaultImagesCreated();
-      currentImageIndex = loadCurrentImageIndex();
-      Serial.print("Current image slot: Image_"); Serial.println(currentImageIndex);
-      if (createdDefaults) {
-        // Show the first image after initial programming
-        displayImageFromSPIFFS();
-      }
+    // Normal startup - load threshold and images
+    touchThreshold = loadThreshold();
+    Serial.printf("Touch threshold: %d\n", touchThreshold);
+    
+    // Setup default images if not present and load current slot
+    bool createdDefaults = ensureDefaultImagesCreated();
+    currentImageIndex = loadCurrentImageIndex();
+    Serial.print("Current image slot: Image_"); Serial.println(currentImageIndex);
+    
+    if (createdDefaults) {
+      // Show the first image after initial programming
+      displayImageFromSPIFFS();
     }
   }
   
