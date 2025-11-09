@@ -494,6 +494,57 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                  isOtaTransfer ? "OTA" : "IMAGE", 
                  expectedDataSize, expectedDataSize / 1024.0);
 
+    // If OTA transfer, format SPIFFS first (before receiving data)
+    if (isOtaTransfer && spiffsReady) {
+      Serial.println("\n========== PRE-OTA SPIFFS CLEANUP ==========");
+      
+      // Backup touch threshold before format
+      int savedThreshold = 70; // Default fallback value
+      if (SPIFFS.exists("/thresh.txt")) {
+        File f = SPIFFS.open("/thresh.txt", "r");
+        if (f) {
+          int loadedValue = f.parseInt();
+          f.close();
+          if (loadedValue > 0) {
+            savedThreshold = loadedValue;
+            Serial.printf("Threshold backed up from SPIFFS: %d\n", savedThreshold);
+          } else {
+            Serial.printf("Threshold file empty, using default: %d\n", savedThreshold);
+          }
+        } else {
+          Serial.printf("Failed to read threshold file, using default: %d\n", savedThreshold);
+        }
+      } else {
+        Serial.printf("No saved threshold found, using default: %d\n", savedThreshold);
+      }
+      
+      Serial.println("Formatting SPIFFS before OTA download...");
+      if (SPIFFS.format()) {
+        Serial.println("SPIFFS formatted successfully.");
+        
+        // Re-mount SPIFFS after format
+        spiffsReady = SPIFFS.begin(true);
+        if (spiffsReady) {
+          Serial.println("SPIFFS re-mounted after format.");
+          
+          // Restore threshold to fresh SPIFFS
+          File f = SPIFFS.open("/thresh.txt", "w");
+          if (f) {
+            f.println(savedThreshold);
+            f.close();
+            Serial.printf("Threshold restored to SPIFFS: %d\n", savedThreshold);
+          } else {
+            Serial.println("WARNING: Failed to restore threshold file.");
+          }
+        } else {
+          Serial.println("ERROR: Failed to re-mount SPIFFS after format!");
+        }
+      } else {
+        Serial.println("ERROR: SPIFFS format failed!");
+      }
+      Serial.println("============================================\n");
+    }
+
     // Reset ALL counters for data and start timing the transfer
     receivedDataSize = 0;
     bytesReceivedFromBLE = 0;
