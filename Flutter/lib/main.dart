@@ -434,7 +434,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     try{
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifestMap = json.decode(manifestJson);
-  final keys = manifestMap.keys.where((k)=> (k.startsWith('FramePic/') || k.startsWith('SamplePics/')) ).toList();
+  // Use lowercase directory name 'Framepic/' matching pubspec to ensure assets appear in release APK.
+  final keys = manifestMap.keys.where((k)=> (k.startsWith('Framepic/') || k.startsWith('SamplePics/')) ).toList();
       String? chosen;
       for(final k in keys){
         final base = k.split('/').last.toLowerCase();
@@ -537,9 +538,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     try{
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifestMap = json.decode(manifestJson);
-      // list of candidate image assets under FramePic/ or SamplePics/
+      // list of candidate image assets under Framepic/ or SamplePics/
       final keys = manifestMap.keys.where((k){
-        if(!(k.startsWith('FramePic/') || k.startsWith('SamplePics/'))) return false;
+        if(!(k.startsWith('Framepic/') || k.startsWith('SamplePics/'))) return false;
         final kl = k.toLowerCase();
         return kl.endsWith('.png') || kl.endsWith('.jpg') || kl.endsWith('.jpeg');
       }).toList();
