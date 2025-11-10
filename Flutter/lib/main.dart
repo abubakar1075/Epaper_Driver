@@ -1667,7 +1667,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           onSubmitted: (_)=> _searchPixabayImages(),
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
-            hintText: 'Search Pixabay (e.g. sunset)',
+            hintText: 'Search (e.g. sunset)',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
           ),
