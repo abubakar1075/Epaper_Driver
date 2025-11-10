@@ -170,6 +170,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   bool _isPixabaySearching = false;
   bool _isPixabayImporting = false;
   String? _pixabayError;
+  // Pixabay categories
+  static const List<String> _pixabayCategories = [
+    'all','backgrounds','fashion','nature','science','education','feelings','health','people','religion','places','animals','industry','computer','food','sports','transportation','travel','buildings','business','music'
+  ];
+  String _selectedPixabayCategory = 'all';
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -1240,14 +1245,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
     _updateStatus('Searching "$q" on Pixabay...');
     try{
-      final uri = Uri.https('pixabay.com','/api/',{
+      final params = <String,String>{
         'key': _pixabayApiKey,
         'q': q,
         'image_type':'photo',
         'safesearch':'true',
         'order':'popular',
-  'per_page':'200',
-      });
+        'per_page':'200',
+      };
+      if(_selectedPixabayCategory != 'all'){
+        params['category'] = _selectedPixabayCategory;
+      }
+      final uri = Uri.https('pixabay.com','/api/', params);
       final resp = await http.get(uri, headers:{
         HttpHeaders.acceptHeader:'application/json',
         HttpHeaders.userAgentHeader:'CanvasBT'
@@ -1282,6 +1291,52 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     if(i<0 || i>=_pixabayResults.length) return;
     setState((){ _selectedPixabayIndex = (_selectedPixabayIndex==i) ? null : i; });
     if(_selectedPixabayIndex!=null){ _updateStatus('Selected Pixabay image'); }
+  }
+
+  // Search using only the selected category (independent of the text query)
+  Future<void> _searchPixabayByCategory(String category) async {
+    final cat = (category.isEmpty) ? 'all' : category;
+    setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
+    _updateStatus('Browsing $cat images on Pixabay...');
+    try{
+      final params = <String,String>{
+        'key': _pixabayApiKey,
+        'q': cat == 'all' ? 'popular' : cat, // ensure query present; biased by category
+        'image_type':'photo',
+        'safesearch':'true',
+        'order':'popular',
+        'per_page':'200',
+      };
+      if(cat != 'all') params['category'] = cat;
+      final uri = Uri.https('pixabay.com','/api/', params);
+      final resp = await http.get(uri, headers:{
+        HttpHeaders.acceptHeader:'application/json',
+        HttpHeaders.userAgentHeader:'CanvasBT'
+      });
+      if(resp.statusCode!=200) throw HttpException('HTTP ${resp.statusCode}');
+      final data = json.decode(resp.body) as Map<String,dynamic>;
+      final hits = data['hits'] as List<dynamic>? ?? const [];
+      final out = <_PixabayImage>[];
+      for(final h in hits){
+        if(h is! Map) continue;
+        final preview = (h['previewURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+        final full = (h['largeImageURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+        if(preview.isEmpty || full.isEmpty) continue;
+        final w = h['imageWidth'];
+        final ht = h['imageHeight'];
+        out.add(_PixabayImage(
+          id: '${h['id'] ?? ''}',
+          previewUrl: preview,
+          fullUrl: full,
+          width: w is int ? w : int.tryParse('$w') ?? 0,
+          height: ht is int ? ht : int.tryParse('$ht') ?? 0,
+          author: (h['user'] as String? ?? 'Pixabay User').trim(),
+        ));
+      }
+      if(mounted){ setState((){ _pixabayResults=out; _pixabayError = out.isEmpty ? 'No results' : null; }); }
+      _updateStatus(out.isEmpty ? 'No results' : 'Found ${out.length} images');
+    }catch(e){ if(mounted){ setState(()=> _pixabayError='Search failed: $e'); } _updateStatus('Search failed'); }
+    finally{ if(mounted){ setState(()=> _isPixabaySearching=false); } }
   }
 
   Future<void> _useSelectedPixabayImage() async {
@@ -1559,25 +1614,61 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   }
 
   Widget _buildPixabaySearchRow(){
-    return Row(children:[
-      Expanded(child: TextField(
-        controller: _pixabaySearchController,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (_)=> _searchPixabayImages(),
-        decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search),
-          hintText: 'Search Pixabay (e.g. sunset)',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          contentPadding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
+    String _titleCase(String s){ if(s.isEmpty) return s; return s[0].toUpperCase()+s.substring(1); }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children:[
+      Row(children:[
+        Expanded(child: TextField(
+          controller: _pixabaySearchController,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_)=> _searchPixabayImages(),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: 'Search Pixabay (e.g. sunset)',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
+          ),
+        )),
+        const SizedBox(width:8),
+        SizedBox(height:44, child: ElevatedButton.icon(
+          onPressed: _isPixabaySearching? null : _searchPixabayImages,
+          icon: const Icon(Icons.search, size:18),
+          label: Text(_isPixabaySearching? 'Searching...' : 'Search'),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
+        )),
+      ]),
+      const SizedBox(height:8),
+      // Swipeable horizontal list of category buttons
+      SizedBox(
+        height: 40,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(right: 8.0),
+                child: Text('Categories:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+              ..._pixabayCategories.map((c){
+                final selected = _selectedPixabayCategory == c;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text(_titleCase(c)),
+                    selected: selected,
+                    selectedColor: Colors.teal.shade600,
+                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12),
+                    onSelected: (_){
+                      setState(()=> _selectedPixabayCategory = c);
+                      // Category triggers its own search independent of text field
+                      if(!_isPixabaySearching){ _searchPixabayByCategory(c); }
+                    },
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
         ),
-      )),
-      const SizedBox(width:8),
-      SizedBox(height:44, child: ElevatedButton.icon(
-        onPressed: _isPixabaySearching? null : _searchPixabayImages,
-        icon: const Icon(Icons.search, size:18),
-        label: Text(_isPixabaySearching? 'Searching...' : 'Search'),
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
-      )),
+      ),
     ]);
   }
 
