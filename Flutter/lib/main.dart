@@ -54,6 +54,14 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
+      // Keep UI consistent across devices by capping text scaling
+      builder: (context, child){
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(textScaler: const TextScaler.linear(1.0)),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: const EPaperImageSender(),
     );
   }
@@ -701,60 +709,47 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     if(_showOnline){
       return _buildOnlineView();
     }
+    // Build a non-scrollable layout that fits within available height.
+    final screenH = MediaQuery.of(context).size.height;
+    final topBarH = 36.0; // approx including padding
+    final actionBarH = 42.0;
+    final statusH = 48.0;
+    final progressH = _isSending ? 34.0 : 0.0;
+    // Remaining space for crop frame + preview panels region
+    final remaining = screenH - topBarH - actionBarH - statusH - progressH -  (MediaQuery.of(context).padding.top) - 100; // subtract app bar/header + margins
+    final frameAreaH = remaining.clamp(220.0, 340.0);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _connectedTopBar(),
-  const SizedBox(height: 2),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Show the crop workspace whenever we have a UI image (including startup from Library)
-                if (_uiOriginal != null)
-                  _buildCropFrame()
-                else
-                  Padding(
-                    padding: EdgeInsets.zero,
-                    child: SizedBox(
-                      height: 300, // match crop frame height - keep constant to prevent shift
-                      child: Center(
-                        child: _processedPngBytes != null
-                          ? FittedBox(
-                              fit: BoxFit.contain,
-                              child: _verticalFrame
-                                ? RotatedBox(quarterTurns: 3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-                                : Image.memory(_processedPngBytes!, fit: BoxFit.contain),
-                            )
-                          : Text(
-                              'Please select an image from Gallery, Library or Generate an Image from AI',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                _buildActionBar(),
-                const SizedBox(height: 10),
-                // Reduce available height slightly during sending to avoid overflow of progress bar
-                Padding(
-                  padding: EdgeInsets.only(bottom: _isSending ? 10 : 0),
-                  child: _buildPreviewAndSliders(),
-                ),
-                if (_isSending) ...[
-                  const SizedBox(height: 2),
-                  LinearProgressIndicator(value: _transferProgress/100),
-                  Text('$_transferProgress%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
-                ],
-                SizedBox(height: _isSending ? 0 : 4),
-                _statusCard(),
-              ],
-            ),
+        const SizedBox(height:2),
+        // Crop / Placeholder (fixed height based on calculation)
+        SizedBox(
+          height: frameAreaH,
+          child: _uiOriginal!=null ? _buildCropFrame() : Center(
+            child: _processedPngBytes!=null ? FittedBox(
+              fit: BoxFit.contain,
+              child: _verticalFrame
+                ? RotatedBox(quarterTurns:3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+                : Image.memory(_processedPngBytes!, fit: BoxFit.contain),
+            ) : Text('Select or generate an image', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
           ),
         ),
+        const SizedBox(height:4),
+        _buildActionBar(),
+        const SizedBox(height:6),
+        SizedBox(
+          height: 210,
+          child: _buildPreviewAndSliders(),
+        ),
+        if(_isSending)...[
+          const SizedBox(height:2),
+          LinearProgressIndicator(value: _transferProgress/100),
+          Text('$_transferProgress%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
+        ],
+        const SizedBox(height:4),
+        _statusCard(),
       ],
     );
   }
