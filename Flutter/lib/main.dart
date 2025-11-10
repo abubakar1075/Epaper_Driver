@@ -1246,7 +1246,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
         'image_type':'photo',
         'safesearch':'true',
         'order':'popular',
-        'per_page':'40',
+  'per_page':'200',
       });
       final resp = await http.get(uri, headers:{
         HttpHeaders.acceptHeader:'application/json',
