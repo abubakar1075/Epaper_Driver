@@ -162,9 +162,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   int? _selectedLibraryIndex; // selected index in library view
   bool _showLibrary = false; // toggle to show library screen when connected
   bool _showOnline = false; // toggle to show online images screen when connected
-  Future<List<String>>? _onlineImagesFuture; // cached future for online images
-  String? _selectedOnlineImageUrl; // selected online image URL
-  bool _isLoadingOnlineImage = false; // loading state for Use in Editor
+  // Pixabay state (replaces Google Drive online images)
+  static const String _pixabayApiKey = '53177368-45f6645edfdd15979265678fc';
+  final TextEditingController _pixabaySearchController = TextEditingController();
+  List<_PixabayImage> _pixabayResults = [];
+  int? _selectedPixabayIndex;
+  bool _isPixabaySearching = false;
+  bool _isPixabayImporting = false;
+  String? _pixabayError;
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -442,6 +447,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _connStateSub?.cancel(); _connStateSub = null;
     _connectionStatusTimer?.cancel();
     _aiPromptController.dispose();
+    _pixabaySearchController.dispose();
     _disconnectDevice();
     super.dispose();
   }
@@ -654,7 +660,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
           child: SizedBox(
             height: 32,
             child: ElevatedButton(
-              onPressed: (){ setState((){ _showOnline = true; _onlineImagesFuture ??= _fetchGitHubImages(); }); },
+              onPressed: (){ setState((){ _showOnline = true; _pixabayError = null; }); },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 backgroundColor: Colors.orange.shade500,
@@ -670,7 +676,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 children: [
                   Icon(Icons.cloud_download, size: 11),
                   SizedBox(width: 2),
-                  Text('Library', style: TextStyle(fontSize: 15)),
+                  Text('Pixabay', style: TextStyle(fontSize: 15)),
                 ],
               ),
             ),
@@ -1226,108 +1232,86 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     return 0; // Equal
   }
 
-  // Select an online image (just track selection, don't download yet)
-  void _selectOnlineImage(String imageUrl) {
-    if (_selectedOnlineImageUrl == imageUrl) {
-      // If already selected, deselect
-      setState(() {
-        _selectedOnlineImageUrl = null;
-        _isLoadingOnlineImage = false;
+  // Pixabay search
+  Future<void> _searchPixabayImages() async {
+    FocusScope.of(context).unfocus();
+    final q = _pixabaySearchController.text.trim();
+    if(q.isEmpty){ setState(()=> _pixabayError='Enter a search term'); return; }
+    setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
+    _updateStatus('Searching "$q" on Pixabay...');
+    try{
+      final uri = Uri.https('pixabay.com','/api/',{
+        'key': _pixabayApiKey,
+        'q': q,
+        'image_type':'photo',
+        'safesearch':'true',
+        'order':'popular',
+        'per_page':'40',
       });
-      return;
-    }
-
-    setState(() {
-      _selectedOnlineImageUrl = imageUrl;
-      _isLoadingOnlineImage = false; // Reset loading state when selecting new image
-    });
-    
-    _updateStatus('Image selected - press "Use in Editor" to load');
+      final resp = await http.get(uri, headers:{
+        HttpHeaders.acceptHeader:'application/json',
+        HttpHeaders.userAgentHeader:'CanvasBT'
+      });
+      if(resp.statusCode!=200) throw HttpException('HTTP ${resp.statusCode}');
+      final data = json.decode(resp.body) as Map<String,dynamic>;
+      final hits = data['hits'] as List<dynamic>? ?? const [];
+      final out = <_PixabayImage>[];
+      for(final h in hits){
+        if(h is! Map) continue;
+        final preview = (h['previewURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+        final full = (h['largeImageURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+        if(preview.isEmpty || full.isEmpty) continue;
+        final w = h['imageWidth'];
+        final ht = h['imageHeight'];
+        out.add(_PixabayImage(
+          id: '${h['id'] ?? ''}',
+          previewUrl: preview,
+            fullUrl: full,
+          width: w is int ? w : int.tryParse('$w') ?? 0,
+          height: ht is int ? ht : int.tryParse('$ht') ?? 0,
+          author: (h['user'] as String? ?? 'Pixabay User').trim(),
+        ));
+      }
+      if(mounted){ setState((){ _pixabayResults=out; if(out.isEmpty) _pixabayError='No results'; }); }
+      _updateStatus(out.isEmpty ? 'No results for "$q"' : 'Found ${out.length} images');
+    }catch(e){ if(mounted){ setState(()=> _pixabayError='Search failed: $e'); } _updateStatus('Search failed'); }
+    finally{ if(mounted){ setState(()=> _isPixabaySearching=false); } }
   }
 
-  // Use the selected online image in the editor (download and load)
-  Future<void> _useSelectedOnlineImage() async {
-    if (_selectedOnlineImageUrl == null) return;
-    
-    setState(() {
-      _isLoadingOnlineImage = true;
-    });
-    
-    try {
-      _updateStatus('Downloading image...');
-      
-      // Convert thumbnail URL to full-resolution download URL
-      String fullResUrl = _selectedOnlineImageUrl!;
-      if (_selectedOnlineImageUrl!.contains('thumbnail?id=')) {
-        final fileId = _selectedOnlineImageUrl!.split('id=')[1].split('&')[0];
-        fullResUrl = 'https://drive.google.com/uc?export=download&id=$fileId';
-      }
-      
-      final response = await http.get(Uri.parse(fullResUrl));
-      if (response.statusCode != 200) {
-        _updateStatus('Failed to download image (HTTP ${response.statusCode})');
-        setState(() {
-          _isLoadingOnlineImage = false;
-        });
-        return;
-      }
-      
-      // Create a temporary file
-      final tempDir = await getTemporaryDirectory();
-      String fileName = 'image';
-      try {
-        fileName = _selectedOnlineImageUrl!.split('/').last;
-        if (fileName.isEmpty || !fileName.contains('.')) {
-          fileName = 'online_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        }
-      } catch (_) {
-        fileName = 'online_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      }
-      
-      final tempFile = File('${tempDir.path}/online_${DateTime.now().millisecondsSinceEpoch}_$fileName');
-      await tempFile.writeAsBytes(response.bodyBytes);
-      
-      // Decode image to detect orientation AND load UI image - all before setState
-      final img.Image? decodedImage = img.decodeImage(response.bodyBytes);
-      bool isPortrait = false;
-      if (decodedImage != null) {
-        isPortrait = decodedImage.height > decodedImage.width;
-      }
-      
-      // Load UI image before setState to prevent flicker
-      final codec = await ui.instantiateImageCodec(response.bodyBytes);
-      final frame = await codec.getNextFrame();
-      final uiImage = frame.image;
-      
-      // Single setState with everything ready
-      if (mounted) {
-        setState(() {
-          _originalImage = tempFile;
-          _uiOriginal = uiImage;
-          _processedImage = null;
-          _processedBytes = null;
-          _processedPngBytes = null;
-          _showOnline = false; // Return to main view
-          _viewInitialized = false; // Force frame recompute
-          _selectedOnlineImageUrl = null; // Clear selection
-          _verticalFrame = isPortrait; // Auto-select orientation based on image
-        });
-        
-        // Calculate frame dimensions after first render
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _recomputeViewForCurrentFrame(context);
-          }
-        });
-      }
-      _updateStatus('Online image loaded into editor');
-    } catch (e) {
-      _updateStatus('Failed to load online image: $e');
-    } finally {
-      setState(() {
-        _isLoadingOnlineImage = false;
+  void _selectPixabayImage(int i){
+    if(i<0 || i>=_pixabayResults.length) return;
+    setState((){ _selectedPixabayIndex = (_selectedPixabayIndex==i) ? null : i; });
+    if(_selectedPixabayIndex!=null){ _updateStatus('Selected Pixabay image'); }
+  }
+
+  Future<void> _useSelectedPixabayImage() async {
+    final idx = _selectedPixabayIndex; if(idx==null) return;
+    final chosen = _pixabayResults[idx];
+    setState(()=> _isPixabayImporting=true);
+    _updateStatus('Downloading Pixabay image...');
+    try{
+      final resp = await http.get(Uri.parse(chosen.fullUrl), headers:{
+        HttpHeaders.userAgentHeader:'CanvasBT-app',
+        HttpHeaders.acceptHeader:'image/*'
       });
-    }
+      if(resp.statusCode!=200) throw HttpException('HTTP ${resp.statusCode}');
+      final bytes = resp.bodyBytes; if(bytes.isEmpty) throw const FormatException('Empty image');
+      final decoded = img.decodeImage(bytes); final portrait = decoded!=null && decoded.height>decoded.width;
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/pixabay_${chosen.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(bytes);
+      final codec = await ui.instantiateImageCodec(bytes); final frame = await codec.getNextFrame(); final uiImg = frame.image;
+      if(!mounted) return;
+      setState((){
+        _originalImage = file;
+        _uiOriginal = uiImg;
+        _processedImage = null; _processedBytes=null; _processedPngBytes=null;
+        _showOnline = false; _viewInitialized=false; _verticalFrame=portrait; _selectedPixabayIndex=null;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_){ if(mounted) _recomputeViewForCurrentFrame(context); });
+      _updateStatus('Loaded Pixabay image by ${chosen.author}');
+    }catch(e){ if(mounted){ setState(()=> _pixabayError='Import failed: $e'); } _updateStatus('Import failed'); }
+    finally{ if(mounted){ setState(()=> _isPixabayImporting=false); } }
   }
 
   // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
@@ -1545,424 +1529,87 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     _deleteLibraryEntryFiles(entry);
   }
 
-  // Online images view - shows images from Google Drive folder
+  // Online view now shows Pixabay search/results
   Widget _buildOnlineView(){
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          color: Colors.blue.shade50,
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: (){ setState(()=> _showOnline = false); },
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  const Expanded(
-                    child: Text('Online Images', 
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: (){ setState((){ _onlineImagesFuture = _fetchGitHubImages(); }); },
-                    icon: const Icon(Icons.refresh),
-                    tooltip: 'Refresh images',
-                  ),
-                ],
-              ),
-              // Action buttons row - always show Use in Editor button
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _smallBtn('Use in Editor', 
-                    (_selectedOnlineImageUrl != null && !_isLoadingOnlineImage) ? _useSelectedOnlineImage : null, 
-                    icon: Icons.open_in_new, backgroundColor: Colors.green.shade600),
-                  const Spacer(),
-                  if (_isLoadingOnlineImage)
-                    const Text('Loading...', 
-                      style: TextStyle(fontSize: 12))
-                  else if (_selectedOnlineImageUrl != null)
-                    const Text('Selected - press button to download and load', 
-                      style: TextStyle(fontSize: 12))
-                  else
-                    const Text('Select an image to use in editor', 
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: FutureBuilder<List<String>>(
-            future: _onlineImagesFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text('Error loading images: ${snapshot.error}'),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => setState(() {}),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              
-              final imageUrls = snapshot.data ?? [];
-              if (imageUrls.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.folder_open, size: 64, color: Colors.orange),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Individual File Sharing Required',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Your folder is public, but individual files need sharing:\n\n'
-                          '1. Go to your Google Drive folder\n'
-                          '2. Select each image file\n'
-                          '3. Right-click → Share → "Anyone with the link"\n'
-                          '4. Refresh this page\n\n'
-                          'Or try uploading new images (they inherit folder permissions)',
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => setState(() => _onlineImagesFuture = _fetchGitHubImages()),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
-              
-              // Ultra-aggressive preloading - preload first 15 images in parallel
-              _preloadImages(imageUrls.take(15).toList());
-              
-              // Continue preloading remaining images in background
-              if (imageUrls.length > 15) {
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  _preloadImages(imageUrls.skip(15).toList());
-                });
-              }
-              
-              return GridView.builder(
-                padding: const EdgeInsets.all(6),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4, // 4 columns for more images and faster scrolling
-                  crossAxisSpacing: 4,
-                  mainAxisSpacing: 4,
-                  childAspectRatio: 1.0,
-                ),
-                // Performance optimizations
-                cacheExtent: 1000, // Cache more items for smoother scrolling
-                physics: const BouncingScrollPhysics(), // Faster scroll physics
-                itemCount: imageUrls.length,
-                itemBuilder: (context, index) {
-                  final imageUrl = imageUrls[index];
-                  final isSelected = _selectedOnlineImageUrl == imageUrl;
-                  return GestureDetector(
-                    onTap: () => _selectOnlineImage(imageUrl),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: isSelected ? Colors.blue.shade600 : Colors.grey.shade400, 
-                          width: isSelected ? 3.0 : 0.5
-                        ),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: _buildImageWithRetry(imageUrl),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
+    final String status;
+    if(_pixabayError!=null){ status = _pixabayError!; }
+    else if(_selectedPixabayIndex!=null){ final d=_pixabayResults[_selectedPixabayIndex!]; status='Selected • ${d.author}'; }
+    else if(_pixabayResults.isNotEmpty){ status='Tap a thumbnail to select'; }
+    else { status='Search Pixabay for images'; }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children:[
+      Row(children:[
+        _smallBtn('Back', ()=> setState(()=> _showOnline=false), icon: Icons.arrow_back, backgroundColor: Colors.grey.shade600),
+        const SizedBox(width:8),
+        Expanded(child: Text('Pixabay Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600))),
+        IconButton(onPressed: (_isPixabaySearching || _pixabaySearchController.text.trim().isEmpty)? null : _searchPixabayImages, icon: const Icon(Icons.refresh)),
+      ]),
+      const SizedBox(height:8),
+      _buildPixabaySearchRow(),
+      const SizedBox(height:8),
+      Expanded(child: _buildPixabayResultsSection()),
+      const SizedBox(height:8),
+      Row(children:[
+        _smallBtn(_isPixabayImporting? 'Importing' : 'Use in Editor', (_selectedPixabayIndex==null || _isPixabayImporting)? null : _useSelectedPixabayImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
+        const SizedBox(width:8),
+        Expanded(child: Text(status, maxLines:2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize:12))),
+      ]),
+      const SizedBox(height:6),
+      _statusCard(),
+    ]);
   }
 
-  // Fetch images from your public Google Drive folder  
-  Future<List<String>> _fetchGitHubImages() async {
-    try {
-      debugPrint('Loading images from your public Google Drive folder...');
-      
-      const folderId = '1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
-      
-      // Since your folder is already public, let's use a direct approach
-      
-      // Method 1: Try to access folder contents via web scraping
-      final folderUrl = 'https://drive.google.com/drive/folders/$folderId';
-      
-      try {
-        final response = await http.get(Uri.parse(folderUrl));
-        
-        if (response.statusCode == 200) {
-          final htmlContent = response.body;
-          final imageUrls = <String>[];
-          
-          // Look for file patterns in the HTML that indicate images
-          // Google Drive exposes file information in the page source
-          final filePattern = RegExp(r'"([a-zA-Z0-9_-]{25,})"[^"]*"([^"]*\.(?:jpg|jpeg|png|gif|webp))"', caseSensitive: false);
-          final matches = filePattern.allMatches(htmlContent);
-          
-          for (final match in matches) {
-            final fileId = match.group(1);
-            final fileName = match.group(2);
-            
-            if (fileId != null && fileName != null && _isValidImageFile(fileName)) {
-              debugPrint('Found valid image: $fileName with ID: $fileId');
-              // Use ultra-fast small thumbnail format
-              imageUrls.add('https://drive.google.com/thumbnail?id=$fileId&sz=w200-h200');
-            }
-          }
-          
-          // Alternative pattern - be more selective about file IDs
-          if (imageUrls.isEmpty) {
-            // Look for specific patterns that indicate image files in Google Drive
-            final patterns = [
-              // Pattern 1: Look for file IDs near image-related terms
-              RegExp(r'"([a-zA-Z0-9_-]{28,})"[^"]{0,100}(?:jpg|jpeg|png|gif|webp)', caseSensitive: false),
-              // Pattern 2: Look for file IDs in image context
-              RegExp(r'(?:jpg|jpeg|png|gif|webp)[^"]{0,50}"([a-zA-Z0-9_-]{28,})"', caseSensitive: false),
-            ];
-            
-            final seenIds = <String>{};
-            
-            for (final pattern in patterns) {
-              final matches = pattern.allMatches(htmlContent);
-              for (final match in matches) {
-                final fileId = match.group(1);
-                if (fileId != null && 
-                    fileId.length >= 28 && 
-                    fileId.length <= 50 && 
-                    !seenIds.contains(fileId) &&
-                    !fileId.contains('folder') && // Exclude folder IDs
-                    !fileId.startsWith('0B')) { // Exclude old format IDs
-                  seenIds.add(fileId);
-                  // Use ultra-fast small thumbnail format for quicker loading
-                  imageUrls.add('https://drive.google.com/thumbnail?id=$fileId&sz=w200-h200');
-                }
-              }
-            }
-            
-            debugPrint('Found ${imageUrls.length} carefully filtered image URLs');
-          }
-          
-          if (imageUrls.isNotEmpty) {
-            // Filter out duplicate URLs and very short IDs
-            final filteredUrls = imageUrls.toSet().where((url) {
-              final id = url.split('id=').last;
-              return id.length >= 25; // Google Drive file IDs are at least 25 characters
-            }).toList();
-            
-            // Return all discovered images from your Google Drive folder
-            debugPrint('Discovered ${filteredUrls.length} image URLs from your Google Drive');
-            return filteredUrls; // Show ALL images from your folder
-          }
-        }
-      } catch (e) {
-        debugPrint('Web scraping failed: $e');
-      }
-      
-      // Method 2: Fallback to known working approach
-      return _getKnownPublicImages();
-      
-    } catch (e) {
-      debugPrint('Error auto-discovering images: $e');
-      return _getKnownPublicImages();
-    }
+  Widget _buildPixabaySearchRow(){
+    return Row(children:[
+      Expanded(child: TextField(
+        controller: _pixabaySearchController,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_)=> _searchPixabayImages(),
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search),
+          hintText: 'Search Pixabay (e.g. sunset)',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          contentPadding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
+        ),
+      )),
+      const SizedBox(width:8),
+      SizedBox(height:44, child: ElevatedButton.icon(
+        onPressed: _isPixabaySearching? null : _searchPixabayImages,
+        icon: const Icon(Icons.search, size:18),
+        label: Text(_isPixabaySearching? 'Searching...' : 'Search'),
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
+      )),
+    ]);
   }
-  
-  // Access your public Google Drive folder directly
-  Future<List<String>> _getKnownPublicImages() async {
-    try {
-      debugPrint('Accessing your public Google Drive folder directly...');
-      
-      const folderId = '1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
-      
-      // For public folders, try to get the files using the folder's export URL
-      final exportUrl = 'https://drive.google.com/drive/folders/$folderId?usp=sharing';
-      
-      try {
-        final response = await http.get(Uri.parse(exportUrl));
-        debugPrint('Public folder access status: ${response.statusCode}');
-        
-        if (response.statusCode == 200) {
-          // Parse HTML to find actual file IDs
-          final htmlContent = response.body;
-          final imageUrls = <String>[];
-          
-          // Look for patterns like: "1ABC...XYZ"
-          final fileIdPattern = RegExp(r'"(1[a-zA-Z0-9_-]{32,42})"');
-          final matches = fileIdPattern.allMatches(htmlContent);
-          final seenIds = <String>{};
-          
-          for (final match in matches) {
-            final fileId = match.group(1);
-            if (fileId != null && 
-                fileId != folderId && 
-                fileId.length >= 33 && 
-                fileId.length <= 44 &&
-                !seenIds.contains(fileId)) {
-              
-              seenIds.add(fileId);
-              debugPrint('Found potential file: $fileId');
-              
-              // Use ultra-fast tiny thumbnail URL format for instant loading
-              imageUrls.add('https://drive.google.com/thumbnail?id=$fileId&sz=w200-h200');
-            }
-          }
-          
-          if (imageUrls.isNotEmpty) {
-            debugPrint('Found ${imageUrls.length} files in your public folder');
-            return imageUrls;
-          }
-        }
-      } catch (e) {
-        debugPrint('Direct folder access failed: $e');
-      }
-      
-      // If auto-discovery fails, provide manual setup instructions
-      debugPrint('Auto-discovery failed - folder may need individual file sharing');
-      return [];
-      
-    } catch (e) {
-      debugPrint('Error accessing public folder: $e');
-      return [];
-    }
-  }
-  
-  // Helper method to check if a filename is a valid image file
-  bool _isValidImageFile(String fileName) {
-    final lowerName = fileName.toLowerCase();
-    return lowerName.endsWith('.jpg') || 
-           lowerName.endsWith('.jpeg') || 
-           lowerName.endsWith('.png') || 
-           lowerName.endsWith('.gif') || 
-           lowerName.endsWith('.webp');
-  }
-  
-  // Ultra-fast preloading with memory optimization
-  void _preloadImages(List<String> imageUrls) {
-    // Preload in batches to avoid memory issues
-    for (int i = 0; i < imageUrls.length; i++) {
-      final url = imageUrls[i];
-      try {
-        // Use optimized network image with small cache
-        final imageProvider = NetworkImage(
-          url,
-          headers: const {
-            'User-Agent': 'Mozilla/5.0 (compatible)',
-            'Accept': 'image/*',
-            'Cache-Control': 'max-age=3600', // 1 hour cache
-          },
-        );
-        precacheImage(imageProvider, context);
-        
-        // Small delay between preloads to avoid overwhelming the network
-        if (i % 3 == 0 && i > 0) {
-          Future.delayed(const Duration(milliseconds: 50));
-        }
-      } catch (e) {
-        debugPrint('Failed to preload image: $url');
-      }
-    }
-  }
-  
-  // Build image widget with faster loading and caching
-  Widget _buildImageWithRetry(String imageUrl) {
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      // Ultra-aggressive performance optimizations
-      cacheWidth: 150, // Even smaller cache for lightning speed
-      cacheHeight: 150,
-      filterQuality: FilterQuality.none, // Fastest possible decoding
-      gaplessPlayback: true, // Smooth transitions
-      // Ultra-optimized headers for maximum speed
-      headers: const {
-        'User-Agent': 'Mozilla/5.0 (Mobile; compatible)',
-        'Accept': 'image/webp,image/jpeg,image/png,image/*;q=0.8',
-        'Accept-Encoding': 'gzip, deflate',
-        'Cache-Control': 'max-age=3600',
-        'Connection': 'keep-alive',
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          color: Colors.grey.shade100,
-          child: Center(
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.5,
-                color: Colors.blue.shade300,
-                // Remove progress calculation for faster rendering
-              ),
-            ),
+
+  Widget _buildPixabayResultsSection(){
+    if(_isPixabaySearching){ return const Center(child: CircularProgressIndicator()); }
+    if(_pixabayResults.isEmpty){ return Center(child: Text(_pixabayError??'Enter a search term above')); }
+    return GridView.builder(
+      padding: const EdgeInsets.all(6),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        childAspectRatio: 1,
+      ),
+      itemCount: _pixabayResults.length,
+      itemBuilder: (context, index){
+        final d = _pixabayResults[index]; final sel = index==_selectedPixabayIndex;
+        return GestureDetector(onTap: ()=> _selectPixabayImage(index), child: AnimatedContainer(
+          duration: const Duration(milliseconds:180),
+          decoration: BoxDecoration(
+            border: Border.all(color: sel? Colors.teal.shade600 : Colors.grey.shade400, width: sel? 3:0.5),
+            borderRadius: BorderRadius.circular(8),
           ),
-        );
-      },
-      errorBuilder: (context, error, stackTrace) {
-        debugPrint('Image load failed: $imageUrl');
-        
-        // Try alternative faster URL formats for Google Drive
-        final fileId = imageUrl.contains('id=') 
-            ? imageUrl.split('id=').last.split('&').first
-            : imageUrl.split('thumbnail?id=').last.split('&').first;
-        final alternativeUrl = 'https://drive.google.com/uc?export=view&id=$fileId';
-        
-        return Image.network(
-          alternativeUrl,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error2, stackTrace2) {
-            debugPrint('Both URLs failed for file ID: $fileId');
-            return Container(
-              color: Colors.grey.shade100,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.image_not_supported, color: Colors.grey, size: 32),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Not accessible',
-                    style: TextStyle(fontSize: 9, color: Colors.grey.shade600),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            );
-          },
-        );
+          child: ClipRRect(borderRadius: BorderRadius.circular(6), child: Stack(children:[
+            Positioned.fill(child: Image.network(d.previewUrl, fit: BoxFit.cover, headers: const { HttpHeaders.userAgentHeader:'CanvasBT-app' })),
+            Positioned(left:4,right:4,bottom:4, child: Container(
+              padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+              child: Text(d.author, maxLines:1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize:10)),
+            )),
+          ])),
+        ));
       },
     );
   }
@@ -3544,6 +3191,17 @@ class _LibraryEntry {
   final bool isDefaultAsset; // true if from bundled assets
   final String title; // display name
   const _LibraryEntry({required this.id, required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasVertical, required this.isDefaultAsset, required this.title});
+}
+
+// Simple data holder for Pixabay search results
+class _PixabayImage {
+  final String id;
+  final String previewUrl;
+  final String fullUrl;
+  final int width;
+  final int height;
+  final String author;
+  const _PixabayImage({required this.id, required this.previewUrl, required this.fullUrl, required this.width, required this.height, required this.author});
 }
 
 // Default asset list (landscape). Updated to new "Cat" and "Leaves" images under SamplePics.
