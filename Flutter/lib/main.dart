@@ -602,7 +602,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // Top bar visible while connected (image, library, navigation)
   Widget _connectedTopBar(){
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 1),
+      padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 1),
       child: Row(children:[
         Expanded(
           child: SizedBox(
@@ -725,49 +725,81 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     if(_showOnline){
       return _buildOnlineView();
     }
-    // Build a non-scrollable layout that fits within available height.
-    final screenH = MediaQuery.of(context).size.height;
-    final topBarH = 36.0; // approx including padding
-    final actionBarH = 42.0;
-    final statusH = 48.0;
-    final progressH = _isSending ? 34.0 : 0.0;
-    // Remaining space for crop frame + preview panels region
-    final remaining = screenH - topBarH - actionBarH - statusH - progressH -  (MediaQuery.of(context).padding.top) - 100; // subtract app bar/header + margins
-    final frameAreaH = remaining.clamp(220.0, 340.0);
+    // Adaptive, constraint-driven layout: guarantees everything fits without vertical scroll.
+    return LayoutBuilder(builder: (context, constraints){
+      final maxH = constraints.maxHeight;
+      // Fixed element heights
+      const double topBarH = 32.0; // button row height
+      const double spacingBelowTopBar = 4.0;
+      const double actionBarH = 40.0;
+      const double spacingBelowAction = 4.0; // gap before action bar
+      const double gapActionToPreview = 4.0; // gap after action bar
+      const double statusH = 46.0;
+      final double progressH = _isSending ? 30.0 : 0.0; // bar + text area
+      const double bottomSpacing = 4.0; // gap before status
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _connectedTopBar(),
-        const SizedBox(height:2),
-        // Crop / Placeholder (fixed height based on calculation)
-        SizedBox(
-          height: frameAreaH,
-          child: _uiOriginal!=null ? _buildCropFrame() : Center(
-            child: _processedPngBytes!=null ? FittedBox(
-              fit: BoxFit.contain,
-              child: _verticalFrame
-                ? RotatedBox(quarterTurns:3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-                : Image.memory(_processedPngBytes!, fit: BoxFit.contain),
-            ) : Text('Select or generate an image', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+      // Remaining for (crop frame) + (preview/sliders)
+  double remaining = maxH - topBarH - spacingBelowTopBar - actionBarH - spacingBelowAction - gapActionToPreview - statusH - progressH - bottomSpacing;
+      if(remaining < 160) remaining = 160; // enforce a sane minimum
+
+      // Allocate proportions: 58% for frame (with clamp), rest for preview section
+      double frameAreaH = (remaining * 0.58).clamp(200.0, 360.0);
+      double previewAreaH = remaining - frameAreaH;
+      // Ensure preview area not too small; if so, borrow from frame
+      const double minPreview = 140.0;
+      if(previewAreaH < minPreview){
+        final deficit = minPreview - previewAreaH;
+        final reducible = frameAreaH - 200.0; // don't go below 200 for frame
+        final take = deficit.clamp(0, reducible);
+        frameAreaH -= take;
+        previewAreaH += take;
+      }
+      // If sending, reserve a little extra by shaving preview slightly to ensure no overflow
+      if(_isSending && previewAreaH > minPreview){
+        previewAreaH -= 8; // small safety reduction
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: topBarH, child: _connectedTopBar()),
+          SizedBox(height: spacingBelowTopBar),
+          // Frame / main workspace
+          SizedBox(
+            height: frameAreaH,
+            child: _uiOriginal!=null ? _buildCropFrame() : Center(
+              child: _processedPngBytes!=null ? FittedBox(
+                fit: BoxFit.contain,
+                child: _verticalFrame
+                  ? RotatedBox(quarterTurns:3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
+                  : Image.memory(_processedPngBytes!, fit: BoxFit.contain),
+              ) : Text('Select or generate an image', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+            ),
           ),
-        ),
-        const SizedBox(height:4),
-        _buildActionBar(),
-        const SizedBox(height:6),
-        SizedBox(
-          height: 210,
-          child: _buildPreviewAndSliders(),
-        ),
-        if(_isSending)...[
-          const SizedBox(height:2),
-          LinearProgressIndicator(value: _transferProgress/100),
-          Text('$_transferProgress%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
+          SizedBox(height: spacingBelowAction),
+          SizedBox(height: actionBarH, child: _buildActionBar()),
+          SizedBox(height: gapActionToPreview),
+          SizedBox(
+            height: previewAreaH,
+            child: _buildPreviewAndSliders(),
+          ),
+          if(_isSending)
+            SizedBox(
+              height: progressH,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  LinearProgressIndicator(value: _transferProgress/100),
+                  const SizedBox(height: 2),
+                  Text('$_transferProgress%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
+                ],
+              ),
+            ),
+          const SizedBox(height:4),
+          SizedBox(height: statusH, child: _statusCard()),
         ],
-        const SizedBox(height:4),
-        _statusCard(),
-      ],
-    );
+      );
+    });
   }
 
   // Main action bar (orientation toggle, add to library, process, send, reset)
@@ -3058,29 +3090,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const SizedBox.shrink(),
-        toolbarHeight: _headerAspectRatio!=null ? MediaQuery.of(context).size.width / _headerAspectRatio! : 88,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        flexibleSpace: (_headerAsset!=null)
-            ? SafeArea(
-                top: false,
-                bottom: false,
-                child: SizedBox.expand(
-                  child: Image.asset(
-                    _headerAsset!,
-                    fit: BoxFit.fitWidth,
-                    alignment: Alignment.topCenter,
-                  ),
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight((_headerAspectRatio!=null ? MediaQuery.of(context).size.width / _headerAspectRatio! : 88) - 24),
+        child: (_headerAsset!=null)
+            ? Padding(
+                padding: const EdgeInsets.only(top: 0, bottom: 0),
+                child: Image.asset(
+                  _headerAsset!,
+                  fit: BoxFit.fitWidth,
+                  alignment: Alignment.topCenter,
                 ),
               )
-            : null,
+            : const SizedBox.shrink(),
       ),
   body: Stack(
         children: [
-          Padding(padding: const EdgeInsets.fromLTRB(12,4,12,12), child: _buildConnected()),
+          Padding(padding: const EdgeInsets.fromLTRB(12,5,12,8), child: _buildConnected()),
           if(_showIntro)
             Positioned.fill(
               child: Container(
