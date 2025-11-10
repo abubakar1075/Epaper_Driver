@@ -681,7 +681,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
                 children: [
                   Icon(Icons.cloud_download, size: 11),
                   SizedBox(width: 2),
-                  Text('Pixabay', style: TextStyle(fontSize: 15)),
+                  Text('Library', style: TextStyle(fontSize: 15)),
                 ],
               ),
             ),
@@ -705,7 +705,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _connectedTopBar(),
-        const SizedBox(height: 8),
+  const SizedBox(height: 2),
         Expanded(
           child: SingleChildScrollView(
             padding: EdgeInsets.zero,
@@ -1592,22 +1592,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
     else if(_pixabayResults.isNotEmpty){ status='Tap a thumbnail to select'; }
     else { status='Search Pixabay for images'; }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children:[
-      Row(children:[
+      Row(crossAxisAlignment: CrossAxisAlignment.center, children:[
         _smallBtn('Back', ()=> setState(()=> _showOnline=false), icon: Icons.arrow_back, backgroundColor: Colors.grey.shade600),
         const SizedBox(width:8),
-        Expanded(child: Text('Pixabay Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600))),
+        _smallBtn(_isPixabayImporting? 'Importing' : 'Use in Editor', (_selectedPixabayIndex==null || _isPixabayImporting)? null : _useSelectedPixabayImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
+        const SizedBox(width:8),
+        Expanded(child: Text('Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600))),
         IconButton(onPressed: (_isPixabaySearching || _pixabaySearchController.text.trim().isEmpty)? null : _searchPixabayImages, icon: const Icon(Icons.refresh)),
       ]),
-      const SizedBox(height:8),
+      const SizedBox(height:4),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+        child: Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+      ),
+      const SizedBox(height:6),
       _buildPixabaySearchRow(),
       const SizedBox(height:8),
       Expanded(child: _buildPixabayResultsSection()),
-      const SizedBox(height:8),
-      Row(children:[
-        _smallBtn(_isPixabayImporting? 'Importing' : 'Use in Editor', (_selectedPixabayIndex==null || _isPixabayImporting)? null : _useSelectedPixabayImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
-        const SizedBox(width:8),
-        Expanded(child: Text(status, maxLines:2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize:12))),
-      ]),
       const SizedBox(height:6),
       _statusCard(),
     ]);
@@ -3066,7 +3067,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               )
             : null,
       ),
-      body: Padding(padding: const EdgeInsets.all(12), child: _buildConnected()),
+  body: Padding(padding: const EdgeInsets.fromLTRB(12,4,12,12), child: _buildConnected()),
     );
 
   // First window removed; no _buildDisconnected() screen.
