@@ -78,6 +78,7 @@ flutter:
     - FramePic/
     - Framepic/
     - OTAFile/
+    - Logo/
 
 # Configure app icons generation
 flutter_launcher_icons:

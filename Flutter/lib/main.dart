@@ -74,7 +74,7 @@ class EPaperImageSender extends StatefulWidget {
   State<EPaperImageSender> createState() => _EPaperImageSenderState();
 }
 
-class _EPaperImageSenderState extends State<EPaperImageSender> {
+class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTickerProviderStateMixin {
   // =============================================================
   // CONSTANTS / STATIC CONFIG
   // =============================================================
@@ -139,6 +139,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   // Header/logo asset (FramePic/CanvasBT.*) to show in the AppBar
   String? _headerAsset;
   double? _headerAspectRatio; // width / height for dynamic AppBar height
+  // Splash intro state
+  bool _showIntro = true;
+  late final AnimationController _introCtrl;
+  late final Animation<double> _introScale;
+  late final Animation<double> _introOpacity;
 
   // =============================================================
   // INTERACTIVE FRAMING (user gestures manipulate these)
@@ -323,6 +328,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
   @override
   void initState(){
     super.initState();
+    // Initialize animated splash
+    _introCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
+    _introScale = CurvedAnimation(parent: _introCtrl, curve: Curves.easeOutBack);
+    _introOpacity = CurvedAnimation(parent: _introCtrl, curve: Curves.easeIn);
+  _introCtrl.forward();
+  Future.delayed(const Duration(milliseconds: 1800), (){ if(mounted){ setState(()=> _showIntro = false); } });
     _checkPermissions();
     // After first frame, initialize Library then load first image (if any)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -455,6 +466,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
 
   @override
   void dispose(){
+    if(_showIntro){
+      // If splash still showing, stop animation controller safely
+      try{ _introCtrl.stop(); }catch(_){ }
+    }
+    try{ _introCtrl.dispose(); }catch(_){ }
     _btStateSub?.cancel();
     _scanSub?.cancel(); _scanSub = null;
     _connStateSub?.cancel(); _connStateSub = null;
@@ -3062,7 +3078,39 @@ class _EPaperImageSenderState extends State<EPaperImageSender> {
               )
             : null,
       ),
-  body: Padding(padding: const EdgeInsets.fromLTRB(12,4,12,12), child: _buildConnected()),
+  body: Stack(
+        children: [
+          Padding(padding: const EdgeInsets.fromLTRB(12,4,12,12), child: _buildConnected()),
+          if(_showIntro)
+            Positioned.fill(
+              child: Container(
+                color: Colors.white,
+                child: Center(
+                  child: FadeTransition(
+                    opacity: _introOpacity,
+                    child: ScaleTransition(
+                      scale: _introScale,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: MediaQuery.of(context).size.width*0.55,
+                            height: MediaQuery.of(context).size.width*0.55,
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 24, offset: Offset(0,10))]),
+                            clipBehavior: Clip.antiAlias,
+                            child: Image.asset('Logo/Applogo.jpg', fit: BoxFit.cover),
+                          ),
+                          const SizedBox(height: 18),
+                          const SizedBox(width: 46, child: LinearProgressIndicator(minHeight: 4)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
 
   // First window removed; no _buildDisconnected() screen.
