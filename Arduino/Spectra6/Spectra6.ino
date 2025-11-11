@@ -677,6 +677,9 @@ void setup() {
   
   // Setup calibration button for threshold calibration
   pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP);
+  
+  // Setup boot button (GPIO0) for factory reset
+  pinMode(0, INPUT_PULLUP);
    
   // Initialize EPD pins and SPI - skip if already done during long press on wakeup
   if (!hardwareInitializedOnWake) {
@@ -732,21 +735,66 @@ void loop() {
   // Handle pcbLED/userLED blinking
   handleLedBlinking();
 
-  // Simple calibration button check for threshold calibration
+  // Boot/Calibration button (GPIO0) - combined handling
+  // Short press: Calibrate threshold
+  // Long press (5+ seconds): Factory reset (format flash and restart)
+  #define BOOT_BUTTON_PIN 0
   static bool lastButtonState = HIGH;
-  bool buttonState = digitalRead(CALIBRATION_BUTTON_PIN);
+  static unsigned long buttonPressStartTime = 0;
+  static bool factoryResetTriggered = false;
   
+  bool buttonState = digitalRead(CALIBRATION_BUTTON_PIN); // Same as BOOT_BUTTON_PIN (GPIO0)
+  
+  // Button just pressed
   if (lastButtonState == HIGH && buttonState == LOW) {
-    // Button pressed - calibrate threshold
-    uint16_t currentTouch = touchRead(TOUCH_PIN);
-    touchThreshold = currentTouch - 4;
-    if (touchThreshold < 10) touchThreshold = 10;
-    saveThreshold(touchThreshold);
-    Serial.printf("Threshold calibrated to: %d\n", touchThreshold);
-    // Flash LEDs (pcbLED and userLED) 3 times
-    for(int i=0; i<3; i++) {
-      digitalWrite(pcbLED, HIGH); digitalWrite(userLED, HIGH); delay(100);
-      digitalWrite(pcbLED, LOW);  digitalWrite(userLED, LOW);  delay(100);
+    buttonPressStartTime = millis();
+    factoryResetTriggered = false;
+    Serial.println("Button pressed...");
+  }
+  // Button still held - check for long press
+  else if (buttonState == LOW && !factoryResetTriggered) {
+    unsigned long pressDuration = millis() - buttonPressStartTime;
+    if (pressDuration >= 5000) {
+      // Long press detected - factory reset
+      factoryResetTriggered = true;
+      Serial.println("===========================================");
+      Serial.println("BOOT BUTTON HELD FOR 5+ SECONDS");
+      Serial.println("FACTORY RESET INITIATED");
+      Serial.println("===========================================");
+      
+      // Format LittleFS (SPIFFS)
+      Serial.println("Step 1: Formatting LittleFS...");
+      if (SPIFFS.format()) {
+        Serial.println("Step 1: LittleFS formatted successfully");
+      } else {
+        Serial.println("Step 1: LittleFS format failed");
+      }
+      
+      // Restart ESP32
+      Serial.println("Step 2: Restarting ESP32...");
+      Serial.flush();
+      delay(500);
+      ESP.restart();
+    }
+  }
+  // Button released
+  else if (lastButtonState == LOW && buttonState == HIGH) {
+    unsigned long pressDuration = millis() - buttonPressStartTime;
+    Serial.println("Button released");
+    
+    // Only calibrate if it was a short press (not a factory reset)
+    if (pressDuration < 5000 && !factoryResetTriggered) {
+      // Short press - calibrate threshold
+      uint16_t currentTouch = touchRead(TOUCH_PIN);
+      touchThreshold = currentTouch - 4;
+      if (touchThreshold < 10) touchThreshold = 10;
+      saveThreshold(touchThreshold);
+      Serial.printf("Threshold calibrated to: %d\n", touchThreshold);
+      // Flash LEDs (pcbLED and userLED) 3 times
+      for(int i=0; i<3; i++) {
+        digitalWrite(pcbLED, HIGH); digitalWrite(userLED, HIGH); delay(100);
+        digitalWrite(pcbLED, LOW);  digitalWrite(userLED, LOW);  delay(100);
+      }
     }
   }
   lastButtonState = buttonState;
