@@ -3477,10 +3477,11 @@ class _PixabayImage {
   const _PixabayImage({required this.id, required this.previewUrl, required this.fullUrl, required this.width, required this.height, required this.author});
 }
 
-// Default asset list (landscape). Updated to new "Cat" and "Leaves" images under SamplePics.
+// Default asset list with renamed images
 const List<String> kDefaultAssetImages = [
-  'SamplePics/Cat.png',
-  'SamplePics/Leaves.png',
+  'SamplePics/Image1.png',
+  'SamplePics/Image2.jpg',
+  'SamplePics/Image3.png',
 ];
 
 extension _LibraryPersistence on _EPaperImageSenderState {
