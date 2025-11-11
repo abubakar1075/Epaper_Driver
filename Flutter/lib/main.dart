@@ -1601,7 +1601,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           const SizedBox(width:6),
           _smallBtn('Delete', _selectedLibraryIndex==null ? null : _deleteSelectedLibraryItem, icon: Icons.delete, backgroundColor: Colors.red.shade600),
           const SizedBox(width:6),
-          _smallBtn(_isSending? 'Sending' : 'Send', _selectedLibraryIndex==null ? null : _sendSelectedLibraryItem, icon: Icons.send, backgroundColor: Colors.blue.shade600),
+          _smallBtn('Use in Editor', _selectedLibraryIndex==null ? null : _useSelectedLibraryItem, icon: Icons.open_in_new, backgroundColor: Colors.teal.shade600),
         ]),
         const SizedBox(height:8),
         Expanded(
@@ -1660,21 +1660,48 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     );
   }
 
-  void _sendSelectedLibraryItem(){
+  Future<void> _useSelectedLibraryItem() async {
     final idx = _selectedLibraryIndex; if(idx==null) return;
     final entry = _library[idx];
-    setState((){
-      // Clear any previously selected gallery image to prefer the library image on the main screen
-      _originalImage = null;
-      _uiOriginal = null;
-      _processedImage = entry.image.clone();
-      _processedBytes = Uint8List.fromList(entry.rawCodes); // raw codes length w*h
-      _showLibrary = false; // return to main view for progress indicators
-      _processedPngBytes = entry.pngBytes;
-      _verticalFrame = entry.wasVertical;
-      _viewInitialized = false; // force frame recompute next build
-    });
-    _sendImageData();
+    try{
+      // Decode image to detect orientation AND load UI image
+      final img.Image? decodedImage = img.decodeImage(entry.pngBytes);
+      bool isPortrait = false;
+      if (decodedImage != null) {
+        isPortrait = decodedImage.height > decodedImage.width;
+      }
+      
+      // Write PNG to a temp file
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/library_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(entry.pngBytes);
+      
+      // Load UI image before setState to prevent flicker
+      final codec = await ui.instantiateImageCodec(entry.pngBytes);
+      final frame = await codec.getNextFrame();
+      final uiImage = frame.image;
+      
+      // Single setState with everything ready
+      if (mounted) {
+        setState((){
+          _originalImage = file;
+          _processedImage = null;
+          _processedBytes = null;
+          _processedPngBytes = null;
+          _uiOriginal = uiImage;
+          _viewInitialized = false;
+          _showLibrary = false;
+          _verticalFrame = isPortrait;
+        });
+        
+        // Calculate frame dimensions after first render
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _recomputeViewForCurrentFrame(context);
+          }
+        });
+      }
+    }catch(e){ _updateStatus('Load error: $e'); }
   }
 
   void _deleteSelectedLibraryItem(){
