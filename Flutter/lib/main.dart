@@ -602,37 +602,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
 
   // Calculate average brightness of image area behind the frame for contrast adjustment
   void _updateFrameBorderColor() {
-    final imgObj = _uiOriginal;
+    // Use _processedImage if available since it's img.Image with pixel access
+    final imgObj = _processedImage;
     if (imgObj == null) {
       _frameBorderColor = Colors.black;
       return;
     }
 
-    // Sample points within the frame area (transformed to image coordinates)
+    // Sample a grid of points to calculate average brightness
     int sampleCount = 0;
     int totalBrightness = 0;
     const int samplesPerAxis = 10; // 10x10 grid = 100 samples
 
-    // Calculate frame bounds in image space
     for (int sy = 0; sy < samplesPerAxis; sy++) {
       for (int sx = 0; sx < samplesPerAxis; sx++) {
-        // Get workspace position within frame
-        final double frameX = _frameOrigin.dx + (_frameWidth * sx / samplesPerAxis);
-        final double frameY = _frameOrigin.dy + (_frameHeight * sy / samplesPerAxis);
-        
-        // Transform to image coordinates (inverse of view transformation)
-        final workspacePos = Offset(frameX, frameY);
-        final translatedPos = workspacePos - _viewTranslation;
-        
-        // Apply inverse rotation
-        final cosR = math.cos(-_viewRotation);
-        final sinR = math.sin(-_viewRotation);
-        final rotatedX = translatedPos.dx * cosR - translatedPos.dy * sinR;
-        final rotatedY = translatedPos.dx * sinR + translatedPos.dy * cosR;
-        
-        // Apply inverse scale
-        final imageX = (rotatedX / _viewScale).round();
-        final imageY = (rotatedY / _viewScale).round();
+        // Sample uniformly across the image
+        final imageX = ((sx + 0.5) * imgObj.width / samplesPerAxis).floor();
+        final imageY = ((sy + 0.5) * imgObj.height / samplesPerAxis).floor();
         
         // Check if within image bounds
         if (imageX >= 0 && imageX < imgObj.width && imageY >= 0 && imageY < imgObj.height) {
@@ -2052,6 +2038,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final now = DateTime.now();
     if(_isSending && !force && now.difference(_lastStatusUpdate).inMilliseconds < 350 && !message.startsWith('Progress')){ return; }
     _lastStatusUpdate = now;
+    
+    // Filter out errors, percentages, and data rates
+    final lowerMsg = message.toLowerCase();
+    if (lowerMsg.contains('error') || 
+        lowerMsg.contains('%') || 
+        lowerMsg.contains('kb/s') ||
+        lowerMsg.contains('progress:') ||
+        lowerMsg.contains('speed:') ||
+        lowerMsg.contains('battery =')) {
+      return; // Don't show these messages
+    }
+    
     if(mounted){ setState(()=> _statusMessage = message); }
   }
 
