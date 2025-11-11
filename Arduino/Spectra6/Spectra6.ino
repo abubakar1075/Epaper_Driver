@@ -781,8 +781,13 @@ void loop() {
     // If GPIO39 has a voltage divider from 5V, calculate the actual input voltage
     float gpio39Input = gpio39Voltage * 2.0;  // Assuming 2:1 voltage divider (adjust ratio as needed)
     
-    Serial.printf("sleep: %lu | Touch: %u | usb %.2fV\n", 
-                  timeRemaining, currentTouch, gpio39Input);
+    // Read battery voltage from BATTERY_PIN
+    int batteryRaw = analogRead(BATTERY_PIN);
+    float batteryAdcVoltage = (batteryRaw / 4095.0) * 3.3;  // Voltage at ADC pin
+    float batteryVoltage = batteryAdcVoltage * 2.0;  // Actual battery voltage (2:1 divider)
+    
+    Serial.printf("sleep: %lu | Touch: %u | usb %.2fV | bat: %.2fV\n", 
+                  timeRemaining, currentTouch, gpio39Input, batteryVoltage);
   }
 
   // Sleep after 30s of idle (no active image transfer), regardless of BLE connection state
