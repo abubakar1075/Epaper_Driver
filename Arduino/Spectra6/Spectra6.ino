@@ -786,19 +786,19 @@ void loop() {
   }
 
   // Sleep after 30s of idle (no active image transfer), regardless of BLE connection state
-  // BUT do not sleep if USB is connected (GPIO39 has voltage > 1V)
+  // BUT do not sleep if USB is connected (GPIO39 has voltage > 4.5V for charging)
   if ((millis() - connectionStartTime > connectionTimeout) && receivingSize && !dataReceived) {
     // Check GPIO39 voltage before sleeping
     int gpio39Raw = analogRead(39);
     float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
     float usbVoltage = gpio39Voltage * 2.0;  // 2:1 voltage divider
     
-    if (usbVoltage > 1.0) {
-      // USB connected - don't sleep, just reset the timer
-      Serial.printf("USB connected (%.2fV) - staying awake...\n", usbVoltage);
+    if (usbVoltage > 4.5) {
+      // USB charging detected - don't sleep, just reset the timer
+      Serial.printf("Charging detected (%.2fV) - staying awake...\n", usbVoltage);
       connectionStartTime = millis();  // Reset timer to prevent continuous checking
     } else {
-      // No USB - safe to sleep
+      // No charging - safe to sleep
       Serial.println("Going to sleep...");
       goToSleep();
     }
@@ -845,12 +845,12 @@ void loop() {
       float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
       float usbVoltage = gpio39Voltage * 2.0;  // 2:1 voltage divider
       
-      if (usbVoltage > 1.0) {
-        // USB connected - don't sleep
-        Serial.printf("USB connected (%.2fV) - staying awake...\n", usbVoltage);
+      if (usbVoltage > 4.5) {
+        // Charging detected - don't sleep
+        Serial.printf("Charging detected (%.2fV) - staying awake...\n", usbVoltage);
         connectionStartTime = millis();  // Reset timer
       } else {
-        // No USB - safe to sleep
+        // No charging - safe to sleep
         Serial.println("No new transfer. Going to sleep...");
         goToSleep();
       }
@@ -921,8 +921,8 @@ void handleLedBlinking() {
   float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
   float usbVoltage = gpio39Voltage * 2.0;  // Assuming 2:1 voltage divider
   
-  // Determine if charging (USB voltage > 1V)
-  isCharging = (usbVoltage > 1.0);
+  // Determine if charging (USB voltage > 4.5V)
+  isCharging = (usbVoltage > 4.5);
   
   // If touch value is less than threshold, keep LEDs ON continuously
   if (touchVal < touchThreshold) {
@@ -967,15 +967,15 @@ void handleLedBlinking() {
       // Save the time when we started the blink cycle
       previousMillis = currentMillis;
       
-      // Turn LEDs on for blinkDuration
-      digitalWrite(pcbLED, HIGH);
-      digitalWrite(userLED, HIGH);
+      // Turn LEDs on for blinkDuration (use analogWrite to ensure proper reset from PWM)
+      analogWrite(pcbLED, 255);
+      analogWrite(userLED, 255);
     } 
     // Check if it's time to turn the LED off
     else if (currentMillis - previousMillis >= blinkDuration && 
              currentMillis - previousMillis < blinkInterval) {
-      digitalWrite(pcbLED, LOW);
-      digitalWrite(userLED, LOW);
+      analogWrite(pcbLED, 0);
+      analogWrite(userLED, 0);
     }
   }
 }
