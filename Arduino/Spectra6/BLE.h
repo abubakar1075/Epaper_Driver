@@ -4,14 +4,16 @@
 #include <Arduino.h>
 #include <ArduinoBLE.h>
 #include <FS.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
+#define SPIFFS LittleFS  // Compatibility alias for seamless migration
 // OTA update support will be implemented in BLE.cpp using Update.h
 
 // External firmware version from main file
 extern const char* FIRMWARE_VERSION;
 // Current image slot management (defined in Spectra6.ino)
 extern int currentImageIndex;              // 1..3
-const char* getCurrentImagePath();         // Returns SPIFFS path for current image slot
+const char* getCurrentImagePath();         // Returns LittleFS path for current image slot
+const char* getImagePathForIndex(int idx); // Returns LittleFS path for specific slot
 void saveCurrentImageIndex(int index);     // Persist current slot
 int loadCurrentImageIndex();               // Load persisted slot
 void displayImageFromSPIFFS();             // Display current slot image

@@ -2,6 +2,8 @@
 #include "W21.h"
 #include "SPICom.h"
 #include <Update.h>
+#include <LittleFS.h>
+#define SPIFFS LittleFS  // Compatibility alias for seamless migration
 
 // Forward declaration of Color_get from W21.cpp
 extern unsigned char Color_get(unsigned char color);
@@ -120,18 +122,18 @@ void bleTick() {
 }
 
 //===============================================================
-// SPIFFS Functions
+// LittleFS Functions (SPIFFS compatibility maintained via alias)
 //===============================================================
 
 bool initSPIFFS() {
   if (!SPIFFS.begin(true)) {  // Format on failure
-    Serial.println("SPIFFS initialization failed!");
+    Serial.println("LittleFS initialization failed!");
     return false;
   }
   
-  Serial.print("SPIFFS total bytes: ");
+  Serial.print("LittleFS total bytes: ");
   Serial.println(SPIFFS.totalBytes());
-  Serial.print("SPIFFS used bytes: ");
+  Serial.print("LittleFS used bytes: ");
   Serial.println(SPIFFS.usedBytes());
   
   return true;
@@ -371,7 +373,7 @@ void onBLEDisconnected(BLEDevice central) {
   // Close file if still open on disconnect
   if (imageFile) {
     imageFile.close();
-    Serial.println("SPIFFS image file closed due to disconnect.");
+    Serial.println("LittleFS image file closed due to disconnect.");
   }
   
   // Start advertising again
@@ -494,9 +496,9 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                  isOtaTransfer ? "OTA" : "IMAGE", 
                  expectedDataSize, expectedDataSize / 1024.0);
 
-    // If OTA transfer, format SPIFFS first (before receiving data)
+    // If OTA transfer, format LittleFS first (before receiving data)
     if (isOtaTransfer && spiffsReady) {
-      Serial.println("\n========== PRE-OTA SPIFFS CLEANUP ==========");
+      Serial.println("\n========== PRE-OTA LITTLEFS CLEANUP ==========");
       
       // Backup touch threshold before format
       int savedThreshold = 70; // Default fallback value
@@ -518,29 +520,30 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         Serial.printf("No saved threshold found, using default: %d\n", savedThreshold);
       }
       
-      Serial.println("Formatting SPIFFS before OTA download...");
+      Serial.println("Formatting LittleFS before OTA download...");
       if (SPIFFS.format()) {
-        Serial.println("SPIFFS formatted successfully.");
+        Serial.println("LittleFS formatted successfully.");
         
-        // Re-mount SPIFFS after format
+        // Re-mount LittleFS after format
         spiffsReady = SPIFFS.begin(true);
         if (spiffsReady) {
-          Serial.println("SPIFFS re-mounted after format.");
+          Serial.println("LittleFS re-mounted after format.");
           
-          // Restore threshold to fresh SPIFFS
+          // Restore threshold to fresh LittleFS
           File f = SPIFFS.open("/thresh.txt", "w");
           if (f) {
             f.println(savedThreshold);
+            f.flush();  // Explicit flush for data integrity
             f.close();
-            Serial.printf("Threshold restored to SPIFFS: %d\n", savedThreshold);
+            Serial.printf("Threshold restored to LittleFS: %d\n", savedThreshold);
           } else {
             Serial.println("WARNING: Failed to restore threshold file.");
           }
         } else {
-          Serial.println("ERROR: Failed to re-mount SPIFFS after format!");
+          Serial.println("ERROR: Failed to re-mount LittleFS after format!");
         }
       } else {
-        Serial.println("ERROR: SPIFFS format failed!");
+        Serial.println("ERROR: LittleFS format failed!");
       }
       Serial.println("============================================\n");
     }
@@ -554,20 +557,34 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     transferStartTime = millis();
     lastFlushSize = 0;  // Reset flush tracking for new transfer
 
-    // Prepare SPIFFS file for writing incoming data (image or OTA)
+    // Prepare LittleFS file for writing incoming data (image or OTA)
     if (spiffsReady) {
       const char* path = isOtaTransfer ? OTA_PATH : getCurrentImagePath();
       
-      // Critical: Ensure file is fully removed before creating new one
-      // This prevents SPIFFS corruption after multiple overwrites (~20+ times)
+      // Critical: Clean up old files BEFORE creating new one to prevent fragmentation
+      // LittleFS handles this better than SPIFFS but still benefits from cleanup
+      if (!isOtaTransfer) {
+        // For image transfers, delete other image slots to free space
+        for (int i = 1; i <= 3; i++) {
+          if (i != currentImageIndex) {
+            const char* oldPath = getImagePathForIndex(i);
+            if (SPIFFS.exists(oldPath)) {
+              SPIFFS.remove(oldPath);
+              Serial.printf("[LittleFS] Cleaned up old slot: %s\n", oldPath);
+            }
+          }
+        }
+      }
+      
+      // Remove target file if it exists
       if (SPIFFS.exists(path)) {
-        Serial.printf("[SPIFFS] Removing old file: %s\n", path);
+        Serial.printf("[LittleFS] Removing old file: %s\n", path);
         SPIFFS.remove(path);
         delay(SPIFFS_DELAY_REMOVE_MS);
         
         // Verify deletion succeeded
         if (SPIFFS.exists(path)) {
-          Serial.println("[SPIFFS] WARNING: File still exists after remove, trying again...");
+          Serial.println("[LittleFS] WARNING: File still exists after remove, trying again...");
           SPIFFS.remove(path);
           delay(SPIFFS_DELAY_REMOVE_MS * 2);
         }
@@ -577,12 +594,12 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       imageFile = SPIFFS.open(path, FILE_WRITE);
       if (imageFile) {
         delay(SPIFFS_DELAY_OPEN_MS);
-        Serial.printf("[SPIFFS] File created: %s\n", path);
+        Serial.printf("[LittleFS] File created: %s\n", path);
       } else {
-        Serial.println("[SPIFFS] ERROR: Failed to create file");
+        Serial.println("[LittleFS] ERROR: Failed to create file");
       }
     } else {
-      Serial.println("SPIFFS not ready - cannot store incoming data.");
+      Serial.println("LittleFS not ready - cannot store incoming data.");
     }
 
     // Send acknowledgment for header/size
@@ -621,8 +638,11 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         }
         
         if (bytesToWrite > 0) {
-          imageFile.write(payload, bytesToWrite);
-          bytesWrittenToSPIFFS += bytesToWrite;
+          size_t written = imageFile.write(payload, bytesToWrite);
+          if (written != bytesToWrite) {
+            Serial.printf("[LittleFS] ERROR: Write failed! Expected %u, wrote %u\n", bytesToWrite, written);
+          }
+          bytesWrittenToSPIFFS += written;
           receivedDataSize += bytesToWrite;
           bytesReceivedFromBLE += bytesToWrite;
           
@@ -670,7 +690,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
         if (imageFile) {
           imageFile.close();
           if (isOtaTransfer) {
-            Serial.print("OTA data stored in SPIFFS at ");
+            Serial.print("OTA data stored in LittleFS at ");
             Serial.println(OTA_PATH);
             // Apply OTA update
             File otaFile = SPIFFS.open(OTA_PATH, FILE_READ);
@@ -712,7 +732,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                       f.close();
                       if (loadedValue > 0) {
                         savedThreshold = loadedValue;
-                        Serial.printf("Threshold backed up from SPIFFS: %d\n", savedThreshold);
+                        Serial.printf("Threshold backed up from LittleFS: %d\n", savedThreshold);
                       } else {
                         Serial.printf("Threshold file empty, using default: %d\n", savedThreshold);
                       }
@@ -723,21 +743,22 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                     Serial.printf("No saved threshold found, using default: %d\n", savedThreshold);
                   }
                   
-                  Serial.println("Cleaning up SPIFFS before restart...");
+                  Serial.println("Cleaning up LittleFS before restart...");
                   if (SPIFFS.format()) {
-                    Serial.println("SPIFFS formatted successfully.");
+                    Serial.println("LittleFS formatted successfully.");
                     
-                    // Restore threshold to fresh SPIFFS
+                    // Restore threshold to fresh LittleFS
                     File f = SPIFFS.open("/thresh.txt", "w");
                     if (f) {
                       f.println(savedThreshold);
+                      f.flush();  // Explicit flush
                       f.close();
-                      Serial.printf("Threshold restored to SPIFFS: %d\n", savedThreshold);
+                      Serial.printf("Threshold restored to LittleFS: %d\n", savedThreshold);
                     } else {
                       Serial.println("WARNING: Failed to restore threshold file.");
                     }
                   } else {
-                    Serial.println("WARNING: SPIFFS format failed, but continuing with restart.");
+                    Serial.println("WARNING: LittleFS format failed, but continuing with restart.");
                   }
                   
                   Serial.println("Restarting ESP32 to apply OTA update...");
@@ -753,7 +774,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
               }
             }
           } else {
-            Serial.print("Image data stored in SPIFFS at ");
+            Serial.print("Image data stored in LittleFS at ");
             Serial.println(getCurrentImagePath());
             dataReceived = true;
             sendAcknowledgment(ACK_COMPLETE);
@@ -786,7 +807,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     // Read data directly and write immediately (no queue buffering to prevent double-write bug)
     characteristic.readValue(buffer, dataLength);
     
-    // Write data to SPIFFS immediately
+    // Write data to LittleFS immediately
     if (imageFile && receivedDataSize < expectedDataSize) {
       // Calculate how much we can actually write (prevent overflow)
       size_t bytesToWrite = dataLength;
@@ -795,8 +816,11 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       }
       
       if (bytesToWrite > 0) {
-        imageFile.write(buffer, bytesToWrite);
-        bytesWrittenToSPIFFS += bytesToWrite;
+        size_t written = imageFile.write(buffer, bytesToWrite);
+        if (written != bytesToWrite) {
+          Serial.printf("[LittleFS] ERROR: Write failed! Expected %u, wrote %u\n", bytesToWrite, written);
+        }
+        bytesWrittenToSPIFFS += written;
         receivedDataSize += bytesToWrite;
         bytesReceivedFromBLE += bytesToWrite;
         
@@ -817,7 +841,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                    receivedDataSize / 1024, expectedDataSize / 1024, percentComplete);
     }
       
-    // Only flush the SPIFFS file at the very end to greatly improve performance
+    // Only flush the LittleFS file at the very end to greatly improve performance
     if (imageFile && (receivedDataSize >= expectedDataSize)) {
       imageFile.flush();
       delay(SPIFFS_DELAY_FLUSH_MS);
@@ -864,15 +888,15 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       // Close the file after writing all data
       if (imageFile) {
         // Critical: Ensure all data is flushed and synced before closing
-        Serial.println("[SPIFFS] Flushing final data...");
+        Serial.println("[LittleFS] Flushing final data...");
         imageFile.flush();
-        delay(SPIFFS_DELAY_FLUSH_MS * 2);
+        delay(SPIFFS_DELAY_FLUSH_MS * 2);  // Extra time for LittleFS to commit
         imageFile.close();
         delay(SPIFFS_DELAY_CLOSE_MS * 2);
-        Serial.println("[SPIFFS] File closed");
+        Serial.println("[LittleFS] File closed");
         
         if (isOtaTransfer) {
-          Serial.print("OTA data stored in SPIFFS at ");
+          Serial.print("OTA data stored in LittleFS at ");
           Serial.println(OTA_PATH);
           // Apply OTA update
           File otaFile = SPIFFS.open(OTA_PATH, FILE_READ);
@@ -925,21 +949,22 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
                   Serial.printf("No saved threshold found, using default: %d\n", savedThreshold);
                 }
                 
-                Serial.println("Cleaning up SPIFFS before restart...");
+                Serial.println("Cleaning up LittleFS before restart...");
                 if (SPIFFS.format()) {
-                  Serial.println("SPIFFS formatted successfully.");
+                  Serial.println("LittleFS formatted successfully.");
                   
-                  // Restore threshold to fresh SPIFFS
+                  // Restore threshold to fresh LittleFS
                   File f = SPIFFS.open("/thresh.txt", "w");
                   if (f) {
                     f.println(savedThreshold);
+                    f.flush();  // Explicit flush
                     f.close();
-                    Serial.printf("Threshold restored to SPIFFS: %d\n", savedThreshold);
+                    Serial.printf("Threshold restored to LittleFS: %d\n", savedThreshold);
                   } else {
                     Serial.println("WARNING: Failed to restore threshold file.");
                   }
                 } else {
-                  Serial.println("WARNING: SPIFFS format failed, but continuing with restart.");
+                  Serial.println("WARNING: LittleFS format failed, but continuing with restart.");
                 }
                 
                 Serial.println("Restarting ESP32 to apply OTA update...");
@@ -955,10 +980,10 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
             }
           }
         } else {
-          Serial.printf("[SPIFFS] Saved to %s\n", getCurrentImagePath());
+          Serial.printf("[LittleFS] Saved to %s\n", getCurrentImagePath());
           
           // Verify file size immediately after writing
-          delay(50); // Give SPIFFS time to finalize write
+          delay(100); // Give LittleFS time to finalize write (increased from 50ms)
           File verifyFile = SPIFFS.open(getCurrentImagePath(), FILE_READ);
           bool fileCorrupted = false;
           if (verifyFile) {
@@ -969,27 +994,33 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
             Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
             Serial.printf("Expected bytes:          %lu\n", expectedDataSize);
             Serial.printf("Bytes received from BLE: %lu\n", bytesReceivedFromBLE);
-            Serial.printf("Bytes written to SPIFFS: %lu\n", bytesWrittenToSPIFFS);
-            Serial.printf("Bytes in SPIFFS file:    %u\n", fileSize);
+            Serial.printf("Bytes written to LittleFS: %lu\n", bytesWrittenToSPIFFS);
+            Serial.printf("Bytes in LittleFS file:  %u\n", fileSize);
             
             if (fileSize == expectedDataSize) {
-              Serial.println("STATUS:                  OK - File verified");
+              Serial.println("STATUS:                  ✓ OK - File verified");
               Serial.println("===========================================\n");
               Serial.println("[VERIFY] ✓ File size matches, image will be displayed");
             } else {
-              Serial.println("STATUS:                  CORRUPTED - Image skipped");
+              Serial.println("STATUS:                  ✗ CORRUPTED - Image skipped");
+              Serial.printf("MISSING BYTES:           %d\n", (int)(expectedDataSize - fileSize));
               Serial.println("===========================================\n");
               
-              Serial.printf("[VERIFY] ✗ ERROR: Expected %lu, got %u bytes - SPIFFS CORRUPTION!\n", expectedDataSize, fileSize);
+              Serial.printf("[VERIFY] ✗ ERROR: Expected %lu, got %u bytes!\n", expectedDataSize, fileSize);
               Serial.println("[SKIP] Corrupted image will NOT be displayed");
+              
+              // Delete corrupted file to free space
+              SPIFFS.remove(getCurrentImagePath());
+              Serial.println("[CLEANUP] Corrupted file deleted from LittleFS");
+              
               fileCorrupted = true;
             }
           } else {
             Serial.println("\n========== BYTE TRACKING SUMMARY ==========");
             Serial.printf("Expected bytes:          %lu\n", expectedDataSize);
             Serial.printf("Bytes received from BLE: %lu\n", bytesReceivedFromBLE);
-            Serial.printf("Bytes written to SPIFFS: %lu\n", bytesWrittenToSPIFFS);
-            Serial.println("STATUS:                  ERROR - Cannot verify");
+            Serial.printf("Bytes written to LittleFS: %lu\n", bytesWrittenToSPIFFS);
+            Serial.println("STATUS:                  ✗ ERROR - Cannot verify");
             Serial.println("===========================================\n");
             Serial.println("[VERIFY] ✗ ERROR: Cannot open file for verification");
             fileCorrupted = true;
@@ -1006,7 +1037,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
           sendAcknowledgment(ACK_COMPLETE);
         }
       } else {
-        Serial.println("No SPIFFS file to close / print.");
+        Serial.println("No LittleFS file to close / print.");
       }
       
       // For image transfers, completion ack already sent above. For OTA, we send ack inside OTA branch.
@@ -1041,7 +1072,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
 // WARNING: This can produce a very large amount of output for large images.
 void printImageFileHex() {
   if (!spiffsReady) {
-    Serial.println("SPIFFS not ready - cannot read file.");
+    Serial.println("LittleFS not ready - cannot read file.");
     return;
   }
   File f = SPIFFS.open(IMAGE_PATH, FILE_READ);
@@ -1049,7 +1080,7 @@ void printImageFileHex() {
     Serial.println("Failed to open image file for reading.");
     return;
   }
-  Serial.println("\n--- Begin SPIFFS Image File Hex Dump ---");
+  Serial.println("\n--- Begin LittleFS Image File Hex Dump ---");
   const size_t dumpBuffer = 256; // read in chunks to limit RAM
   uint8_t temp[dumpBuffer];
   size_t index = 0;
@@ -1070,7 +1101,7 @@ void printImageFileHex() {
   }
   f.close();
   Serial.println();
-  Serial.println("--- End SPIFFS Image File Hex Dump ---\n");
+  Serial.println("--- End LittleFS Image File Hex Dump ---\n");
 }
 
 // Helper functions for optimized BLE transfer

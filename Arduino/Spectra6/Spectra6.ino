@@ -10,7 +10,8 @@ const char* FIRMWARE_VERSION = "1.33.0";
 #include <SPI.h>
 #include <ArduinoBLE.h>
 #include <FS.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
+#define SPIFFS LittleFS  // Compatibility alias for seamless migration
 #include "esp_sleep.h"  // For deep sleep timer wake
 #include "SPICom.h"
 #include "W21.h"
@@ -20,11 +21,9 @@ void handleLedBlinking();
 // LED aliases for readability
 const int pcbLED = LED2;   // board LED (e.g., GPIO4 on FirstPCB)
 const int userLED = 26;    // user LED on GPIO32 (mirrors pcbLED)
-// Print touch reading every 500ms
-static unsigned long lastTouchPrint = 0;
 
 // ============================
-// SPIFFS image slot management
+// LittleFS image slot management
 // ============================
 static const char* IMAGE1_PATH = "/Image_1";
 static const char* IMAGE2_PATH = "/Image_2";
@@ -33,7 +32,7 @@ static const char* CURRENT_IMAGE_FILE = "/current.txt";
 
 int currentImageIndex = 1; // 1..3
 
-static const char* getImagePathForIndex(int idx) {
+const char* getImagePathForIndex(int idx) {
   switch (idx) {
     case 1: return IMAGE1_PATH;
     case 2: return IMAGE2_PATH;
@@ -153,12 +152,6 @@ uint8_t getBatteryPercent() {
   // Cap at 100% to prevent overcharge indication
   if (percent > 100.0f) percent = 100.0f;
   return (uint8_t)(percent + 0.5f);
-}
-
-// Single function to read and print battery status at startup
-static void printBatteryStatus() {
-  uint8_t percent = getBatteryPercent();
-  Serial.printf("Battery: %u%%\n", percent);
 }
 
 // Simple threshold save/load
@@ -350,11 +343,11 @@ void handleSerialCommands() {
           Serial.println("===================================\n");
           
         } else if (serialCommand == "spiffs") {
-          Serial.println("\n========== SPIFFS INFORMATION ==========");
+          Serial.println("\n========== LITTLEFS INFORMATION ==========");
           
           if (!spiffsReady) {
-            Serial.println("ERROR: SPIFFS not mounted!");
-            Serial.println("========================================\n");
+            Serial.println("ERROR: LittleFS not mounted!");
+            Serial.println("==========================================\n");
           } else {
             // Get filesystem info
             size_t totalBytes = SPIFFS.totalBytes();
@@ -365,6 +358,11 @@ void handleSerialCommands() {
             Serial.printf("Total Size: %u bytes (%.2f KB)\n", totalBytes, totalBytes / 1024.0f);
             Serial.printf("Used: %u bytes (%.2f KB) [%.1f%%]\n", usedBytes, usedBytes / 1024.0f, usedPercent);
             Serial.printf("Free: %u bytes (%.2f KB)\n", freeBytes, freeBytes / 1024.0f);
+            Serial.println("----------------------------------------");
+            Serial.println("LittleFS Features:");
+            Serial.println("  ✓ Wear leveling enabled");
+            Serial.println("  ✓ Power-loss resilient");
+            Serial.println("  ✓ Reduced fragmentation");
             Serial.println("----------------------------------------");
             
             // List all files in SPIFFS
@@ -416,30 +414,30 @@ void handleSerialCommands() {
           
           Serial.println("========================================\n");
         } else if (serialCommand == "cleanspiffs") {
-          Serial.println("\n========== CLEAN SPIFFS ==========");
+          Serial.println("\n========== CLEAN LITTLEFS ==========");
           if (!spiffsReady) {
-            Serial.println("SPIFFS not mounted, attempting to mount...");
+            Serial.println("LittleFS not mounted, attempting to mount...");
             spiffsReady = SPIFFS.begin(true);
           }
           // Avoid formatting while an image payload is in progress
           if (!receivingSize) {
             Serial.println("ERROR: Image transfer in progress. Try again after it completes.");
-            Serial.println("===================================\n");
+            Serial.println("====================================\n");
           } else {
             // Optionally unmount before format
-            Serial.println("Formatting SPIFFS partition (this may take a few seconds)...");
+            Serial.println("Formatting LittleFS partition (this may take a few seconds)...");
             bool ok = SPIFFS.format();
             if (!ok) {
-              Serial.println("ERROR: SPIFFS.format() failed.");
-              Serial.println("===================================\n");
+              Serial.println("ERROR: LittleFS.format() failed.");
+              Serial.println("====================================\n");
             } else {
               // Re-mount and recreate defaults
               spiffsReady = SPIFFS.begin(true);
               if (!spiffsReady) {
-                Serial.println("ERROR: SPIFFS mount failed after format.");
-                Serial.println("===================================\n");
+                Serial.println("ERROR: LittleFS mount failed after format.");
+                Serial.println("====================================\n");
               } else {
-                Serial.println("SPIFFS formatted and mounted.");
+                Serial.println("LittleFS formatted and mounted.");
                 bool created = ensureDefaultImagesCreated();
                 currentImageIndex = loadCurrentImageIndex();
                 Serial.printf("Current Image after clean: Image_%d (%s)\n", currentImageIndex, getCurrentImagePath());
@@ -483,12 +481,12 @@ void setup() {
   // If woken by 5-minute RTC timer, quickly refresh image and return to deep sleep.
   esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
   if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
-    Serial.println("Wake cause: RTC timer. Refreshing image from SPIFFS...");
+    Serial.println("Wake cause: RTC timer. Refreshing image from LittleFS...");
     // Ensure board GPIOs are configured (power rails, indicator LED)
     if (!spiffsReady) {
       spiffsReady = SPIFFS.begin(true);
       if (!spiffsReady) {
-        Serial.println("SPIFFS mount failed during timer wake.");
+        Serial.println("LittleFS mount failed during timer wake.");
       }
     }
     // Ensure EPD pins and SPI are initialized before driving the display
@@ -543,12 +541,14 @@ void setup() {
   #endif
   Serial.println("==============================");
   
-  // Initialize SPIFFS (format on fail)
+  // Initialize LittleFS (format on fail)
   spiffsReady = SPIFFS.begin(true);
   if(!spiffsReady) {
-    Serial.println("SPIFFS mount failed!");
+    Serial.println("LittleFS mount failed!");
   } else {
-    Serial.println("SPIFFS mounted successfully.");
+    Serial.println("LittleFS mounted successfully.");
+    Serial.println("  ✓ Wear leveling active");
+    Serial.println("  ✓ Power-loss protection enabled");
     
     // Normal startup - load threshold and images
     touchThreshold = loadThreshold();
