@@ -10,6 +10,7 @@ const int ACK_PROGRESS = 0x02;
 const int ACK_COMPLETE = 0x03;
 const int ACK_ERROR = 0xFF;
 const int ACK_BATTERY = 0xB0; // battery status from device (ignored here)
+const int ACK_CHARGING = 0xB1; // charging status from device
 
 // BLE UUIDs - match with Arduino code
 const String UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";

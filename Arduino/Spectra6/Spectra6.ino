@@ -760,6 +760,28 @@ void loop() {
     Serial.println("BLE device disconnected!");
   }
   
+  // Send battery/charging status every second if connected
+  static unsigned long lastBatteryUpdate = 0;
+  if (BLE.connected() && (millis() - lastBatteryUpdate >= 1000)) {
+    lastBatteryUpdate = millis();
+    
+    // Check GPIO39 voltage to determine if charging
+    int gpio39Raw = analogRead(39);
+    float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
+    float usbVoltage = gpio39Voltage * 2.0;
+    
+    // Send charging status or battery percentage
+    extern BLECharacteristic txCharacteristic;
+    if (usbVoltage > 4.5) {
+      uint8_t chargingMsg[] = {0xB1, 0x01}; // ACK_CHARGING
+      txCharacteristic.writeValue(chargingMsg, sizeof(chargingMsg));
+    } else {
+      uint8_t batt = getBatteryPercent();
+      uint8_t battMsg[] = {0xB0, batt}; // ACK_BATTERY
+      txCharacteristic.writeValue(battMsg, sizeof(battMsg));
+    }
+  }
+  
   // Hold/reset the 30s idle timer while image data is actively being received
   // receivingSize == false means we're currently in the image payload phase
   if (!receivingSize) {
@@ -811,6 +833,10 @@ void loop() {
   
   // Poll BLE for events
   BLE.poll();
+  
+  // Check for charging state changes (minimal data - only on change)
+  extern void bleTick();
+  bleTick();
   
   // If we have new data received via BLE, display it and wait 3s before sleep
   if (dataReceived) {

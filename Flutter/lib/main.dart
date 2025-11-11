@@ -93,6 +93,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   static const int ACK_COMPLETE = 0x03;
   static const int ACK_ERROR = 0xFF;
   static const int ACK_BATTERY = 0xB0; // Battery percentage notification
+  static const int ACK_CHARGING = 0xB1; // Charging status notification
   // Transfer-type header values (1 byte)
   static const int TRANSFER_TYPE_IMAGE = 0x10;
   static const int TRANSFER_TYPE_OTA   = 0x20;
@@ -131,6 +132,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   bool _autoConnectTried = false; // ensure single auto-connect attempt per scan
   bool _mtuRequestedForThisConnection = false; // guard to avoid repeated MTU requests per connection
   int? _batteryPercent; // latest battery percent from device
+  bool _isCharging = false; // charging status from device
   // Periodic connection status for bottom bar
   Timer? _connectionStatusTimer;
   String _connectionStatusText = 'Not connected';
@@ -1869,7 +1871,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                 ),
               ),
               // Battery status bottom-left inside the "In Frame" panel (no separate bar)
-              if (title == 'In Frame' && _batteryPercent != null)
+              if (title == 'In Frame' && (_batteryPercent != null || _isCharging))
                 Positioned(
                   left: 4,
                   bottom: 4,
@@ -1882,9 +1884,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.battery_full, color: Colors.white, size: 14),
+                        Icon(
+                          _isCharging ? Icons.battery_charging_full : Icons.battery_full, 
+                          color: _isCharging ? Colors.green : Colors.white, 
+                          size: 14
+                        ),
                         const SizedBox(width: 4),
-                        Text('$_batteryPercent%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                        Text(
+                          _isCharging ? 'Charging' : '$_batteryPercent%', 
+                          style: TextStyle(
+                            color: _isCharging ? Colors.green : Colors.white, 
+                            fontSize: 11, 
+                            fontWeight: FontWeight.w600
+                          )
+                        ),
                       ],
                     ),
                   ),
@@ -2660,7 +2673,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           final battMatch = RegExp(r'Battery\s*=\s*(\d{1,3})').firstMatch(msg);
           if (battMatch != null) {
             final int batt = int.parse(battMatch.group(1)!).clamp(0, 100);
-            setState((){ _batteryPercent = batt; });
+            setState(() {
+              _batteryPercent = batt;
+              _isCharging = false; // Text battery update means not charging
+            });
             _updateStatus('$msg');
           } else {
             _updateStatus(msg);
@@ -2679,9 +2695,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       case ACK_BATTERY:
         if (data.length >= 2) {
           final int batt = data[1].clamp(0, 100);
-          setState((){ _batteryPercent = batt; });
+          setState(() {
+            _batteryPercent = batt;
+            _isCharging = false; // Battery percentage means not charging
+          });
           _updateStatus("Battery = $batt%");
         }
+        break;
+      case ACK_CHARGING:
+        // Charging status received
+        setState(() {
+          _batteryPercent = null; // Clear percentage when charging
+          _isCharging = true;
+        });
+        _updateStatus("Device is charging");
         break;
       case ACK_SIZE_RECEIVED:
         _updateStatus("Size received by device");

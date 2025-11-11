@@ -26,6 +26,7 @@ void displayImageFromSPIFFSPath(const char* path); // Display specific image pat
 #define ACK_ERROR 0xFF           // Error acknowledgment
 // New: battery percentage notification
 #define ACK_BATTERY 0xB0         // Battery percentage notification (value in next byte)
+#define ACK_CHARGING 0xB1        // Charging status notification (sent instead of battery % when charging)
 
 // BLE service and characteristic UUIDs
 extern const char* serviceUUID;
