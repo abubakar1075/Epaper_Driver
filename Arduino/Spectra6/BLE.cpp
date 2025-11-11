@@ -561,22 +561,7 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     if (spiffsReady) {
       const char* path = isOtaTransfer ? OTA_PATH : getCurrentImagePath();
       
-      // Critical: Clean up old files BEFORE creating new one to prevent fragmentation
-      // LittleFS handles this better than SPIFFS but still benefits from cleanup
-      if (!isOtaTransfer) {
-        // For image transfers, delete other image slots to free space
-        for (int i = 1; i <= 3; i++) {
-          if (i != currentImageIndex) {
-            const char* oldPath = getImagePathForIndex(i);
-            if (SPIFFS.exists(oldPath)) {
-              SPIFFS.remove(oldPath);
-              Serial.printf("[LittleFS] Cleaned up old slot: %s\n", oldPath);
-            }
-          }
-        }
-      }
-      
-      // Remove target file if it exists
+      // Remove target file if it exists (only the file being overwritten)
       if (SPIFFS.exists(path)) {
         Serial.printf("[LittleFS] Removing old file: %s\n", path);
         SPIFFS.remove(path);
