@@ -166,6 +166,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   double _frameHeight = 0;
   Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
   bool _verticalFrame = false; // portrait orientation toggle
+  Color _frameBorderColor = Colors.black; // dynamically adjusted for contrast
   // Slider-driven tuning
   final double _ditherStrength = 1.0; // 0=off .. 1=full
   final double _strongColorBoost = 1.0; // influences brightness/contrast/saturation mapping (default max)
@@ -599,6 +600,60 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     }catch(_){ return null; }
   }
 
+  // Calculate average brightness of image area behind the frame for contrast adjustment
+  void _updateFrameBorderColor() {
+    final imgObj = _uiOriginal;
+    if (imgObj == null) {
+      _frameBorderColor = Colors.black;
+      return;
+    }
+
+    // Sample points within the frame area (transformed to image coordinates)
+    int sampleCount = 0;
+    int totalBrightness = 0;
+    const int samplesPerAxis = 10; // 10x10 grid = 100 samples
+
+    // Calculate frame bounds in image space
+    for (int sy = 0; sy < samplesPerAxis; sy++) {
+      for (int sx = 0; sx < samplesPerAxis; sx++) {
+        // Get workspace position within frame
+        final double frameX = _frameOrigin.dx + (_frameWidth * sx / samplesPerAxis);
+        final double frameY = _frameOrigin.dy + (_frameHeight * sy / samplesPerAxis);
+        
+        // Transform to image coordinates (inverse of view transformation)
+        final workspacePos = Offset(frameX, frameY);
+        final translatedPos = workspacePos - _viewTranslation;
+        
+        // Apply inverse rotation
+        final cosR = math.cos(-_viewRotation);
+        final sinR = math.sin(-_viewRotation);
+        final rotatedX = translatedPos.dx * cosR - translatedPos.dy * sinR;
+        final rotatedY = translatedPos.dx * sinR + translatedPos.dy * cosR;
+        
+        // Apply inverse scale
+        final imageX = (rotatedX / _viewScale).round();
+        final imageY = (rotatedY / _viewScale).round();
+        
+        // Check if within image bounds
+        if (imageX >= 0 && imageX < imgObj.width && imageY >= 0 && imageY < imgObj.height) {
+          final pixel = imgObj.getPixel(imageX, imageY);
+          // Calculate perceived brightness (weighted RGB)
+          final brightness = (0.299 * pixel.r + 0.587 * pixel.g + 0.114 * pixel.b).round();
+          totalBrightness += brightness;
+          sampleCount++;
+        }
+      }
+    }
+
+    if (sampleCount > 0) {
+      final avgBrightness = totalBrightness / sampleCount;
+      // If image is dark (< 128), use light border; if bright, use dark border
+      _frameBorderColor = avgBrightness < 128 ? Colors.white : Colors.black;
+    } else {
+      _frameBorderColor = Colors.black;
+    }
+  }
+
   // Wrapper for triggering rebuild from extension helpers
   void _refresh(){ if(mounted){ setState(()=>{}); } }
 
@@ -826,6 +881,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                 // Don't reset _viewInitialized - preserve user's image position/zoom
               });
               _recomputeViewForCurrentFrame(context);
+              // Update frame border color after orientation change
+              setState(() => _updateFrameBorderColor());
             } : null,
             icon: Icons.screen_rotation,
             backgroundColor: Colors.indigo.shade600,
@@ -856,21 +913,28 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     // These match sizes used in crop frame and preview
     final double workspaceW = MediaQuery.of(context).size.width - 24; // body horizontal padding is 12 each side
     final double workspaceH = 300; // crop frame height - keep constant to prevent image shift
-    // Compute frame size same as _buildCropFrame
-    double frameW = workspaceW * 0.5;
-    double frameH;
+    
+    // Calculate base dimensions that maintain same diagonal size in both orientations
+    const double TARGET_DIAGONAL = 933.5;
+    double frameW, frameH;
+    
     if (_verticalFrame) {
+      // Portrait: 480 wide x 800 tall (swapped)
+      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
       frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
     } else {
+      // Landscape: 800 wide x 480 tall
+      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
       frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
     }
-    if (frameH > workspaceH) {
-      frameH = workspaceH * 0.5;
-      if (_verticalFrame) {
-        frameW = frameH * (IMAGE_HEIGHT / IMAGE_WIDTH);
-      } else {
-        frameW = frameH * (IMAGE_WIDTH / IMAGE_HEIGHT);
-      }
+    
+    // Scale down to fit workspace if needed
+    final scaleW = workspaceW * 0.9 / frameW;
+    final scaleH = workspaceH * 0.9 / frameH;
+    final scale = math.min(scaleW, scaleH);
+    if (scale < 1.0) {
+      frameW *= scale;
+      frameH *= scale;
     }
     final Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
     // Compute fit scale for min/max scale limits only, don't auto-adjust user's view
@@ -1942,6 +2006,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       _viewRotation = 0.0;
       // changing view invalidates processed cache
       _processedImage = null; _processedBytes = null; _processedPngBytes = null;
+      // Update frame border color after reset
+      _updateFrameBorderColor();
     });
   // auto disabled
   }
@@ -3206,20 +3272,29 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       child: LayoutBuilder(builder: (context, constraints) {
         final workspaceW = constraints.maxWidth;
         final workspaceH = constraints.maxHeight;
-        // Base frame width half of available
-        _frameWidth = workspaceW * 0.5;
+        
+        // Calculate base dimensions that maintain same diagonal size in both orientations
+        // For 800x480 display, diagonal = sqrt(800^2 + 480^2) = 933.5
+        const double TARGET_DIAGONAL = 933.5;
+        
         if (_verticalFrame) {
-          _frameHeight = _frameWidth * (IMAGE_WIDTH / IMAGE_HEIGHT); // portrait 800/480
+          // Portrait: 480 wide x 800 tall (swapped)
+          // Calculate dimensions maintaining the target diagonal
+          _frameWidth = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
+          _frameHeight = _frameWidth * (IMAGE_WIDTH / IMAGE_HEIGHT);
         } else {
-          _frameHeight = _frameWidth * (IMAGE_HEIGHT / IMAGE_WIDTH); // landscape 480/800
+          // Landscape: 800 wide x 480 tall
+          _frameWidth = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
+          _frameHeight = _frameWidth * (IMAGE_HEIGHT / IMAGE_WIDTH);
         }
-        if (_frameHeight > workspaceH) {
-          _frameHeight = workspaceH * 0.5;
-          if (_verticalFrame) {
-            _frameWidth = _frameHeight * (IMAGE_HEIGHT / IMAGE_WIDTH);
-          } else {
-            _frameWidth = _frameHeight * (IMAGE_WIDTH / IMAGE_HEIGHT);
-          }
+        
+        // Scale down to fit workspace if needed
+        final scaleW = workspaceW * 0.9 / _frameWidth;
+        final scaleH = workspaceH * 0.9 / _frameHeight;
+        final scale = math.min(scaleW, scaleH);
+        if (scale < 1.0) {
+          _frameWidth *= scale;
+          _frameHeight *= scale;
         }
         _frameOrigin = Offset(
           (workspaceW - _frameWidth)/2,
@@ -3242,6 +3317,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             (workspaceH - ih*fitScale)/2,
           );
           _viewInitialized = true;
+          // Update frame border color for initial image
+          _updateFrameBorderColor();
           // Cropped preview now paints directly; no PNG cache needed
         }
         return GestureDetector(
@@ -3255,6 +3332,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
               _viewTranslation = _startTranslation + (d.focalPoint - _startFocal);
               // any crop change invalidates processed cache
               _processedImage=null; _processedBytes=null; _processedPngBytes=null;
+              // Update frame border color based on image behind it
+              _updateFrameBorderColor();
             });
             // Cropped preview now uses GPU painter; no heavy work here
           },
@@ -3280,7 +3359,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                 child: IgnorePointer(
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black, width: 3),
+                      border: Border.all(color: _frameBorderColor, width: 3),
                     ),
                   ),
                 ),
@@ -3301,14 +3380,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                         icon: const Icon(Icons.add, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; }); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; _updateFrameBorderColor(); }); },
                         tooltip: 'Zoom In',
                       ),
                       IconButton(
                         icon: const Icon(Icons.remove, color: Colors.white, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; }); },
+                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; _updateFrameBorderColor(); }); },
                         tooltip: 'Zoom Out',
                       ),
                       IconButton(
