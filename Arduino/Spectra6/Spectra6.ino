@@ -192,6 +192,9 @@ unsigned long connectionStartTime = 0;
 const long connectionTimeout = 30000;  // 30 seconds timeout for inactivity
 bool bleConnected = false;
 
+// Flag to track if hardware was initialized during wakeup long press
+bool hardwareInitializedOnWake = false;
+
 // Periodic refresh interval: 5 days in microseconds
 static const uint64_t REFRESH_INTERVAL_US = 5ULL * 24ULL * 60ULL * 60ULL * 1000000ULL;
 
@@ -541,23 +544,111 @@ void setup() {
   #endif
   Serial.println("==============================");
   
-  // Initialize LittleFS (format on fail)
+  // Initialize LittleFS early to load threshold for touch detection
   spiffsReady = SPIFFS.begin(true);
+  if (spiffsReady) {
+    touchThreshold = loadThreshold();
+    Serial.printf("Touch threshold loaded: %d\n", touchThreshold);
+  }
+  
+  // Check if woken by touch - detect long press immediately
+  if (wakeCause == ESP_SLEEP_WAKEUP_TOUCHPAD) {
+    Serial.println("Wake cause: Touch pad");
+    
+    // Load current image index FIRST (needed for both short and long press)
+    if (spiffsReady) {
+      currentImageIndex = loadCurrentImageIndex();
+      Serial.print("Loaded current slot from LittleFS: Image_"); Serial.println(currentImageIndex);
+    }
+    
+    // Wait a moment for touch sensor to stabilize
+    delay(50);
+    
+    // Check if user is still holding the touch (long press detection)
+    unsigned long pressStart = millis();
+    bool stillTouched = true;
+    
+    while (millis() - pressStart < LONG_PRESS_DURATION) {
+      uint16_t touchVal = touchRead(TOUCH_PIN);
+      
+      if (touchVal >= touchThreshold) {
+        // Touch released before long press duration
+        stillTouched = false;
+        Serial.println("Touch released - short press detected");
+        break;
+      }
+      delay(50);  // Check every 50ms
+    }
+    
+    if (stillTouched) {
+      // Long press detected immediately after wake!
+      Serial.println("*** LONG PRESS DETECTED ON WAKEUP (2s) ***");
+      
+      if (spiffsReady) {
+        // Next image (1->2->3->1) - currentImageIndex already loaded above
+        currentImageIndex = (currentImageIndex % 3) + 1;
+        saveCurrentImageIndex(currentImageIndex);
+        Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
+        
+        // Initialize display hardware
+        pinMode(PIN_EPD_BUSY, INPUT);
+        pinMode(PIN_EPD_RST, OUTPUT);
+        pinMode(PIN_EPD_DC, OUTPUT);
+        pinMode(PIN_EPD_CS, OUTPUT);
+        digitalWrite(PIN_EPD_CS, HIGH);
+        digitalWrite(PIN_EPD_DC, HIGH);
+        digitalWrite(PIN_EPD_RST, HIGH);
+        
+#if defined(ARDUINO_XIAO_ESP32C3)
+        SPI.begin(EPD_SPI_SCK, EPD_SPI_MISO, EPD_SPI_MOSI, PIN_EPD_CS);
+        Serial.println("ESP32C3 detected - using explicit SPI pin configuration");
+#else
+        SPI.begin();
+        Serial.println("Using default SPI pin configuration");
+#endif
+        SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+        
+        // Display the new image
+        displayImageFromSPIFFS();
+        
+        Serial.println("Image changed via long press on wakeup");
+        
+        // Set flag to skip redundant hardware initialization
+        hardwareInitializedOnWake = true;
+      }
+    }
+  }
+  
+  // Re-initialize LittleFS (in case not done above)
+  if (!spiffsReady) {
+    spiffsReady = SPIFFS.begin(true);
+  }
+  
   if(!spiffsReady) {
     Serial.println("LittleFS mount failed!");
   } else {
-    Serial.println("LittleFS mounted successfully.");
-    Serial.println("  ✓ Wear leveling active");
-    Serial.println("  ✓ Power-loss protection enabled");
-    
-    // Normal startup - load threshold and images
-    touchThreshold = loadThreshold();
-    Serial.printf("Touch threshold: %d\n", touchThreshold);
+    if (!touchThreshold) {
+      // Load threshold if not already loaded (e.g., if LittleFS was just initialized)
+      touchThreshold = loadThreshold();
+      Serial.printf("Touch threshold: %d\n", touchThreshold);
+    }
     
     // Setup default images if not present and load current slot
-    bool createdDefaults = ensureDefaultImagesCreated();
-    currentImageIndex = loadCurrentImageIndex();
-    Serial.print("Current image slot: Image_"); Serial.println(currentImageIndex);
+    // Skip if images were just used during long press (we know they exist)
+    bool createdDefaults = false;
+    if (!hardwareInitializedOnWake) {
+      createdDefaults = ensureDefaultImagesCreated();
+    } else {
+      Serial.println("Skipping default image check - images already verified during wakeup");
+    }
+    
+    // Load current index only if not already loaded (e.g., not loaded during touch wakeup)
+    if (!currentImageIndex || currentImageIndex < 1 || currentImageIndex > 3) {
+      currentImageIndex = loadCurrentImageIndex();
+      Serial.print("Loaded current slot from LittleFS: Image_"); Serial.println(currentImageIndex);
+    } else {
+      Serial.print("Current image slot already set: Image_"); Serial.println(currentImageIndex);
+    }
     
     if (createdDefaults) {
       // Show the first image after initial programming
@@ -568,25 +659,30 @@ void setup() {
   // Setup calibration button for threshold calibration
   pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP);
    
-  // Initialize EPD pins - but don't run any display commands yet
-  pinMode(PIN_EPD_BUSY, INPUT);  // BUSY (panel drives this)
-  pinMode(PIN_EPD_RST, OUTPUT);  // RES
-  pinMode(PIN_EPD_DC, OUTPUT);   // DC  
-  pinMode(PIN_EPD_CS, OUTPUT);   // CS  
-  digitalWrite(PIN_EPD_CS, HIGH); // deselect
-  digitalWrite(PIN_EPD_DC, HIGH);
-  digitalWrite(PIN_EPD_RST, HIGH);
-   
-  // SPI init (explicit pins for ESP32C3)
+  // Initialize EPD pins and SPI - skip if already done during long press on wakeup
+  if (!hardwareInitializedOnWake) {
+    // Initialize EPD pins - but don't run any display commands yet
+    pinMode(PIN_EPD_BUSY, INPUT);  // BUSY (panel drives this)
+    pinMode(PIN_EPD_RST, OUTPUT);  // RES
+    pinMode(PIN_EPD_DC, OUTPUT);   // DC  
+    pinMode(PIN_EPD_CS, OUTPUT);   // CS  
+    digitalWrite(PIN_EPD_CS, HIGH); // deselect
+    digitalWrite(PIN_EPD_DC, HIGH);
+    digitalWrite(PIN_EPD_RST, HIGH);
+     
+    // SPI init (explicit pins for ESP32C3)
 #if defined(ARDUINO_XIAO_ESP32C3)
-  // Order: SCK, MISO, MOSI, SS
-  SPI.begin(EPD_SPI_SCK, EPD_SPI_MISO, EPD_SPI_MOSI, PIN_EPD_CS);
-  Serial.println("ESP32C3 detected - using explicit SPI pin configuration");
+    // Order: SCK, MISO, MOSI, SS
+    SPI.begin(EPD_SPI_SCK, EPD_SPI_MISO, EPD_SPI_MOSI, PIN_EPD_CS);
+    Serial.println("ESP32C3 detected - using explicit SPI pin configuration");
 #else
-  SPI.begin();
-  Serial.println("Using default SPI pin configuration");
+    SPI.begin();
+    Serial.println("Using default SPI pin configuration");
 #endif
-  SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0)); // 8MHz safer for large ePaper
+    SPI.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0)); // 8MHz safer for large ePaper
+  } else {
+    Serial.println("Hardware already initialized during wakeup - skipping redundant init");
+  }
   
   #ifdef TEST_IMAGE
      /************Full display*******************/
