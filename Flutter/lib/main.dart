@@ -1288,12 +1288,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     FocusScope.of(context).unfocus();
     final q = _pixabaySearchController.text.trim();
     if(q.isEmpty){ setState(()=> _pixabayError='Enter a search term'); return; }
+    
+    // Add "abstract" to the search query (hidden from user)
+    final searchQuery = 'abstract $q';
+    
     setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
     _updateStatus('Searching "$q" on Pixabay...');
     try{
       final params = <String,String>{
         'key': _pixabayApiKey,
-        'q': q,
+        'q': searchQuery,  // Use modified query with "abstract"
         'image_type':'photo',
         'safesearch':'true',
         'order':'popular',
@@ -1345,9 +1349,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
     _updateStatus('Browsing $cat images on Pixabay...');
     try{
+      // Add "abstract" to category search query (hidden from user)
+      final baseQuery = cat == 'all' ? 'popular' : cat;
+      final searchQuery = 'abstract $baseQuery';
+      
       final params = <String,String>{
         'key': _pixabayApiKey,
-        'q': cat == 'all' ? 'popular' : cat, // ensure query present; biased by category
+        'q': searchQuery, // Use modified query with "abstract"
         'image_type':'photo',
         'safesearch':'true',
         'order':'popular',
