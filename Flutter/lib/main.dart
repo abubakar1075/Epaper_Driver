@@ -3480,7 +3480,7 @@ class _PixabayImage {
 // Default asset list with renamed images
 const List<String> kDefaultAssetImages = [
   'SamplePics/Image1.png',
-  'SamplePics/Image2.jpg',
+  'SamplePics/Image2.png',
   'SamplePics/Image3.png',
 ];
 
