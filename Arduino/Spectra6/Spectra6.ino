@@ -187,6 +187,12 @@ unsigned long previousMillis = 0;
 const long blinkInterval = 1000;  // Blink every 1 second
 const long blinkDuration = 50;    // LED on for 50ms
 
+// Variables for LED fading (charging indication)
+unsigned long fadeStartMillis = 0;
+const long fadeCycleDuration = 2000;  // Total cycle: 1s fade in + 1s fade out
+int currentBrightness = 0;
+bool isCharging = false;
+
 // Variables for idle timeout (sleep after 30s unless actively receiving image)
 unsigned long connectionStartTime = 0;
 const long connectionTimeout = 30000;  // 30 seconds timeout for inactivity
@@ -483,6 +489,18 @@ void setup() {
   
   // If woken by 5-minute RTC timer, quickly refresh image and return to deep sleep.
   esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
+  
+  // Check if woken by GPIO39 (USB voltage detection)
+  if (wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+    Serial.begin(115200);
+    delay(100);
+    Serial.println("*************************************************************************");
+    Serial.println("***************** WAKEUP FROM USB PIN (GPIO39) *****************");
+    Serial.println("*************************************************************************");
+    // Continue normal initialization - don't go back to sleep immediately
+    // This allows BLE and charging indication to work
+  }
+  
   if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
     Serial.println("Wake cause: RTC timer. Refreshing image from LittleFS...");
     // Ensure board GPIOs are configured (power rails, indicator LED)
@@ -511,8 +529,9 @@ void setup() {
     // Display from SPIFFS if available, then sleep again
     displayImageFromSPIFFS();
     Serial.println("Refresh complete. Going back to deep sleep for next cycle...");
-    // Keep both timer and touch as wake sources
+    // Keep both timer, touch, and USB voltage as wake sources
     touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
+    esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_39, ESP_EXT1_WAKEUP_ANY_HIGH);
     esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
     Serial.flush();
     esp_deep_sleep_start();
@@ -747,20 +766,42 @@ void loop() {
     connectionStartTime = millis();
   }
 
-  // Show sleep countdown every 5 seconds
+  // Show sleep countdown every second
   static unsigned long lastCountdownPrint = 0;
   unsigned long timeElapsed = millis() - connectionStartTime;
   unsigned long timeRemaining = connectionTimeout > timeElapsed ? (connectionTimeout - timeElapsed) / 1000 : 0;
   
-  if (receivingSize && !dataReceived && (millis() - lastCountdownPrint >= 5000)) {
+  if (receivingSize && !dataReceived && (millis() - lastCountdownPrint >= 1000)) {
     lastCountdownPrint = millis();
-    Serial.printf("Sleep in %lu seconds\n", timeRemaining);
+    
+    // Read touch value and GPIO39 voltage for debugging
+    uint16_t currentTouch = touchRead(TOUCH_PIN);
+    int gpio39Raw = analogRead(39);  // Read GPIO39 ADC value (12-bit: 0-4095)
+    float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;  // Convert to voltage (assuming 3.3V reference)
+    // If GPIO39 has a voltage divider from 5V, calculate the actual input voltage
+    float gpio39Input = gpio39Voltage * 2.0;  // Assuming 2:1 voltage divider (adjust ratio as needed)
+    
+    Serial.printf("sleep: %lu | Touch: %u | usb %.2fV\n", 
+                  timeRemaining, currentTouch, gpio39Input);
   }
 
   // Sleep after 30s of idle (no active image transfer), regardless of BLE connection state
+  // BUT do not sleep if USB is connected (GPIO39 has voltage > 1V)
   if ((millis() - connectionStartTime > connectionTimeout) && receivingSize && !dataReceived) {
-    Serial.println("Going to sleep...");
-    goToSleep();
+    // Check GPIO39 voltage before sleeping
+    int gpio39Raw = analogRead(39);
+    float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
+    float usbVoltage = gpio39Voltage * 2.0;  // 2:1 voltage divider
+    
+    if (usbVoltage > 1.0) {
+      // USB connected - don't sleep, just reset the timer
+      Serial.printf("USB connected (%.2fV) - staying awake...\n", usbVoltage);
+      connectionStartTime = millis();  // Reset timer to prevent continuous checking
+    } else {
+      // No USB - safe to sleep
+      Serial.println("Going to sleep...");
+      goToSleep();
+    }
   }
   
   // Poll BLE for events
@@ -797,10 +838,22 @@ void loop() {
       delay(10);
     }
     
-    // If no new transfer started, go to sleep
+    // If no new transfer started, check USB voltage before sleeping
     if (receivingSize) {
-      Serial.println("No new transfer. Going to sleep...");
-      goToSleep();
+      // Check GPIO39 voltage before sleeping
+      int gpio39Raw = analogRead(39);
+      float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
+      float usbVoltage = gpio39Voltage * 2.0;  // 2:1 voltage divider
+      
+      if (usbVoltage > 1.0) {
+        // USB connected - don't sleep
+        Serial.printf("USB connected (%.2fV) - staying awake...\n", usbVoltage);
+        connectionStartTime = millis();  // Reset timer
+      } else {
+        // No USB - safe to sleep
+        Serial.println("No new transfer. Going to sleep...");
+        goToSleep();
+      }
     }
   }
   
@@ -841,6 +894,11 @@ void goToSleep() {
   // Configure touchpad as wakeup source
   // Use touch channel T9 which maps to GPIO32 on classic ESP32
   touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
+  
+  // Configure GPIO39 (USB voltage detection) as EXT1 wakeup source
+  // Wake when GPIO39 goes HIGH (USB connected/charging)
+  esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_39, ESP_EXT1_WAKEUP_ANY_HIGH);
+  
   // Also configure periodic 5-day RTC timer wake for image refresh
   esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
   
@@ -858,27 +916,66 @@ void handleLedBlinking() {
   unsigned long currentMillis = millis();
   uint16_t touchVal = touchRead(TOUCH_PIN);
   
+  // Check USB charging voltage on GPIO39
+  int gpio39Raw = analogRead(39);
+  float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
+  float usbVoltage = gpio39Voltage * 2.0;  // Assuming 2:1 voltage divider
+  
+  // Determine if charging (USB voltage > 1V)
+  isCharging = (usbVoltage > 1.0);
+  
   // If touch value is less than threshold, keep LEDs ON continuously
   if (touchVal < touchThreshold) {
-    digitalWrite(pcbLED, HIGH);
-    digitalWrite(userLED, HIGH);
-    return; // Exit early, no blinking needed
+    if (isCharging) {
+      // Use PWM for fading effect during charging
+      analogWrite(pcbLED, 255);
+      analogWrite(userLED, 255);
+    } else {
+      digitalWrite(pcbLED, HIGH);
+      digitalWrite(userLED, HIGH);
+    }
+    return; // Exit early
   }
   
-  // Otherwise, continue normal blinking behavior
-  // Check if it's time to turn the LED on
-  if (currentMillis - previousMillis >= blinkInterval) {
-    // Save the time when we started the blink cycle
-    previousMillis = currentMillis;
+  // If charging, show fading effect
+  if (isCharging) {
+    unsigned long fadeElapsed = currentMillis - fadeStartMillis;
     
-    // Turn LEDs on for blinkDuration
-    digitalWrite(pcbLED, HIGH);
-    digitalWrite(userLED, HIGH);
+    // Reset cycle if it's complete
+    if (fadeElapsed >= fadeCycleDuration) {
+      fadeStartMillis = currentMillis;
+      fadeElapsed = 0;
+    }
+    
+    // Calculate brightness (0-255) based on position in cycle
+    if (fadeElapsed < 1000) {
+      // First 1 second: fade in (0 to 255)
+      currentBrightness = map(fadeElapsed, 0, 1000, 0, 255);
+    } else {
+      // Next 1 second: fade out (255 to 0)
+      currentBrightness = map(fadeElapsed, 1000, 2000, 255, 0);
+    }
+    
+    // Apply PWM to both LEDs
+    analogWrite(pcbLED, currentBrightness);
+    analogWrite(userLED, currentBrightness);
   } 
-  // Check if it's time to turn the LED off
-  else if (currentMillis - previousMillis >= blinkDuration && 
-           currentMillis - previousMillis < blinkInterval) {
-    digitalWrite(pcbLED, LOW);
-    digitalWrite(userLED, LOW);
+  // Otherwise, continue normal blinking behavior
+  else {
+    // Check if it's time to turn the LED on
+    if (currentMillis - previousMillis >= blinkInterval) {
+      // Save the time when we started the blink cycle
+      previousMillis = currentMillis;
+      
+      // Turn LEDs on for blinkDuration
+      digitalWrite(pcbLED, HIGH);
+      digitalWrite(userLED, HIGH);
+    } 
+    // Check if it's time to turn the LED off
+    else if (currentMillis - previousMillis >= blinkDuration && 
+             currentMillis - previousMillis < blinkInterval) {
+      digitalWrite(pcbLED, LOW);
+      digitalWrite(userLED, LOW);
+    }
   }
 }
