@@ -172,13 +172,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   final double _strongColorBoost = 1.0; // influences brightness/contrast/saturation mapping (default max)
 
   // =============================================================
-  // IN-MEMORY LIBRARY (session only)
+  // IN-MEMORY SAVED IMAGES (session only)
   // =============================================================
   final List<_LibraryEntry> _library = [];
-  int? _selectedLibraryIndex; // selected index in library view
-  bool _showLibrary = false; // toggle to show library screen when connected
-  bool _showOnline = false; // toggle to show online images screen when connected
-  // Pixabay state (replaces Google Drive online images)
+  int? _selectedLibraryIndex; // selected index in saved images view
+  bool _showLibrary = false; // toggle to show SAVED IMAGES window when connected
+  bool _showOnline = false; // toggle to show LIBRARY (Pixabay online images) window when connected
+  // Pixabay state (Library window with online images)
   static const String _pixabayApiKey = '53177368-45f6645edfdd15979265678fc';
   final TextEditingController _pixabaySearchController = TextEditingController();
   List<_PixabayImage> _pixabayResults = [];
@@ -643,7 +643,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // Wrapper for triggering rebuild from extension helpers
   void _refresh(){ if(mounted){ setState(()=>{}); } }
 
-  // Top bar visible while connected (image, library, navigation)
+  // ========================= TOP BAR NAVIGATION BUTTONS =========================
+  // Three main windows when connected:
+  // 1. "Saved" button -> Opens SAVED IMAGES window (_showLibrary=true, shows _buildLibraryView)
+  // 2. "Library" button -> Opens LIBRARY window with Pixabay (_showOnline=true, shows _buildOnlineView)
+  // 3. "AI" button -> Opens AI generation window (_showAi=true, shows _buildAiView)
   Widget _connectedTopBar(){
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 1),
@@ -759,14 +763,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     );
   }
 
+  // Main connected view router
+  // Navigation: _showLibrary = SAVED IMAGES window, _showOnline = LIBRARY (Pixabay) window, _showAi = AI window
   Widget _buildConnected(){
     if(_showAi){
       return _buildAiView();
     }
-    if(_showLibrary){
+    if(_showLibrary){  // SAVED IMAGES window
       return _buildLibraryView();
     }
-    if(_showOnline){
+    if(_showOnline){  // LIBRARY window (Pixabay)
       return _buildOnlineView();
     }
     // Adaptive, constraint-driven layout: guarantees everything fits without vertical scroll.
@@ -1591,7 +1597,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     _updateStatus('No image to send. Pick, generate, or use Library.');
   }
 
-  // Grid of saved processed images (tap to select, then Send / Delete)
+  // ========================= SAVED IMAGES WINDOW =========================
+  // Grid of saved processed images (tap to select, then Use in Editor / Delete)
   Widget _buildLibraryView(){
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1627,22 +1634,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                             ? RotatedBox(quarterTurns: 3, child: Image.memory(e.pngBytes, fit: BoxFit.cover))
                             : Image.memory(e.pngBytes, fit: BoxFit.cover),
                       )),
-                      Positioned(
-                        left:4, top:4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
-                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-                          child: Text(e.wasVertical? 'Portrait' : 'Landscape', style: const TextStyle(color: Colors.white, fontSize:9, fontWeight: FontWeight.w500)),
-                        ),
-                      ),
-                      Positioned(
-                        right:4, bottom:4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
-                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-                          child: Text('${e.created.hour.toString().padLeft(2,'0')}:${e.created.minute.toString().padLeft(2,'0')}', style: const TextStyle(color: Colors.white,fontSize:10)),
-                        ),
-                      ),
                     ]),
                   ),
                 );
@@ -1715,7 +1706,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     _deleteLibraryEntryFiles(entry);
   }
 
-  // Online view now shows Pixabay search/results
+  // ========================= LIBRARY WINDOW (Pixabay online images) =========================
   Widget _buildOnlineView(){
     final String status;
     if(_pixabayError!=null){ status = _pixabayError!; }
