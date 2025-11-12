@@ -388,7 +388,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       _processedImage = e.image.clone();
       _processedBytes = Uint8List.fromList(e.rawCodes);
       _processedPngBytes = e.pngBytes;
-      _verticalFrame = e.wasVertical; // match orientation same as selected from Library
+      // Keep current orientation - don't restore saved orientation
       _viewInitialized = false;
     });
     // Decode PNG to ui.Image for the crop workspace so it renders in the first window
@@ -1132,13 +1132,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   Future<void> _useAiImage() async {
     if(_aiPngBytes==null) return;
     try{
-      // Decode image to detect orientation AND load UI image - all before setState
-      final img.Image? decodedImage = img.decodeImage(_aiPngBytes!);
-      bool isPortrait = false;
-      if (decodedImage != null) {
-        isPortrait = decodedImage.height > decodedImage.width;
-      }
-      
       // Write PNG to a temp file
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/ai_${DateTime.now().millisecondsSinceEpoch}.png');
@@ -1159,7 +1152,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _uiOriginal = uiImage;
           _viewInitialized = false;
           _showAi = false;
-          _verticalFrame = isPortrait; // Auto-select orientation based on image
+          // Keep current orientation - don't auto-change
         });
         
         // Calculate frame dimensions after first render
@@ -1461,7 +1454,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       });
       if(resp.statusCode!=200) throw HttpException('HTTP ${resp.statusCode}');
       final bytes = resp.bodyBytes; if(bytes.isEmpty) throw const FormatException('Empty image');
-      final decoded = img.decodeImage(bytes); final portrait = decoded!=null && decoded.height>decoded.width;
       final tempDir = await getTemporaryDirectory();
       final file = File('${tempDir.path}/pixabay_${chosen.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
       await file.writeAsBytes(bytes);
@@ -1471,7 +1463,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         _originalImage = file;
         _uiOriginal = uiImg;
         _processedImage = null; _processedBytes=null; _processedPngBytes=null;
-        _showOnline = false; _viewInitialized=false; _verticalFrame=portrait; _selectedPixabayIndex=null;
+        _showOnline = false; _viewInitialized=false; _selectedPixabayIndex=null;
+        // Keep current orientation - don't auto-change
       });
       WidgetsBinding.instance.addPostFrameCallback((_){ if(mounted) _recomputeViewForCurrentFrame(context); });
       _updateStatus('Loaded Pixabay image by ${chosen.author}');
@@ -1588,7 +1581,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         _processedImage = e.image.clone();
         _processedBytes = Uint8List.fromList(e.rawCodes);
         _processedPngBytes = e.pngBytes;
-        _verticalFrame = e.wasVertical;
+        // Keep current orientation - don't restore saved orientation
         _viewInitialized = false;
       });
       await _sendImageData();
@@ -1664,12 +1657,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final entry = _library[idx];
     try{
       // Decode image to detect orientation AND load UI image
-      final img.Image? decodedImage = img.decodeImage(entry.pngBytes);
-      bool isPortrait = false;
-      if (decodedImage != null) {
-        isPortrait = decodedImage.height > decodedImage.width;
-      }
-      
       // Write PNG to a temp file
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/library_${DateTime.now().millisecondsSinceEpoch}.png');
@@ -1690,7 +1677,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _uiOriginal = uiImage;
           _viewInitialized = false;
           _showLibrary = false;
-          _verticalFrame = isPortrait;
+          // Keep current orientation - don't auto-change
         });
         
         // Calculate frame dimensions after first render
@@ -2095,13 +2082,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       final file = File(pickedFile.path);
       final bytes = await file.readAsBytes();
       
-      // Decode to detect orientation
-      final img.Image? decodedImage = img.decodeImage(bytes);
-      bool isPortrait = false;
-      if (decodedImage != null) {
-        isPortrait = decodedImage.height > decodedImage.width;
-      }
-      
       // Load UI image
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
@@ -2117,7 +2097,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _transferProgress = 0; 
           _uiOriginal = uiImage;
           _viewInitialized = false;
-          _verticalFrame = isPortrait; // Auto-select orientation based on image
+          // Keep current orientation - don't auto-change
         });
         
         // Calculate frame dimensions after first render
