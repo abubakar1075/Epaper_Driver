@@ -216,6 +216,7 @@ int tapCount = 0;
 bool touchActive = false;
 unsigned long touchStartTime = 0;
 bool longPressTriggered = false;
+bool touchReleasedAfterLongPress = true; // Track if touch was released after last long press
 
 /**
  * Detect long press (2 seconds) and double taps on the capacitive touch sensor
@@ -251,9 +252,18 @@ void handleTapDetection() {
     unsigned long pressDuration = currentTime - touchStartTime;
     
     if (pressDuration >= LONG_PRESS_DURATION) {
+      // Check if touch was released after previous long press
+      if (!touchReleasedAfterLongPress) {
+        Serial.println("Ignoring second long press as there was no touch release");
+        longPressTriggered = true; // Mark as triggered to prevent repeated messages
+        tapCount = 0; // Reset tap counter
+        return; // Don't process this long press
+      }
+      
       // Long press detected - Next image
       Serial.println("*** LONG PRESS DETECTED (2s) ***");
       longPressTriggered = true;
+      touchReleasedAfterLongPress = false; // Mark that touch needs to be released
       tapCount = 0; // Reset tap counter
       
       // Next image (1->2->3->1)
@@ -276,6 +286,8 @@ void handleTapDetection() {
     if (longPressTriggered) {
       tapCount = 0;
       longPressTriggered = false;
+      touchReleasedAfterLongPress = true; // Touch has been released after long press
+      Serial.println("Touch released after long press - ready for next long press");
     }
     // Only count as valid tap if it was quick enough
     else if (tapDuration > TAP_DURATION) {
