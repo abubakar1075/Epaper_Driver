@@ -182,6 +182,29 @@ bool useBleImage = false;
 // Simple threshold management
 int touchThreshold = 70;  // Default threshold
 
+/**
+ * Perform capacitive touch sensor calibration
+ * This function can be called from physical button or BLE command
+ */
+void performCalibration() {
+  uint16_t currentTouch = touchRead(TOUCH_PIN);
+  touchThreshold = currentTouch - 4;
+  if (touchThreshold < 10) touchThreshold = 10;
+  saveThreshold(touchThreshold);
+  Serial.printf("*** CALIBRATION COMPLETE ***\n");
+  Serial.printf("Threshold calibrated to: %d\n", touchThreshold);
+  
+  // Flash LEDs (pcbLED and userLED) 3 times to indicate success
+  for(int i=0; i<3; i++) {
+    digitalWrite(pcbLED, HIGH); 
+    digitalWrite(userLED, HIGH); 
+    delay(100);
+    digitalWrite(pcbLED, LOW);  
+    digitalWrite(userLED, LOW);  
+    delay(100);
+  }
+}
+
 // Variables for LED blinking
 unsigned long previousMillis = 0;
 const long blinkInterval = 1000;  // Blink every 1 second
@@ -797,16 +820,8 @@ void loop() {
     // Only calibrate if it was a short press (not a factory reset)
     if (pressDuration < 5000 && !factoryResetTriggered) {
       // Short press - calibrate threshold
-      uint16_t currentTouch = touchRead(TOUCH_PIN);
-      touchThreshold = currentTouch - 4;
-      if (touchThreshold < 10) touchThreshold = 10;
-      saveThreshold(touchThreshold);
-      Serial.printf("Threshold calibrated to: %d\n", touchThreshold);
-      // Flash LEDs (pcbLED and userLED) 3 times
-      for(int i=0; i<3; i++) {
-        digitalWrite(pcbLED, HIGH); digitalWrite(userLED, HIGH); delay(100);
-        digitalWrite(pcbLED, LOW);  digitalWrite(userLED, LOW);  delay(100);
-      }
+      Serial.println("Physical button calibration triggered");
+      performCalibration();
     }
   }
   lastButtonState = buttonState;

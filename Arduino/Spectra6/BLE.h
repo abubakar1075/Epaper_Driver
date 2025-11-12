@@ -18,6 +18,7 @@ void saveCurrentImageIndex(int index);     // Persist current slot
 int loadCurrentImageIndex();               // Load persisted slot
 void displayImageFromSPIFFS();             // Display current slot image
 void displayImageFromSPIFFSPath(const char* path); // Display specific image path
+void performCalibration();                 // Calibrate capacitive touch sensor (defined in Spectra6.ino)
 
 // Constants for BLE acknowledgements
 #define ACK_SIZE_RECEIVED 0x01   // Size acknowledgment
@@ -27,6 +28,10 @@ void displayImageFromSPIFFSPath(const char* path); // Display specific image pat
 // New: battery percentage notification
 #define ACK_BATTERY 0xB0         // Battery percentage notification (value in next byte)
 #define ACK_CHARGING 0xB1        // Charging status notification (sent instead of battery % when charging)
+// Command codes for single-byte commands
+#define CMD_VERSION_QUERY 0x30   // Query firmware version
+#define CMD_CALIBRATE 0xC0       // Calibrate capacitive touch sensor
+#define ACK_CALIBRATE_OK 0xC1    // Calibration success acknowledgment
 
 // BLE service and characteristic UUIDs
 extern const char* serviceUUID;

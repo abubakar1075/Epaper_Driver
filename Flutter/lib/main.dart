@@ -1274,6 +1274,156 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       return null;
     }
   }
+
+  /// Send calibration command to Arduino via BLE
+  Future<void> _sendCalibrationCommand() async {
+    if (_connectedDevice == null || _rxCharacteristic == null) {
+      _showErrorDialog(
+        'Device Not Connected',
+        'Please connect to your e-paper frame before attempting calibration. Touch the frame to wake it up and establish a connection.',
+      );
+      return;
+    }
+
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Calibrating sensor...'),
+            ],
+          ),
+        ),
+      );
+
+      // Create a completer to wait for calibration acknowledgment
+      Completer<bool> calibrationCompleter = Completer<bool>();
+      
+      // Listen for calibration acknowledgment on TX characteristic
+      BluetoothCharacteristic? txChar;
+      for (var service in await _connectedDevice!.discoverServices()) {
+        for (var char in service.characteristics) {
+          if (char.uuid.toString().toLowerCase() == '6e400003-b5a3-f393-e0a9-e50e24dcca9e') {
+            txChar = char;
+            break;
+          }
+        }
+      }
+
+      late StreamSubscription subscription;
+      if (txChar != null) {
+        await txChar.setNotifyValue(true);
+        subscription = txChar.lastValueStream.listen((value) {
+          if (value.isNotEmpty && value[0] == 0xC1) {
+            // Calibration acknowledgment received (0xC1)
+            if (!calibrationCompleter.isCompleted) {
+              calibrationCompleter.complete(true);
+            }
+            subscription.cancel();
+          }
+        });
+      }
+
+      // Send calibration command (0xC0)
+      await _rxCharacteristic!.write(Uint8List.fromList([0xC0]));
+      print('Calibration command sent (0xC0)');
+
+      // Wait for acknowledgment with timeout
+      bool success = await calibrationCompleter.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          subscription.cancel();
+          return false;
+        },
+      );
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      // Show result
+      if (success) {
+        _showSuccessDialog(
+          'Calibration Complete! ✅',
+          'The capacitive touch sensor has been successfully calibrated. The frame\'s LED should have flashed 3 times to confirm. Your frame is now ready to use with optimal touch sensitivity.',
+        );
+      } else {
+        _showErrorDialog(
+          'Calibration Timeout',
+          'The frame did not respond to the calibration command. Please ensure:\n\n• The frame is powered on\n• Bluetooth connection is stable\n• Your finger is NOT touching the sensor during calibration\n\nTry again or use the physical boot button on the frame.',
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      Navigator.of(context).pop();
+      
+      print('Error sending calibration command: $e');
+      _showErrorDialog(
+        'Calibration Failed',
+        'An error occurred while sending the calibration command: $e\n\nPlease check your Bluetooth connection and try again.',
+      );
+    }
+  }
+
+  void _showSuccessDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green.shade600, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(color: Colors.green.shade700, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 15, height: 1.5)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red.shade600, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(color: Colors.red.shade700, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 15, height: 1.5)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
   
   Future<String?> _getOtaFileVersion() async {
     try {
@@ -3405,6 +3555,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             ),
             const Divider(height: 1),
             ListTile(
+              leading: const Icon(Icons.tune, color: Colors.orange, size: 28),
+              title: const Text('Calibrate Sensor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+              onTap: () {
+                Navigator.pop(context);
+                _showCalibrateSensorDialog();
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
               leading: const Icon(Icons.policy_outlined, color: Colors.green, size: 28),
               title: const Text('Policies', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
@@ -3608,6 +3768,230 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             child: Text(
               text,
               style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCalibrateSensorDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 650),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.orange.shade600, Colors.orange.shade400],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.tune, color: Colors.white, size: 32),
+                    SizedBox(width: 12),
+                    Text(
+                      'Calibrate Touch Sensor',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // What is Calibration
+                      const Text(
+                        'What is Sensor Calibration? 🎯',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'The e-paper frame uses a capacitive touch sensor to detect your finger touch. Calibration adjusts the sensor\'s sensitivity to ensure reliable touch detection in different environmental conditions.',
+                        style: TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      // When to Calibrate
+                      const Text(
+                        'When Should You Calibrate? 🤔',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('Touch sensor not responding to your finger'),
+                      _buildBulletPoint('Frame waking up randomly without touch'),
+                      _buildBulletPoint('After changing environmental conditions (temperature/humidity)'),
+                      _buildBulletPoint('After installing frame in a new location'),
+                      const SizedBox(height: 20),
+                      
+                      // How to Calibrate
+                      const Text(
+                        'How to Calibrate 📋',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Follow these simple steps:',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildNumberedPoint('1', 'Make sure your frame is powered on and connected via Bluetooth'),
+                      _buildNumberedPoint('2', 'Do NOT touch the sensor area during calibration'),
+                      _buildNumberedPoint('3', 'Tap the "Calibrate Now" button below'),
+                      _buildNumberedPoint('4', 'Wait for the frame\'s LED to flash 3 times confirming success'),
+                      const SizedBox(height: 20),
+                      
+                      // Important Notes
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Important',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              '• Keep your finger AWAY from the sensor during calibration\n'
+                              '• The calibration measures the baseline "no-touch" state\n'
+                              '• You can also press the physical boot button (GPIO0) on the back to calibrate',
+                              style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      // Pro Tip
+                      const Text(
+                        'Pro Tip 💡',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('If touch still doesn\'t work after calibration, try cleaning the sensor area with a soft cloth'),
+                      _buildBulletPoint('Metal objects near the sensor can interfere - ensure proper mounting'),
+                      _buildBulletPoint('Extreme temperatures may require recalibration'),
+                    ],
+                  ),
+                ),
+              ),
+              // Footer with Calibrate Button
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          _sendCalibrationCommand();
+                        },
+                        icon: const Icon(Icons.settings_remote, size: 20),
+                        label: const Text('Calibrate Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange.shade600,
+                          side: BorderSide(color: Colors.orange.shade600),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Close', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNumberedPoint(String number, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade700,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+              ),
             ),
           ),
         ],

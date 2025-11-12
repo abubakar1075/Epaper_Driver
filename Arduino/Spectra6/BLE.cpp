@@ -401,16 +401,16 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
   // Get the value length
   int dataLength = characteristic.valueLength();
   
-  // Check for version query command (0x30) - single byte command
+  // Check for single-byte commands
   if (dataLength == 1) {
     uint8_t command;
     characteristic.readValue(&command, 1);
     
-    if (command == 0x30) {
+    if (command == CMD_VERSION_QUERY) {
       // Version query command - send firmware version
       String version = FIRMWARE_VERSION;
       uint8_t versionMsg[32];
-      versionMsg[0] = 0x30; // Version response header
+      versionMsg[0] = CMD_VERSION_QUERY; // Version response header
       int versionLen = version.length();
       if (versionLen > 30) versionLen = 30; // Limit to 30 chars
       memcpy(&versionMsg[1], version.c_str(), versionLen);
@@ -418,6 +418,17 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       txCharacteristic.writeValue(versionMsg, versionLen + 1);
       Serial.print("Version query received, sent: ");
       Serial.println(version);
+      return;
+    }
+    else if (command == CMD_CALIBRATE) {
+      // Calibration command - perform capacitive touch sensor calibration
+      Serial.println("BLE calibration command received");
+      performCalibration();
+      
+      // Send acknowledgment back to Android
+      uint8_t calibrateAck[] = {ACK_CALIBRATE_OK};
+      txCharacteristic.writeValue(calibrateAck, sizeof(calibrateAck));
+      Serial.println("Calibration acknowledgment sent to Android");
       return;
     }
   }
