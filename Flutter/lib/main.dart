@@ -1634,6 +1634,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                             ? RotatedBox(quarterTurns: 3, child: Image.memory(e.pngBytes, fit: BoxFit.cover))
                             : Image.memory(e.pngBytes, fit: BoxFit.cover),
                       )),
+                      Positioned(
+                        left:4, top:4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
+                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+                          child: Text(e.wasVertical? 'Portrait' : 'Landscape', style: const TextStyle(color: Colors.white, fontSize:9, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
                     ]),
                   ),
                 );
@@ -1817,11 +1825,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           ),
           child: ClipRRect(borderRadius: BorderRadius.circular(6), child: Stack(children:[
             Positioned.fill(child: Image.network(d.previewUrl, fit: BoxFit.cover, headers: const { HttpHeaders.userAgentHeader:'CanvasBT-app' })),
-            Positioned(left:4,right:4,bottom:4, child: Container(
-              padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-              child: Text(d.author, maxLines:1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize:10)),
-            )),
           ])),
         ));
       },
