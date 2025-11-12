@@ -3391,31 +3391,53 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     color: Colors.black.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.add, color: Colors.white, size: 20),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale * 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; _updateFrameBorderColor(); }); },
-                        tooltip: 'Zoom In',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.remove, color: Colors.white, size: 20),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: (){ setState((){ _viewScale = (_viewScale / 1.25).clamp(_minScale, _maxScale); _processedImage=null; _processedBytes=null; _processedPngBytes=null; _updateFrameBorderColor(); }); },
-                        tooltip: 'Zoom Out',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minHeight: 36, minWidth: 36),
-                        onPressed: _resetView,
-                        tooltip: 'Reset View (also double-tap)',
-                      ),
-                    ],
+                  child: IconButton(
+                    icon: const Icon(Icons.info_outline, color: Colors.white, size: 24),
+                    padding: const EdgeInsets.all(8),
+                    constraints: const BoxConstraints(minHeight: 40, minWidth: 40),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Row(
+                            children: [
+                              Icon(Icons.touch_app, color: Colors.blue),
+                              SizedBox(width: 8),
+                              Text('How to Adjust Image'),
+                            ],
+                          ),
+                          content: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '• Drag with one finger to move',
+                                style: TextStyle(fontSize: 15, height: 1.6),
+                              ),
+                              Text(
+                                '• Pinch with two fingers to zoom',
+                                style: TextStyle(fontSize: 15, height: 1.6),
+                              ),
+                              Text(
+                                '• Rotate with two fingers to angle',
+                                style: TextStyle(fontSize: 15, height: 1.6),
+                              ),
+                              Text(
+                                '• Double-tap to reset view',
+                                style: TextStyle(fontSize: 15, height: 1.6),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Got it!'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    tooltip: 'Help',
                   ),
                 ),
               ),
