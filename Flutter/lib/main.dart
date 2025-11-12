@@ -1679,16 +1679,48 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final idx = _selectedLibraryIndex; if(idx==null) return;
     final entry = _library[idx];
     try{
-      // Decode image to detect orientation AND load UI image
+      // Saved images are already processed at exact display resolution (800x480 or 480x800)
+      // Load them and fit to current frame orientation (don't auto-rotate)
+      
       // Write PNG to a temp file
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/library_${DateTime.now().millisecondsSinceEpoch}.png');
       await file.writeAsBytes(entry.pngBytes);
       
-      // Load UI image before setState to prevent flicker
+      // Load UI image before setState
       final codec = await ui.instantiateImageCodec(entry.pngBytes);
       final frame = await codec.getNextFrame();
       final uiImage = frame.image;
+      
+      // Calculate workspace dimensions (same as in _recomputeViewForCurrentFrame)
+      final double workspaceW = MediaQuery.of(context).size.width - 24;
+      final double workspaceH = 300;
+      
+      // Calculate frame dimensions for CURRENT orientation (don't change it)
+      const double TARGET_DIAGONAL = 933.5;
+      double frameW, frameH;
+      
+      if (_verticalFrame) {
+        frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
+        frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
+      } else {
+        frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
+        frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
+      }
+      
+      // Scale down frame to fit workspace if needed
+      final scaleW = workspaceW * 0.9 / frameW;
+      final scaleH = workspaceH * 0.9 / frameH;
+      final scale = math.min(scaleW, scaleH);
+      if (scale < 1.0) {
+        frameW *= scale;
+        frameH *= scale;
+      }
+      
+      // Fit the saved image to the current frame
+      final iw = uiImage.width.toDouble();
+      final ih = uiImage.height.toDouble();
+      final fitScale = math.min(frameW / iw, frameH / ih);
       
       // Single setState with everything ready
       if (mounted) {
@@ -1698,16 +1730,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _processedBytes = null;
           _processedPngBytes = null;
           _uiOriginal = uiImage;
-          _viewInitialized = false;
+          // Keep current _verticalFrame - don't change orientation
+          _frameWidth = frameW;
+          _frameHeight = frameH;
+          _frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
+          
+          // Set view to fit the saved image in the current frame
+          _viewScale = fitScale;
+          _viewRotation = 0.0;
+          _viewTranslation = Offset(
+            (workspaceW - iw * fitScale) / 2,
+            (workspaceH - ih * fitScale) / 2,
+          );
+          _viewInitialized = true;
+          _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
+          _maxScale = fitScale * 80;
+          
           _showLibrary = false;
-          // Keep current orientation - don't auto-change
-        });
-        
-        // Calculate frame dimensions after first render
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _recomputeViewForCurrentFrame(context);
-          }
         });
       }
     }catch(e){ _updateStatus('Load error: $e'); }
