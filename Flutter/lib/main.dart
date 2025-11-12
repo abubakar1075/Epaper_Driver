@@ -1181,13 +1181,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // Get OTA file version
       String? otaVersion = await _getOtaFileVersion();
       
-      setState(() {
-        _deviceFirmwareVersion = deviceVersion;
-        _otaFileVersion = otaVersion;
-        _otaButtonEnabled = _shouldEnableOtaButton(deviceVersion, otaVersion);
-        _isCheckingVersion = false;
-        _versionCheckCompleted = true; // Mark as completed to prevent flickering
-      });
+      if (mounted) {
+        setState(() {
+          _deviceFirmwareVersion = deviceVersion;
+          _otaFileVersion = otaVersion;
+          _otaButtonEnabled = _shouldEnableOtaButton(deviceVersion, otaVersion);
+          _isCheckingVersion = false;
+          _versionCheckCompleted = true; // Mark as completed to prevent flickering
+        });
+      }
       
       if (deviceVersion != null && otaVersion != null) {
         if (_otaButtonEnabled) {
@@ -1199,11 +1201,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         _updateStatus('Version check completed');
       }
     } catch (e) {
-      setState(() {
-        _isCheckingVersion = false;
-        _otaButtonEnabled = true; // Enable by default on error
-        _versionCheckCompleted = true; // Mark as completed even on error
-      });
+      if (mounted) {
+        setState(() {
+          _isCheckingVersion = false;
+          _otaButtonEnabled = true; // Enable by default on error
+          _versionCheckCompleted = true; // Mark as completed even on error
+        });
+      }
       _updateStatus('Version check failed: $e');
     }
   }
@@ -2507,6 +2511,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   Future<void> _scanForDevices() async {
     if (_isScanning) return;
     
+    if (!mounted) return;
     setState(() {
       _devicesList.clear();
       _isScanning = true;
@@ -2519,9 +2524,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       var adapterState = await FlutterBluePlus.adapterState.first;
       if (adapterState != BluetoothAdapterState.on) {
         _updateStatus("Bluetooth is turned off");
-        setState(() {
-          _isScanning = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isScanning = false;
+          });
+        }
         return;
       }
       
@@ -2537,7 +2544,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           final devName = result.device.advName;
           final name = advName.isNotEmpty ? advName : devName;
           if (name.isNotEmpty && !_devicesList.contains(result.device)) {
-            setState(() { _devicesList.add(result.device); });
+            if (mounted) setState(() { _devicesList.add(result.device); });
           }
           // Immediate auto-connect to first device whose name starts with EPD
           if(!_autoConnectTried && _connectedDevice==null && !_isConnecting) {
@@ -2559,9 +2566,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // When scan completes
       await FlutterBluePlus.isScanning.where((val) => val == false).first;
       
-      setState(() {
-        _isScanning = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+        });
+      }
       await _scanSub?.cancel(); _scanSub = null;
       
       if (_devicesList.isEmpty) {
@@ -2578,9 +2587,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
     } catch (e) {
       _updateStatus("Error scanning: $e");
-      setState(() {
-        _isScanning = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isScanning = false;
+        });
+      }
       await _scanSub?.cancel(); _scanSub = null;
     }
   }
@@ -2589,6 +2600,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   Future<void> _connectToDevice(BluetoothDevice device) async {
     if (_isConnecting) return;
     
+    if (!mounted) return;
     setState(() {
       _isConnecting = true;
     });
@@ -2663,12 +2675,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       await txChar.setNotifyValue(true);
       txChar.onValueReceived.listen(_handleNotification);
       
-      setState(() {
-        _connectedDevice = device;
-        _rxCharacteristic = rxChar;
-        _isConnecting = false;
-  // Remain on the connected UI; first window was removed
-      });
+      if (mounted) {
+        setState(() {
+          _connectedDevice = device;
+          _rxCharacteristic = rxChar;
+          _isConnecting = false;
+    // Remain on the connected UI; first window was removed
+        });
+      }
       // If the popup was visible (user tapped while disconnected), close it
       if(_activeDialogContext != null){
         _dismissActiveDialog();
@@ -2712,9 +2726,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       _checkFirmwareVersion();
     } catch (e) {
       _updateStatus("Connection failed: $e");
-      setState(() {
-        _isConnecting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isConnecting = false;
+        });
+      }
     }
   }
 
@@ -2765,10 +2781,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           final battMatch = RegExp(r'Battery\s*=\s*(\d{1,3})').firstMatch(msg);
           if (battMatch != null) {
             final int batt = int.parse(battMatch.group(1)!).clamp(0, 100);
-            setState(() {
-              _batteryPercent = batt;
-              _isCharging = false; // Text battery update means not charging
-            });
+            if (mounted) {
+              setState(() {
+                _batteryPercent = batt;
+                _isCharging = false; // Text battery update means not charging
+              });
+            }
             _updateStatus('$msg');
           } else {
             _updateStatus(msg);
@@ -2787,19 +2805,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       case ACK_BATTERY:
         if (data.length >= 2) {
           final int batt = data[1].clamp(0, 100);
-          setState(() {
-            _batteryPercent = batt;
-            _isCharging = false; // Battery percentage means not charging
-          });
+          if (mounted) {
+            setState(() {
+              _batteryPercent = batt;
+              _isCharging = false; // Battery percentage means not charging
+            });
+          }
           _updateStatus("Battery = $batt%");
         }
         break;
       case ACK_CHARGING:
         // Charging status received
-        setState(() {
-          _batteryPercent = null; // Clear percentage when charging
-          _isCharging = true;
-        });
+        if (mounted) {
+          setState(() {
+            _batteryPercent = null; // Clear percentage when charging
+            _isCharging = true;
+          });
+        }
         _updateStatus("Device is charging");
         break;
       case ACK_SIZE_RECEIVED:
@@ -2817,17 +2839,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         break;
         
       case ACK_COMPLETE:
-        setState(() {
-          _isSending = false;
-          _transferProgress = 100;
-        });
+        if (mounted) {
+          setState(() {
+            _isSending = false;
+            _transferProgress = 100;
+          });
+        }
         _updateStatus("Transfer completed successfully");
         break;
         
       case ACK_ERROR:
-        setState(() {
-          _isSending = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isSending = false;
+          });
+        }
         _updateStatus("Error reported by device");
         break;
         
@@ -2927,10 +2953,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         if (elapsedTime > 0) {
           double speedKBps = (bytesSent / 1024) / (elapsedTime / 1000);
           
-          setState(() {
-            _transferProgress = progress;
-            _transferSpeed = speedKBps;
-          });
+          if (mounted) {
+            setState(() {
+              _transferProgress = progress;
+              _transferSpeed = speedKBps;
+            });
+          }
           
           // Only update detailed status every 10%
           if (progress % 10 == 0 || progress == 100) {
@@ -2950,9 +2978,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // We don't set _isSending to false here - wait for ACK_COMPLETE
     } catch (e) {
   _updateStatus("Error sending data: $e", force: true);
-      setState(() {
-        _isSending = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
     }
   }
 
@@ -3867,53 +3897,55 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     color: Colors.black.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: IconButton(
-                    icon: const Icon(Icons.info_outline, color: Colors.white, size: 24),
-                    padding: const EdgeInsets.all(8),
-                    constraints: const BoxConstraints(minHeight: 40, minWidth: 40),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Row(
-                            children: [
-                              Icon(Icons.touch_app, color: Colors.blue),
-                              SizedBox(width: 8),
-                              Text('How to Adjust Image'),
-                            ],
-                          ),
-                          content: const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '• Drag with one finger to move',
-                                style: TextStyle(fontSize: 15, height: 1.6),
-                              ),
-                              Text(
-                                '• Pinch with two fingers to zoom',
-                                style: TextStyle(fontSize: 15, height: 1.6),
-                              ),
-                              Text(
-                                '• Rotate with two fingers to angle',
-                                style: TextStyle(fontSize: 15, height: 1.6),
-                              ),
-                              Text(
-                                '• Double-tap to reset view',
-                                style: TextStyle(fontSize: 15, height: 1.6),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(),
-                              child: const Text('Got it!'),
+                  child: Builder(
+                    builder: (btnContext) => IconButton(
+                      icon: const Icon(Icons.info_outline, color: Colors.white, size: 24),
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(minHeight: 40, minWidth: 40),
+                      onPressed: () {
+                        showDialog(
+                          context: btnContext,
+                          builder: (ctx) => AlertDialog(
+                            title: Row(
+                              children: const [
+                                Icon(Icons.touch_app, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text('How to Adjust Image'),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                    tooltip: 'Help',
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  '• Drag with one finger to move',
+                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                ),
+                                Text(
+                                  '• Pinch with two fingers to zoom',
+                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                ),
+                                Text(
+                                  '• Rotate with two fingers to angle',
+                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                ),
+                                Text(
+                                  '• Double-tap to reset view',
+                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                child: const Text('Got it!'),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      tooltip: 'Help',
+                    ),
                   ),
                 ),
               ),
