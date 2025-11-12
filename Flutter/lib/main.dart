@@ -785,7 +785,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       const double spacingBelowAction = 4.0; // gap before action bar
       const double gapActionToPreview = 4.0; // gap after action bar
       const double statusH = 46.0;
-      final double progressH = _isSending ? 30.0 : 0.0; // bar + text area
+      const double progressH = 30.0; // Always reserve space to prevent layout shift
       const double bottomSpacing = 4.0; // gap before status
 
       // Remaining for (crop frame) + (preview/sliders)
@@ -804,10 +804,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         frameAreaH -= take;
         previewAreaH += take;
       }
-      // If sending, reserve a little extra by shaving preview slightly to ensure no overflow
-      if(_isSending && previewAreaH > minPreview){
-        previewAreaH -= 8; // small safety reduction
-      }
+      // Keep layout stable - don't adjust when sending
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
