@@ -1348,6 +1348,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         'safesearch':'true',
         'order':'popular',
         'per_page':'200',
+        'orientation': _verticalFrame ? 'vertical' : 'horizontal', // Filter by current orientation
       };
       if(_selectedPixabayCategory != 'all'){
         params['category'] = _selectedPixabayCategory;
@@ -1368,12 +1369,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         if(preview.isEmpty || full.isEmpty) continue;
         final w = h['imageWidth'];
         final ht = h['imageHeight'];
+        
+        // Additional client-side validation to ensure correct orientation
+        final width = w is int ? w : int.tryParse('$w') ?? 0;
+        final height = ht is int ? ht : int.tryParse('$ht') ?? 0;
+        final isPortrait = height > width;
+        
+        // Skip images that don't match the selected orientation
+        if(_verticalFrame && !isPortrait) continue;
+        if(!_verticalFrame && isPortrait) continue;
+        
         out.add(_PixabayImage(
           id: '${h['id'] ?? ''}',
           previewUrl: preview,
             fullUrl: full,
-          width: w is int ? w : int.tryParse('$w') ?? 0,
-          height: ht is int ? ht : int.tryParse('$ht') ?? 0,
+          width: width,
+          height: height,
           author: (h['user'] as String? ?? 'Pixabay User').trim(),
         ));
       }
@@ -1406,6 +1417,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         'safesearch':'true',
         'order':'popular',
         'per_page':'200',
+        'orientation': _verticalFrame ? 'vertical' : 'horizontal', // Filter by current orientation
       };
       if(cat != 'all') params['category'] = cat;
       final uri = Uri.https('pixabay.com','/api/', params);
@@ -1424,12 +1436,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         if(preview.isEmpty || full.isEmpty) continue;
         final w = h['imageWidth'];
         final ht = h['imageHeight'];
+        
+        // Additional client-side validation to ensure correct orientation
+        final width = w is int ? w : int.tryParse('$w') ?? 0;
+        final height = ht is int ? ht : int.tryParse('$ht') ?? 0;
+        final isPortrait = height > width;
+        
+        // Skip images that don't match the selected orientation
+        if(_verticalFrame && !isPortrait) continue;
+        if(!_verticalFrame && isPortrait) continue;
+        
         out.add(_PixabayImage(
           id: '${h['id'] ?? ''}',
           previewUrl: preview,
           fullUrl: full,
-          width: w is int ? w : int.tryParse('$w') ?? 0,
-          height: ht is int ? ht : int.tryParse('$ht') ?? 0,
+          width: width,
+          height: height,
           author: (h['user'] as String? ?? 'Pixabay User').trim(),
         ));
       }
