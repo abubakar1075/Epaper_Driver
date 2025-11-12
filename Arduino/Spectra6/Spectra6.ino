@@ -2,7 +2,7 @@
 //#define TEST_IMAGE
 
 // Firmware version - update this when you create new OTA files
-const char* FIRMWARE_VERSION = "1.35.0";
+const char* FIRMWARE_VERSION = "1.36.0";
 
 // GPIO pin definitions
 #define CALIBRATION_BUTTON_PIN 0  // GPIO 27 for threshold calibration
@@ -196,11 +196,11 @@ void performCalibration() {
   
   // Flash LEDs (pcbLED and userLED) 3 times to indicate success
   for(int i=0; i<3; i++) {
-    digitalWrite(pcbLED, HIGH); 
-    digitalWrite(userLED, HIGH); 
+    analogWrite(pcbLED, 255); 
+    analogWrite(userLED, 255); 
     delay(100);
-    digitalWrite(pcbLED, LOW);  
-    digitalWrite(userLED, LOW);  
+    analogWrite(pcbLED, 0);  
+    analogWrite(userLED, 0);  
     delay(100);
   }
 }
@@ -576,8 +576,8 @@ void setup() {
   pinMode(pcbLED, OUTPUT); // LED on GPIO4
   pinMode(userLED, OUTPUT);   // Mirror LED on GPIO32
   digitalWrite(GND, LOW);
-  digitalWrite(pcbLED, HIGH);
-  digitalWrite(userLED, HIGH);
+  analogWrite(pcbLED, 255);
+  analogWrite(userLED, 255);
   Serial.begin(115200);
   delay(1000);
  // while (!Serial && millis() < 5000); // Wait for serial or timeout
@@ -985,9 +985,9 @@ void goToSleep() {
   
   // Flash LEDs (pcbLED and userLED) to indicate going to sleep
   for (int i = 0; i < 5; i++) {
-    digitalWrite(pcbLED, HIGH); digitalWrite(userLED, HIGH);
+    analogWrite(pcbLED, 255); analogWrite(userLED, 255);
     delay(100);
-    digitalWrite(pcbLED, LOW);  digitalWrite(userLED, LOW);
+    analogWrite(pcbLED, 0);  analogWrite(userLED, 0);
     delay(100);
   }
   
@@ -1032,14 +1032,9 @@ void handleLedBlinking() {
   
   // If touch value is less than threshold, keep LEDs ON continuously
   if (touchVal < touchThreshold) {
-    if (isCharging) {
-      // Use PWM for fading effect during charging
-      analogWrite(pcbLED, 255);
-      analogWrite(userLED, 255);
-    } else {
-      digitalWrite(pcbLED, HIGH);
-      digitalWrite(userLED, HIGH);
-    }
+    // Use PWM for consistent behavior regardless of charging state
+    analogWrite(pcbLED, 255);
+    analogWrite(userLED, 255);
     return; // Exit early
   }
   
