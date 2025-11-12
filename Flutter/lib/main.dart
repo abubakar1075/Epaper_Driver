@@ -3328,81 +3328,109 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildHowToSection(
-                        icon: Icons.bluetooth,
-                        title: '1. Connect to Your Display',
-                        steps: [
-                          'Tap the device name at the top',
-                          'Touch your e-paper frame to wake it',
-                          'Select your device from the list',
-                          'Wait for connection confirmation',
-                        ],
+                      // Step 1: Select Your Image
+                      const Text(
+                        'Step 1: Select Your Image 📸',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Choose an image from any of these sources:',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('Gallery - Browse your phone\'s photo collection'),
+                      _buildBulletPoint('Library - Discover beautiful images from Pixabay online'),
+                      _buildBulletPoint('AI - Create unique artwork with text prompts'),
+                      _buildBulletPoint('Saved - Access images you\'ve previously edited'),
                       const SizedBox(height: 20),
-                      _buildHowToSection(
-                        icon: Icons.image_search,
-                        title: '2. Choose Your Image',
-                        steps: [
-                          'Gallery: Pick from your photos',
-                          'Library: Search Pixabay images',
-                          'AI Generate: Create with DALL·E',
-                          'Saved: Use previously processed images',
-                        ],
+                      
+                      // Step 2: Perfect Your Frame
+                      const Text(
+                        'Step 2: Perfect Your Frame 🎨',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Once your image loads in the editor:',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('Orientation - Tap Portrait/Landscape to match your display'),
+                      _buildBulletPoint('Position - Drag with one finger to move the image'),
+                      _buildBulletPoint('Zoom - Pinch with two fingers to zoom in or out'),
+                      _buildBulletPoint('Rotate - Twist with two fingers to adjust the angle'),
+                      _buildBulletPoint('Reset - Double-tap anytime to start fresh'),
+                      _buildBulletPoint('Info - Tap the ⓘ icon for quick gesture reminders'),
                       const SizedBox(height: 20),
-                      _buildHowToSection(
-                        icon: Icons.crop_rotate,
-                        title: '3. Adjust Your Image',
-                        steps: [
-                          'Choose Portrait or Landscape mode',
-                          'Drag with one finger to move',
-                          'Pinch with two fingers to zoom',
-                          'Rotate with two fingers to angle',
-                          'Double-tap to reset view',
-                        ],
+                      
+                      // Step 3: Send to Display
+                      const Text(
+                        'Step 3: Send to Display 📡',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Ready to transfer? It\'s automatic!',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('Tap the blue Send button'),
+                      _buildBulletPoint('Touch your e-paper frame - it wakes up instantly'),
+                      _buildBulletPoint('Watch the progress bar as your image transfers'),
+                      _buildBulletPoint('Your display refreshes automatically when complete'),
                       const SizedBox(height: 20),
-                      _buildHowToSection(
-                        icon: Icons.tune,
-                        title: '4. Enhance (Optional)',
-                        steps: [
-                          'Use Color slider for brightness',
-                          'Toggle Dithering for better quality',
-                          'Preview shows final result',
-                        ],
+                      
+                      // Step 4: Save Your Creations
+                      const Text(
+                        'Step 4: Save Your Creations 💾',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Love what you made?',
+                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('Tap Save to store your edited image'),
+                      _buildBulletPoint('Find it anytime in the Saved section'),
+                      _buildBulletPoint('Each save remembers your exact framing and settings'),
                       const SizedBox(height: 20),
-                      _buildHowToSection(
-                        icon: Icons.send,
-                        title: '5. Send to Display',
-                        steps: [
-                          'Tap the blue Send button',
-                          'Watch progress bar',
-                          'Your display will refresh automatically',
-                          'Save your work for later reuse',
-                        ],
+                      
+                      // Pro Tips
+                      const Text(
+                        'Pro Tips 💡',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('Battery Status - Check your frame\'s battery in the preview corner'),
+                      _buildBulletPoint('USB Charging - Frame stays awake and shows breathing LED when charging'),
+                      _buildBulletPoint('Auto-Connect - App remembers and reconnects to your frame automatically'),
+                      _buildBulletPoint('OTA Updates - Orange OTA button appears when firmware updates are available'),
+                      _buildBulletPoint('Smart Search - Library filters images by your current orientation (Portrait/Landscape)'),
                       const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.lightbulb_outline, color: Colors.blue.shade700, size: 24),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Text(
-                                'Tip: Tap the ⓘ icon on the frame to see gesture controls!',
-                                style: TextStyle(fontSize: 14, color: Colors.black87),
-                              ),
-                            ),
-                          ],
-                        ),
+                      
+                      // Quick Features
+                      const Text(
+                        'Quick Features ⚡',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('No Setup Required - Bluetooth connects automatically when you touch the frame'),
+                      _buildBulletPoint('Fast Transfer - Optimized BLE protocol sends images in seconds'),
+                      _buildBulletPoint('Offline Ready - All image processing happens on your phone'),
+                      _buildBulletPoint('5-Day Refresh - Frame automatically refreshes display to prevent ghosting'),
+                      const SizedBox(height: 20),
+                      
+                      // Troubleshooting
+                      const Text(
+                        'Troubleshooting 🔧',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildBulletPoint('Can\'t connect? Make sure Bluetooth is on and touch the frame to wake it'),
+                      _buildBulletPoint('Frame not responding? Hold the boot button 5 seconds for factory reset'),
+                      _buildBulletPoint('Low battery? Connect USB cable - frame shows charging status to the app'),
                     ],
                   ),
                 ),
@@ -3433,59 +3461,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     );
   }
 
-  Widget _buildHowToSection({required IconData icon, required String title, required List<String> steps}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: Colors.blue.shade700, size: 24),
+  Widget _buildBulletPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(fontSize: 16, color: Colors.blue, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ...steps.map((step) => Padding(
-          padding: const EdgeInsets.only(left: 50, bottom: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                margin: const EdgeInsets.only(top: 6),
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade400,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  step,
-                  style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87),
-                ),
-              ),
-            ],
           ),
-        )),
-      ],
+        ],
+      ),
     );
   }
 
