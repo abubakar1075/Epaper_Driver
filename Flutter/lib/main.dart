@@ -3207,22 +3207,497 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     }
   }
 
+  // ========================= DRAWER MENU =========================
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Container(
+        color: Colors.grey.shade50,
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.blue.shade700, Colors.blue.shade500],
+                ),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.image, size: 48, color: Colors.white),
+                  SizedBox(height: 12),
+                  Text(
+                    'CanvasBT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'E-Paper Image Transfer',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.help_outline, color: Colors.blue, size: 28),
+              title: const Text('How to Use', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+              onTap: () {
+                Navigator.pop(context);
+                _showHowToUseDialog();
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.policy_outlined, color: Colors.green, size: 28),
+              title: const Text('Policies', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+              onTap: () {
+                Navigator.pop(context);
+                _showPoliciesDialog();
+              },
+            ),
+            const Divider(height: 1),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showHowToUseDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue.shade600, Colors.blue.shade400],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.help_outline, color: Colors.white, size: 32),
+                    SizedBox(width: 12),
+                    Text(
+                      'How to Use CanvasBT',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHowToSection(
+                        icon: Icons.bluetooth,
+                        title: '1. Connect to Your Display',
+                        steps: [
+                          'Tap the device name at the top',
+                          'Touch your e-paper frame to wake it',
+                          'Select your device from the list',
+                          'Wait for connection confirmation',
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildHowToSection(
+                        icon: Icons.image_search,
+                        title: '2. Choose Your Image',
+                        steps: [
+                          'Gallery: Pick from your photos',
+                          'Library: Search Pixabay images',
+                          'AI Generate: Create with DALL·E',
+                          'Saved: Use previously processed images',
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildHowToSection(
+                        icon: Icons.crop_rotate,
+                        title: '3. Adjust Your Image',
+                        steps: [
+                          'Choose Portrait or Landscape mode',
+                          'Drag with one finger to move',
+                          'Pinch with two fingers to zoom',
+                          'Rotate with two fingers to angle',
+                          'Double-tap to reset view',
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildHowToSection(
+                        icon: Icons.tune,
+                        title: '4. Enhance (Optional)',
+                        steps: [
+                          'Use Color slider for brightness',
+                          'Toggle Dithering for better quality',
+                          'Preview shows final result',
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildHowToSection(
+                        icon: Icons.send,
+                        title: '5. Send to Display',
+                        steps: [
+                          'Tap the blue Send button',
+                          'Watch progress bar',
+                          'Your display will refresh automatically',
+                          'Save your work for later reuse',
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.lightbulb_outline, color: Colors.blue.shade700, size: 24),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Tip: Tap the ⓘ icon on the frame to see gesture controls!',
+                                style: TextStyle(fontSize: 14, color: Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Footer
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Got it!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHowToSection({required IconData icon, required String title, required List<String> steps}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Colors.blue.shade700, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...steps.map((step) => Padding(
+          padding: const EdgeInsets.only(left: 50, bottom: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 6),
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade400,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  step,
+                  style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87),
+                ),
+              ),
+            ],
+          ),
+        )),
+      ],
+    );
+  }
+
+  void _showPoliciesDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.green.shade600, Colors.green.shade400],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.policy_outlined, color: Colors.white, size: 32),
+                    SizedBox(width: 12),
+                    Text(
+                      'Privacy & Policies',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildPolicySection(
+                        title: 'Data Privacy',
+                        icon: Icons.security,
+                        content: 'CanvasBT processes all images locally on your device. Your photos never leave your phone except when you explicitly send them to your e-paper display via Bluetooth.',
+                      ),
+                      const SizedBox(height: 20),
+                      _buildPolicySection(
+                        title: 'Bluetooth Connection',
+                        icon: Icons.bluetooth_connected,
+                        content: 'The app requires Bluetooth permission to communicate with your e-paper display. Connection is direct and secure between your phone and display only.',
+                      ),
+                      const SizedBox(height: 20),
+                      _buildPolicySection(
+                        title: 'Image Sources',
+                        icon: Icons.photo_library,
+                        content: 'When using Gallery, you access your own photos. Pixabay integration provides free stock images. AI generation uses OpenAI\'s DALL·E API with your provided key.',
+                      ),
+                      const SizedBox(height: 20),
+                      _buildPolicySection(
+                        title: 'Storage',
+                        icon: Icons.storage,
+                        content: 'The app stores your processed images and settings locally on your device for quick access. You can clear this data anytime from your device settings.',
+                      ),
+                      const SizedBox(height: 20),
+                      _buildPolicySection(
+                        title: 'Third-Party Services',
+                        icon: Icons.cloud_outlined,
+                        content: 'Pixabay API is used for image search. OpenAI API is used for AI generation (requires your API key). No personal data is shared with these services.',
+                      ),
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.verified_user, color: Colors.green.shade700, size: 24),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Your privacy matters! We don\'t collect, store, or share your personal information.',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Footer
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Close', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPolicySection({required String title, required IconData icon, required String content}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Colors.green.shade700, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.only(left: 50),
+          child: Text(
+            content,
+            style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black87),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
         preferredSize: Size.fromHeight((_headerAspectRatio!=null ? MediaQuery.of(context).size.width / _headerAspectRatio! : 88) - 24),
         child: (_headerAsset!=null)
-            ? Padding(
-                padding: const EdgeInsets.only(top: 0, bottom: 0),
-                child: Image.asset(
-                  _headerAsset!,
-                  fit: BoxFit.fitWidth,
-                  alignment: Alignment.topCenter,
-                ),
+            ? Stack(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 0, bottom: 0),
+                    child: Image.asset(
+                      _headerAsset!,
+                      fit: BoxFit.fitWidth,
+                      alignment: Alignment.topCenter,
+                    ),
+                  ),
+                  Positioned(
+                    top: 3,
+                    left: 18,
+                    child: SafeArea(
+                      child: Builder(
+                        builder: (builderContext) => GestureDetector(
+                          onTap: () => Scaffold.of(builderContext).openDrawer(),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(height: 4, width: 28, color: Colors.black87),
+                                const SizedBox(height: 4),
+                                Container(height: 4, width: 28, color: Colors.black87),
+                                const SizedBox(height: 4),
+                                Container(height: 4, width: 28, color: Colors.black87),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               )
             : const SizedBox.shrink(),
       ),
+      drawer: _buildDrawer(),
   body: Stack(
         children: [
           Padding(padding: const EdgeInsets.fromLTRB(12,5,12,8), child: _buildConnected()),
