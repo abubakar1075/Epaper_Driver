@@ -3223,13 +3223,24 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                   colors: [Colors.blue.shade700, Colors.blue.shade500],
                 ),
               ),
-              child: const Column(
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.image, size: 48, color: Colors.white),
-                  SizedBox(height: 12),
-                  Text(
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset(
+                      'Logo/Applogo.jpg',
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.image, size: 64, color: Colors.white);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
                     'CanvasBT',
                     style: TextStyle(
                       color: Colors.white,
@@ -3237,7 +3248,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(
+                  const Text(
                     'E-Paper Image Transfer',
                     style: TextStyle(
                       color: Colors.white70,
