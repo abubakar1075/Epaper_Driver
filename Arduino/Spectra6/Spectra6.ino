@@ -2,7 +2,7 @@
 //#define TEST_IMAGE
 
 // Firmware version - update this when you create new OTA files
-const char* FIRMWARE_VERSION = "1.33.0";
+const char* FIRMWARE_VERSION = "1.35.0";
 
 // GPIO pin definitions
 #define CALIBRATION_BUTTON_PIN 0  // GPIO 27 for threshold calibration

@@ -75,6 +75,9 @@ class EPaperImageSender extends StatefulWidget {
 }
 
 class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTickerProviderStateMixin {
+  // GlobalKey for accessing scaffold context in async methods
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  
   // =============================================================
   // CONSTANTS / STATIC CONFIG
   // =============================================================
@@ -852,7 +855,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // Main action bar (orientation toggle, add to library, process, send, reset)
   Widget _buildActionBar(){
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal:8, vertical:2),
+      padding: const EdgeInsets.symmetric(horizontal:6, vertical:2),
       decoration: BoxDecoration(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
@@ -876,9 +879,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             icon: Icons.screen_rotation,
             backgroundColor: Colors.indigo.shade600,
           ),
-          const SizedBox(width:2),
+          const SizedBox(width:1),
           _smallBtn('Save', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.green.shade600),
-          const SizedBox(width:2),
+          const SizedBox(width:1),
           _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send, backgroundColor: Colors.blue.shade600),
         ]),
         const Spacer(),
@@ -886,9 +889,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         Row(children:[
           // Only add spacing if OTA button is visible (after version check is complete)
           if (_versionCheckCompleted && (_otaButtonEnabled || _isCheckingVersion)) ...[
-            const SizedBox(width:2),
+            const SizedBox(width:1),
             _buildOtaButton(),
-            const SizedBox(width:2),
+            const SizedBox(width:1),
           ],
           _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app, backgroundColor: Colors.red.shade600),
         ])
@@ -1542,8 +1545,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
       _pendingSend = _PendingSend.image; // remember user's intent
       if (!mounted) return;
+      
+      // Use scaffold context for reliable dialog display
+      final dialogContext = _scaffoldKey.currentContext ?? context;
       await showDialog(
-        context: context,
+        context: dialogContext,
+        barrierDismissible: false,
         builder: (ctx){
           _activeDialogContext = ctx;
           return AlertDialog(
@@ -1720,7 +1727,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // Fit the saved image to the current frame
       final iw = uiImage.width.toDouble();
       final ih = uiImage.height.toDouble();
-      final fitScale = math.min(frameW / iw, frameH / ih);
+      
+      // For saved images at display resolution, use a more appropriate fit strategy
+      // Fill one dimension and let the user crop/adjust as needed
+      final fitScaleWidth = frameW / iw;
+      final fitScaleHeight = frameH / ih;
+      
+      // Use the LARGER scale to ensure image fills frame (user can zoom out if needed)
+      // This prevents tiny images when orientation doesn't match
+      final fitScale = math.max(fitScaleWidth, fitScaleHeight);
       
       // Single setState with everything ready
       if (mounted) {
@@ -2057,9 +2072,57 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // Reset pan/zoom/rotation to initial cover fit
   void _resetView(){
     if(_uiOriginal==null){ return; }
+    
+    // Calculate workspace and frame dimensions
+    final double workspaceW = MediaQuery.of(context).size.width - 24;
+    final double workspaceH = 300;
+    
+    const double TARGET_DIAGONAL = 933.5;
+    double frameW, frameH;
+    
+    if (_verticalFrame) {
+      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
+      frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
+    } else {
+      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
+      frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
+    }
+    
+    final scaleW = workspaceW * 0.9 / frameW;
+    final scaleH = workspaceH * 0.9 / frameH;
+    final scale = math.min(scaleW, scaleH);
+    if (scale < 1.0) {
+      frameW *= scale;
+      frameH *= scale;
+    }
+    
+    final iw = _uiOriginal!.width.toDouble();
+    final ih = _uiOriginal!.height.toDouble();
+    
+    // Check if this is a saved image (at display resolution)
+    final bool isSavedImage = (iw == 800 && ih == 480) || (iw == 480 && ih == 800);
+    
+    // For saved images, use max scale to fill frame (prevents tiny display)
+    // For regular photos, use min scale to fit entirely in frame
+    final fitScale = isSavedImage 
+        ? math.max(frameW / iw, frameH / ih)  // Fill frame
+        : math.min(frameW / iw, frameH / ih);  // Fit in frame
+    
     setState((){
-      _viewInitialized = false; // recompute cover scale next build
+      _frameWidth = frameW;
+      _frameHeight = frameH;
+      _frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
+      
+      _viewScale = fitScale;
       _viewRotation = 0.0;
+      _viewTranslation = Offset(
+        (workspaceW - iw * fitScale) / 2,
+        (workspaceH - ih * fitScale) / 2,
+      );
+      _viewInitialized = true; // Mark as initialized so it doesn't recalculate
+      _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
+      _maxScale = fitScale * 80;
+      
       // changing view invalidates processed cache
       _processedImage = null; _processedBytes = null; _processedPngBytes = null;
       // Update frame border color after reset
@@ -3157,8 +3220,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
       _pendingSend = _PendingSend.ota; // remember user's intent
       if (!mounted) return;
+      
+      // Use scaffold context for reliable dialog display
+      final dialogContext = _scaffoldKey.currentContext ?? context;
       await showDialog(
-        context: context,
+        context: dialogContext,
+        barrierDismissible: false,
         builder: (ctx){
           _activeDialogContext = ctx;
           return AlertDialog(
@@ -3713,6 +3780,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
 
   @override
   Widget build(BuildContext context) => Scaffold(
+      key: _scaffoldKey,
       backgroundColor: Colors.white,
       appBar: PreferredSize(
         preferredSize: Size.fromHeight((_headerAspectRatio!=null ? MediaQuery.of(context).size.width / _headerAspectRatio! : 88) - 24),
@@ -3866,8 +3934,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         if (!_viewInitialized && _uiOriginal != null) {
           final iw = _uiOriginal!.width.toDouble();
           final ih = _uiOriginal!.height.toDouble();
-          // scale so entire image fits within frame and center translation
+          
+          // Scale to fit: works for both saved images (800x480/480x800) and regular photos
+          // Saved images will have fitScale close to 1.0, photos will be scaled down to fit
           final fitScale = math.min(_frameWidth / iw, _frameHeight / ih);
+          
           _viewScale = fitScale;
           // Allow zooming out to a small fraction of fit scale, in, to large magnification
           _minScale = fitScale * 0.01; // 1% of fit size (very far zoom out)
