@@ -3660,7 +3660,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     children: [
                       // Step 1: Select Your Image
                       const Text(
-                        'Step 1: Select Your Image 📸',
+                        'Step 1: Select Your Image',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3677,7 +3677,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // Step 2: Perfect Your Frame
                       const Text(
-                        'Step 2: Perfect Your Frame 🎨',
+                        'Step 2: Perfect Your Frame',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3696,7 +3696,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // Step 3: Send to Display
                       const Text(
-                        'Step 3: Send to Display 📡',
+                        'Step 3: Send to Display',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3713,7 +3713,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // Step 4: Save Your Creations
                       const Text(
-                        'Step 4: Save Your Creations 💾',
+                        'Step 4: Save Your Creations',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3729,7 +3729,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // Pro Tips
                       const Text(
-                        'Pro Tips 💡',
+                        'Pro Tips',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3742,7 +3742,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // Quick Features
                       const Text(
-                        'Quick Features ⚡',
+                        'Quick Features',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3754,7 +3754,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // Troubleshooting
                       const Text(
-                        'Troubleshooting 🔧',
+                        'Troubleshooting',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3855,7 +3855,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     children: [
                       // What is Calibration
                       const Text(
-                        'What is Sensor Calibration? 🎯',
+                        'What is Sensor Calibration?',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3867,7 +3867,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // When to Calibrate
                       const Text(
-                        'When Should You Calibrate? 🤔',
+                        'When Should You Calibrate?',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3879,7 +3879,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // How to Calibrate
                       const Text(
-                        'How to Calibrate 📋',
+                        'How to Calibrate',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
@@ -3933,7 +3933,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                       
                       // Pro Tip
                       const Text(
-                        'Pro Tip 💡',
+                        'Pro Tip',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
