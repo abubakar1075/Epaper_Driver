@@ -1862,8 +1862,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final idx = _selectedLibraryIndex; if(idx==null) return;
     final entry = _library[idx];
     try{
-      // Saved images are already processed at exact display resolution (800x480 or 480x800)
-      // Load them and fit to current frame orientation (don't auto-rotate)
+      // All saved images are stored as 800x480 (landscape) in library
+      // If wasVertical=true, we need to rotate back to 480x800 for display
       
       // Write PNG to a temp file
       final dir = await getTemporaryDirectory();
@@ -1873,17 +1873,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // Load UI image before setState
       final codec = await ui.instantiateImageCodec(entry.pngBytes);
       final frame = await codec.getNextFrame();
-      final uiImage = frame.image;
+      ui.Image uiImage = frame.image;
+      
+      // If image was saved as portrait, rotate it back to portrait orientation
+      if(entry.wasVertical){
+        uiImage = await _rotateUiImage90(uiImage, clockwise: false); // Rotate back to portrait
+      }
       
       // Calculate workspace dimensions (same as in _recomputeViewForCurrentFrame)
       final double workspaceW = MediaQuery.of(context).size.width - 24;
       final double workspaceH = 300;
       
-      // Calculate frame dimensions for CURRENT orientation (don't change it)
+      // Calculate frame dimensions for SAVED image's orientation (use entry.wasVertical)
       const double TARGET_DIAGONAL = 933.5;
       double frameW, frameH;
       
-      if (_verticalFrame) {
+      if (entry.wasVertical) {
         frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
         frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
       } else {
@@ -1921,12 +1926,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _processedBytes = null;
           _processedPngBytes = null;
           _uiOriginal = uiImage;
-          // Keep current _verticalFrame - don't change orientation
+          // Set frame orientation to match saved image to prevent rotation
+          _verticalFrame = entry.wasVertical;
           _frameWidth = frameW;
           _frameHeight = frameH;
           _frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
           
-          // Set view to fit the saved image in the current frame
+          // Set view to fit the saved image in the matching frame
           _viewScale = fitScale;
           _viewRotation = 0.0;
           _viewTranslation = Offset(
