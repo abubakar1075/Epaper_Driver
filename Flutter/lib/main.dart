@@ -925,7 +925,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     }
     // Shrink crop frame by 5% only in portrait and keep centered
     if (_isPortrait) {
-      const double frameScale = 0.94;
+      const double frameScale = 0.95;
       frameW *= frameScale;
       frameH *= frameScale;
     }
@@ -1904,7 +1904,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
       // Shrink crop frame by 5% only in portrait and keep centered
       if (_isPortrait) {
-        const double frameScale = 0.94;
+        const double frameScale = 0.95;
         frameW *= frameScale;
         frameH *= frameScale;
       }
@@ -4319,7 +4319,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         }
         // Shrink crop frame by 5% only in portrait and keep centered
         if (_isPortrait) {
-          const double frameScale = 0.94;
+          const double frameScale = 0.95;
           _frameWidth *= frameScale;
           _frameHeight *= frameScale;
         }
