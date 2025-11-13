@@ -932,6 +932,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         frameH = frameW / aspect;
       }
     }
+    // Shrink crop frame by 5% only in portrait and keep centered
+    if (_isPortrait) {
+      const double frameScale = 0.94;
+      frameW *= frameScale;
+      frameH *= frameScale;
+    }
     Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
     origin = _snapOffset(origin);
     // Compute fit scale for min/max scale limits only, don't auto-adjust user's view
@@ -1915,6 +1921,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           frameW = maxW;
           frameH = frameW / aspect;
         }
+      }
+      // Shrink crop frame by 5% only in portrait and keep centered
+      if (_isPortrait) {
+        const double frameScale = 0.94;
+        frameW *= frameScale;
+        frameH *= frameScale;
       }
       // Frame origin centered in workspace (exact aspect, no portrait skew)
       Offset frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
@@ -4339,6 +4351,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             _frameWidth = maxW;
             _frameHeight = _frameWidth / aspect;
           }
+        }
+        // Shrink crop frame by 5% only in portrait and keep centered
+        if (_isPortrait) {
+          const double frameScale = 0.94;
+          _frameWidth *= frameScale;
+          _frameHeight *= frameScale;
         }
         _frameOrigin = Offset(
           (workspaceW - _frameWidth)/2,
