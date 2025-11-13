@@ -168,7 +168,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   double _frameWidth = 0;
   double _frameHeight = 0;
   Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
-  bool _verticalFrame = false; // portrait orientation toggle
+  bool _isPortrait = false; // portrait orientation toggle
   Color _frameBorderColor = Colors.black; // dynamically adjusted for contrast
   // Slider-driven tuning
   final double _ditherStrength = 1.0; // 0=off .. 1=full
@@ -859,10 +859,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         // Left side controls
         Row(children:[
           _smallBtn(
-            _verticalFrame ? 'Portrait' : 'Landscape',
+            _isPortrait ? 'Portrait' : 'Landscape',
             (_uiOriginal != null || _processedPngBytes != null) ? (){
               setState((){
-                _verticalFrame = !_verticalFrame;
+                _isPortrait = !_isPortrait;
                 _processedImage = null;
                 _processedBytes = null;
                 // Don't reset _viewInitialized - preserve user's image position/zoom
@@ -905,7 +905,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     const double TARGET_DIAGONAL = 933.5;
     double frameW, frameH;
     
-    if (_verticalFrame) {
+    if (_isPortrait) {
       // Portrait: 480 wide x 800 tall (swapped)
       frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
       frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
@@ -1021,9 +1021,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       final safePrompt = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
       final encoded = Uri.encodeComponent(safePrompt);
       final seed = (safePrompt.hashCode & 0x7fffffff).toString();
-      // Use editor orientation (_verticalFrame) instead of a separate AI toggle
-      final genW = _verticalFrame ? IMAGE_HEIGHT : IMAGE_WIDTH;  // 480 if portrait
-      final genH = _verticalFrame ? IMAGE_WIDTH : IMAGE_HEIGHT;  // 800 if portrait
+      // Use editor orientation (_isPortrait) instead of a separate AI toggle
+      final genW = _isPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH;  // 480 if portrait
+      final genH = _isPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT;  // 800 if portrait
       final candidates = <Uri>[
         Uri.parse('https://image.pollinations.ai/prompt/$encoded?width=$genW&height=$genH&seed=$seed&nologo=true'),
         Uri.parse('https://image.pollinations.ai/prompt/$encoded?size=${genW}x$genH&seed=$seed&nologo=true'),
@@ -1084,8 +1084,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         prompt = (aiPrefix + prompt).trim();
       }
       // Use editor orientation for canvas size
-      final int w = _verticalFrame ? IMAGE_HEIGHT : IMAGE_WIDTH;
-      final int h = _verticalFrame ? IMAGE_WIDTH : IMAGE_HEIGHT;
+      final int w = _isPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH;
+      final int h = _isPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT;
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0,0,w.toDouble(),h.toDouble()));
       final hash = prompt.hashCode;
@@ -1500,7 +1500,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         'safesearch':'true',
         'order':'popular',
         'per_page':'200',
-        'orientation': _verticalFrame ? 'vertical' : 'horizontal', // Filter by current orientation
+        'orientation': _isPortrait ? 'portrait' : 'landscape', // Filter by current orientation
       };
       if(_selectedPixabayCategory != 'all'){
         params['category'] = _selectedPixabayCategory;
@@ -1528,8 +1528,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         final isPortrait = height > width;
         
         // Skip images that don't match the selected orientation
-        if(_verticalFrame && !isPortrait) continue;
-        if(!_verticalFrame && isPortrait) continue;
+        if(_isPortrait && !isPortrait) continue;
+        if(!_isPortrait && isPortrait) continue;
         
         out.add(_PixabayImage(
           id: '${h['id'] ?? ''}',
@@ -1569,7 +1569,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         'safesearch':'true',
         'order':'popular',
         'per_page':'200',
-        'orientation': _verticalFrame ? 'vertical' : 'horizontal', // Filter by current orientation
+        'orientation': _isPortrait ? 'portrait' : 'landscape', // Filter by current orientation
       };
       if(cat != 'all') params['category'] = cat;
       final uri = Uri.https('pixabay.com','/api/', params);
@@ -1595,8 +1595,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         final isPortrait = height > width;
         
         // Skip images that don't match the selected orientation
-        if(_verticalFrame && !isPortrait) continue;
-        if(!_verticalFrame && isPortrait) continue;
+        if(_isPortrait && !isPortrait) continue;
+        if(!_isPortrait && isPortrait) continue;
         
         out.add(_PixabayImage(
           id: '${h['id'] ?? ''}',
@@ -1652,7 +1652,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     // Encode PNG for library in the same visual orientation as the current frame
     // so that when reloaded into the editor it appears exactly as saved (no rotation).
     img.Image pngImage = _processedImage!;
-    if(_verticalFrame){
+    if(_isPortrait){
       // Portrait frame: store PNG as portrait (rotate -90 so width<height)
       pngImage = img.copyRotate(pngImage, angle: -90);
     }
@@ -1663,7 +1663,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     rawCodes: Uint8List.fromList(_processedBytes!),
     pngBytes: png,
     created: DateTime.now(),
-    wasVertical: _verticalFrame,
+    wasPortrait: _isPortrait,
     isDefaultAsset: false,
   title: 'Saved',
   );
@@ -1693,7 +1693,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       setState((){ _connectedDevice = null; _rxCharacteristic = null; });
       if(!mounted) return;
       // Pick the correct finger image based on current orientation
-      final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
+      final String? fingerAsset = await _resolveFingerAssetForOrientation(_isPortrait);
       _pendingSend = _PendingSend.image; // remember user's intent
       if (!mounted) return;
       
@@ -1811,7 +1811,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
                           decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-                          child: Text(e.wasVertical? 'Portrait' : 'Landscape', style: const TextStyle(color: Colors.white, fontSize:9, fontWeight: FontWeight.w500)),
+                          child: Text(e.wasPortrait? 'Portrait' : 'Landscape', style: const TextStyle(color: Colors.white, fontSize:9, fontWeight: FontWeight.w500)),
                         ),
                       ),
                     ]),
@@ -1836,7 +1836,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final entry = _library[idx];
     try{
       // All saved images are stored as 800x480 (landscape) in library
-      // If wasVertical=true, we need to rotate back to 480x800 for display
+      // Load exactly as stored; no rotation is applied automatically
       
       // Write PNG to a temp file
       final dir = await getTemporaryDirectory();
@@ -1859,7 +1859,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       const double TARGET_DIAGONAL = 933.5;
       double frameW, frameH;
       
-      if (_verticalFrame) {
+      if (_isPortrait) {
         frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
         frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
       } else {
@@ -2069,14 +2069,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             final double workspaceW = MediaQuery.of(context).size.width - 24;
             final double workspaceH = 300;
             frameW = workspaceW * 0.5;
-            if (_verticalFrame) {
+            if (_isPortrait) {
               frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
             } else {
               frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
             }
             if (frameH > workspaceH) {
               frameH = workspaceH * 0.5;
-              if (_verticalFrame) {
+              if (_isPortrait) {
                 frameW = frameH * (IMAGE_HEIGHT / IMAGE_WIDTH);
               } else {
                 frameW = frameH * (IMAGE_WIDTH / IMAGE_HEIGHT);
@@ -2232,7 +2232,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     const double TARGET_DIAGONAL = 933.5;
     double frameW, frameH;
     
-    if (_verticalFrame) {
+    if (_isPortrait) {
       frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
       frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
     } else {
@@ -2440,8 +2440,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final double cosR = math.cos(_viewRotation);
     final double sinR = math.sin(_viewRotation);
     final double invScale = 1.0 / _viewScale;
-    final int targetW = _verticalFrame ? IMAGE_HEIGHT : IMAGE_WIDTH; // 480 if vertical
-    final int targetH = _verticalFrame ? IMAGE_WIDTH : IMAGE_HEIGHT; // 800 if vertical
+    final int targetW = _isPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH; // 480 if portrait
+    final int targetH = _isPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT; // 800 if portrait
     final img.Image working = img.Image(width: targetW, height: targetH, format: img.Format.uint8);
     for (int oy = 0; oy < targetH; oy++) {
       final double wy = _frameOrigin.dy + (oy / targetH) * _frameHeight; // workspace y
@@ -2474,7 +2474,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         working.setPixelRgba(ox, oy, r, g, b, 255);
       }
     }
-    if (_verticalFrame) {
+    if (_isPortrait) {
       return rotatePortrait ? img.copyRotate(working, angle: 90) : working;
     }
     return working;
@@ -3136,7 +3136,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       
       // Apply appropriate rotation based on orientation mode
       // Hardware displays require specific rotation for correct rendering
-      if (_verticalFrame) {
+      if (_isPortrait) {
         // PORTRAIT MODE: Apply standard 180° rotation
         toSend = _applyPortraitModeRotation(src);
         _updateStatus("Applied portrait mode rotation (180°)");
@@ -3369,7 +3369,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       _updateStatus("Not connected. Trying to connect...");
       // Reuse the same UX pattern as _sendOrProcessThenSend when disconnected
       if(!mounted) return;
-      final String? fingerAsset = await _resolveFingerAssetForOrientation(_verticalFrame);
+      final String? fingerAsset = await _resolveFingerAssetForOrientation(_isPortrait);
       _pendingSend = _PendingSend.ota; // remember user's intent
       if (!mounted) return;
       
@@ -4294,7 +4294,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         // For 800x480 display, diagonal = sqrt(800^2 + 480^2) = 933.5
         const double TARGET_DIAGONAL = 933.5;
         
-        if (_verticalFrame) {
+        if (_isPortrait) {
           // Portrait: 480 wide x 800 tall (swapped)
           // Calculate dimensions maintaining the target diagonal
           _frameWidth = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
@@ -4506,10 +4506,10 @@ class _LibraryEntry {
   final Uint8List rawCodes; // raw color codes (one per pixel)
   final Uint8List pngBytes; // cached PNG for thumbnail
   final DateTime created;
-  final bool wasVertical; // orientation when saved
+  final bool wasPortrait; // orientation when saved
   final bool isDefaultAsset; // true if from bundled assets
   final String title; // display name
-  const _LibraryEntry({required this.id, required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasVertical, required this.isDefaultAsset, required this.title});
+  const _LibraryEntry({required this.id, required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasPortrait, required this.isDefaultAsset, required this.title});
 }
 
 // Simple data holder for Pixabay search results
@@ -4552,7 +4552,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       for(final item in data){
         if(item is! Map) continue;
         final id = item['id'] as String?; if(id==null) continue;
-        final wasVertical = item['wasVertical'] == true;
+        final wasPortrait = (item['wasPortrait'] == true) || (item['wasVertical'] == true); // backward compatible
         final createdMs = item['created'] as int? ?? DateTime.now().millisecondsSinceEpoch;
         final rawFile = File('${_libraryDir!.path}/$id.raw');
         final pngFile = File('${_libraryDir!.path}/$id.png');
@@ -4565,14 +4565,14 @@ extension _LibraryPersistence on _EPaperImageSenderState {
             final isAsset = id.startsWith('asset_');
             final baseName = isAsset ? id.replaceFirst('asset_','').toLowerCase() : id.toLowerCase();
             final title = (item['title'] as String?) ?? (isAsset ? _deriveAssetTitle(baseName) : 'Saved');
-            final correctedPortrait = isAsset ? _isPortraitAsset(baseName) : wasVertical;
+            final correctedPortrait = isAsset ? _isPortraitAsset(baseName) : wasPortrait;
             _library.add(_LibraryEntry(
               id: id,
               image: decoded.clone(),
               rawCodes: Uint8List.fromList(rawCodes),
               pngBytes: pngBytes,
               created: DateTime.fromMillisecondsSinceEpoch(createdMs),
-              wasVertical: correctedPortrait,
+              wasPortrait: correctedPortrait,
               isDefaultAsset: isAsset,
               title: title,
             ));
@@ -4600,7 +4600,9 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       final list = _library.map((e)=>{
         'id': e.id,
         'created': e.created.millisecondsSinceEpoch,
-        'wasVertical': e.wasVertical,
+        // Write both keys for backward/forward compatibility
+        'wasPortrait': e.wasPortrait,
+        'wasVertical': e.wasPortrait,
       }).toList();
       await indexFile.writeAsString(jsonEncode(list), flush: true);
     }catch(e){ _updateStatus('Index write error: $e'); }
