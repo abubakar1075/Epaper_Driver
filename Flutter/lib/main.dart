@@ -923,11 +923,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       frameW = maxW;
       frameH = frameW / aspect;
     }
-    // Shrink crop frame by 5% only in portrait and keep centered
+    // Shrink crop frame by 5% in portrait, then reduce height by an extra 1%
     if (_isPortrait) {
-      const double frameScale = 0.95;
+      const double frameScale = 0.95; // 5% uniform shrink
       frameW *= frameScale;
       frameH *= frameScale;
+      frameH *= 0.99; // 1% height-only reduction
     }
     Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
     origin = _snapOffset(origin);
@@ -1902,11 +1903,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         frameW = maxW;
         frameH = frameW / aspect;
       }
-      // Shrink crop frame by 5% only in portrait and keep centered
+      // Shrink crop frame by 5% in portrait, then reduce height by an extra 1%
       if (_isPortrait) {
-        const double frameScale = 0.95;
+        const double frameScale = 0.95; // 5% uniform shrink
         frameW *= frameScale;
         frameH *= frameScale;
+        frameH *= 0.99; // 1% height-only reduction
       }
       // Frame origin centered in workspace (exact aspect, no portrait skew)
       Offset frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
@@ -2263,19 +2265,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final double maxH = workspaceH * margin;
     double aspect = _isPortrait ? (IMAGE_HEIGHT / IMAGE_WIDTH) : (IMAGE_WIDTH / IMAGE_HEIGHT);
     double frameW = 0, frameH = 0;
-    final bool imgPortrait = img.height > img.width;
-    if (imgPortrait == _isPortrait){
-      final double s = math.min(maxW / img.width, maxH / img.height);
-      frameW = img.width * s;
-      frameH = img.height * s;
+    if (maxW / maxH > aspect) {
+      frameH = maxH;
+      frameW = frameH * aspect;
     } else {
-      if (maxW / maxH > aspect) {
-        frameH = maxH;
-        frameW = frameH * aspect;
-      } else {
-        frameW = maxW;
-        frameH = frameW / aspect;
-      }
+      frameW = maxW;
+      frameH = frameW / aspect;
+    }
+    // Apply portrait-only shrink (5%) and extra 1% height reduction to match editor behavior
+    if (_isPortrait) {
+      const double frameScale = 0.95; // 5% uniform shrink
+      frameW *= frameScale;
+      frameH *= frameScale;
+      frameH *= 0.99; // 1% height-only reduction
     }
     Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
     origin = _snapOffset(origin);
@@ -4317,11 +4319,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _frameWidth = maxW;
           _frameHeight = _frameWidth / aspect;
         }
-        // Shrink crop frame by 5% only in portrait and keep centered
+        // Shrink crop frame by 5% in portrait, then reduce height by an extra 1%
         if (_isPortrait) {
-          const double frameScale = 0.95;
+          const double frameScale = 0.95; // 5% uniform shrink
           _frameWidth *= frameScale;
           _frameHeight *= frameScale;
+          // Additional 1% height-only reduction as requested
+          _frameHeight *= 0.99;
         }
         _frameOrigin = Offset(
           (workspaceW - _frameWidth)/2,
