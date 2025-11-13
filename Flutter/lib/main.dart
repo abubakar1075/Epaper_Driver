@@ -644,6 +644,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // Wrapper for triggering rebuild from extension helpers
   void _refresh(){ if(mounted){ setState(()=>{}); } }
 
+  // Open Saved window (no auto-seed here to respect user deletions)
+  Future<void> _openSavedWindow() async {
+    if(mounted){ setState(()=> _showLibrary = true); }
+  }
+
   // ========================= TOP BAR NAVIGATION BUTTONS =========================
   // Three main windows when connected:
   // 1. "Saved" button -> Opens SAVED IMAGES window (_showLibrary=true, shows _buildLibraryView)
@@ -685,16 +690,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             height: 32,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _library.isEmpty ? Colors.grey.shade400 : Colors.green.shade600,
+                backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 elevation: 2,
-                shadowColor: (_library.isEmpty ? Colors.grey : Colors.green).withOpacity(0.3),
+                shadowColor: Colors.green.withOpacity(0.3),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: _library.isEmpty ? null : (){ setState(()=> _showLibrary = true); },
+              onPressed: _openSavedWindow,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -4593,6 +4598,9 @@ class _PixabayImage {
 const List<String> kDefaultAssetImages = [];
 
 extension _LibraryPersistence on _EPaperImageSenderState {
+  // Marker file to remember if user deleted the bundled sample (prevents reseeding)
+  File? get _asset1DeletedFlagFile =>
+      (_libraryDir == null) ? null : File('${_libraryDir!.path}/asset_image1.deleted');
   Future<void> _initPersistentLibrary() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
@@ -4683,6 +4691,13 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       final pngFile = File('${_libraryDir!.path}/${entry.id}.png');
       if(await rawFile.exists()) { await rawFile.delete(); }
       if(await pngFile.exists()) { await pngFile.delete(); }
+      // If deleting the bundled sample, record a flag so we don't auto-reseed it later
+      if (entry.id.toLowerCase() == 'asset_image1') {
+        final flag = _asset1DeletedFlagFile;
+        if (flag != null) {
+          try { await flag.writeAsString('deleted', flush: true); } catch (_) {}
+        }
+      }
       await _writeLibraryIndex();
     }catch(e){ _updateStatus('Delete file error: $e'); }
   }
@@ -4690,6 +4705,9 @@ extension _LibraryPersistence on _EPaperImageSenderState {
   // Seed SamplePics/Image1.* into the library as a default asset, treated like a saved image
   Future<void> _seedSampleImageIfMissing() async {
     try{
+      // Respect user deletion: if flag exists, do not re-seed
+      final delFlag = _asset1DeletedFlagFile;
+      if (delFlag != null && await delFlag.exists()) return;
       // Avoid duplicate seeding
       if (_library.any((e) => e.id.toLowerCase() == 'asset_image1')) return;
       // Discover asset path via manifest (supports png/jpg variants)
