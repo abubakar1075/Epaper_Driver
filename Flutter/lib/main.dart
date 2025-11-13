@@ -340,12 +340,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     _introOpacity = CurvedAnimation(parent: _introCtrl, curve: Curves.easeIn);
   _introCtrl.forward();
   Future.delayed(const Duration(milliseconds: 1800), (){ if(mounted){ setState(()=> _showIntro = false); } });
-    _checkPermissions();
-    // After first frame, initialize Library then load first image (if any)
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _initPersistentLibrary();
-      if(mounted){ await _tryLoadFirstLibraryImageOnStartup(); }
-    });
+    
     // Track Bluetooth adapter state
     _btStateSub = FlutterBluePlus.adapterState.listen((s){
       final isOn = (s == BluetoothAdapterState.on);
@@ -354,8 +349,39 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         _scanForDevices();
       }
     });
-    // Prompt user to turn on Bluetooth at app start if needed
-    WidgetsBinding.instance.addPostFrameCallback((_) { _ensureBluetoothOnAtLaunch(); });
+    
+    // Initialize app after first frame with proper sequencing
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Step 1: Request permissions
+      await _checkPermissions();
+      
+      // Step 2: Initialize Library and load first image
+      await _initPersistentLibrary();
+      if(mounted){ await _tryLoadFirstLibraryImageOnStartup(); }
+      
+      // Step 3: Ensure Bluetooth is ON (prompt user if needed)
+      await _ensureBluetoothOnAtLaunch();
+      
+      // Step 4: If Bluetooth is already ON, start initial scan
+      if(mounted){
+        try {
+          final state = await FlutterBluePlus.adapterState.first;
+          print('Initial Bluetooth state: $state');
+          if(state == BluetoothAdapterState.on && _connectedDevice == null && !_isScanning){
+            print('Starting initial BLE scan after app launch...');
+            // Add small delay to ensure permissions are fully processed
+            await Future.delayed(const Duration(milliseconds: 500));
+            if(mounted && _connectedDevice == null && !_isScanning){
+              _scanForDevices();
+            }
+          } else {
+            print('Skipping initial scan - BT off or already connected/scanning');
+          }
+        } catch(e){
+          print('Error checking initial Bluetooth state: $e');
+        }
+      }
+    });
   // Load header/logo asset named CanvasBT in FramePic/ or SamplePics/
   _loadHeaderAsset();
     // Periodically update connection status text every second
