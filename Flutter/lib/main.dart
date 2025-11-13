@@ -898,31 +898,24 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // Recompute frame geometry and cover-fit view instantly for current layout sizes
   void _recomputeViewForCurrentFrame(BuildContext context){
     final imgObj = _uiOriginal; if(imgObj==null) return;
-    // These match sizes used in crop frame and preview
+    // Workspace size (match crop frame widget)
     final double workspaceW = MediaQuery.of(context).size.width - 24; // body horizontal padding is 12 each side
     final double workspaceH = 300; // crop frame height - keep constant to prevent image shift
-    
-    // Calculate base dimensions that maintain same diagonal size in both orientations
-    const double TARGET_DIAGONAL = 933.5;
+
+    // Compute crop frame size with exact 800x480 or 480x800 aspect ratio
+    const double margin = 0.9; // leave a bit of breathing room
+    final double maxW = workspaceW * margin;
+    final double maxH = workspaceH * margin;
+    final double aspect = _isPortrait ? (IMAGE_HEIGHT / IMAGE_WIDTH) : (IMAGE_WIDTH / IMAGE_HEIGHT); // width/height
     double frameW, frameH;
-    
-    if (_isPortrait) {
-      // Portrait: 480 wide x 800 tall (swapped)
-      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
-      frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
+    if (maxW / maxH > aspect) {
+      // height-limited
+      frameH = maxH;
+      frameW = frameH * aspect;
     } else {
-      // Landscape: 800 wide x 480 tall
-      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
-      frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
-    }
-    
-    // Scale down to fit workspace if needed
-    final scaleW = workspaceW * 0.9 / frameW;
-    final scaleH = workspaceH * 0.9 / frameH;
-    final scale = math.min(scaleW, scaleH);
-    if (scale < 1.0) {
-      frameW *= scale;
-      frameH *= scale;
+      // width-limited
+      frameW = maxW;
+      frameH = frameW / aspect;
     }
     final Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
     // Compute fit scale for min/max scale limits only, don't auto-adjust user's view
@@ -1856,16 +1849,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       final double workspaceW = MediaQuery.of(context).size.width - 24;
       final double workspaceH = 300;
       
-      // Calculate frame dimensions for CURRENT orientation (don't auto-change)
-      const double TARGET_DIAGONAL = 933.5;
+      // Calculate crop frame dimensions for CURRENT orientation with exact 800x480 or 480x800 ratio
+      const double margin = 0.9;
+      final double maxW = (MediaQuery.of(context).size.width - 24) * margin;
+      final double maxH = 300 * margin;
+      final double aspect = _isPortrait ? (IMAGE_HEIGHT / IMAGE_WIDTH) : (IMAGE_WIDTH / IMAGE_HEIGHT); // width/height
       double frameW, frameH;
-      
-      if (_isPortrait) {
-        frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
-        frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
+      if (maxW / maxH > aspect) {
+        // height-limited
+        frameH = maxH;
+        frameW = frameH * aspect;
       } else {
-        frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
-        frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
+        // width-limited
+        frameW = maxW;
+        frameH = frameW / aspect;
       }
       
       // Scale down frame to fit workspace if needed
@@ -1877,18 +1874,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         frameH *= scale;
       }
       
-      // Fit the saved image to the current frame
+      // Determine if current orientation matches the saved image orientation
+      final bool orientationsMatch = (_isPortrait == entry.wasPortrait);
+
+      // Fit calculations (used only when orientations match)
       final iw = uiImage.width.toDouble();
-      final ih = uiImage.height.toDouble();
+      final ih = uiImage.height.toDouble(); // kept for clarity; used for exactScale equivalence and future logic
       
-      // For saved images at display resolution, use a more appropriate fit strategy
-      // Fill one dimension and let the user crop/adjust as needed
-      final fitScaleWidth = frameW / iw;
-      final fitScaleHeight = frameH / ih;
-      
-      // Use the LARGER scale to ensure image fills frame (user can zoom out if needed)
-      // This prevents tiny images when orientation doesn't match
-      final fitScale = math.max(fitScaleWidth, fitScaleHeight);
+      // Exact fill scale when aspect matches; otherwise this is just a bound for min/max
+      final exactScale = frameW / iw; // equals frameH/ih when ratios match exactly
       
       // Single setState with everything ready
       if (mounted) {
@@ -1903,16 +1897,26 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _frameHeight = frameH;
           _frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
           
-          // Set view to fit the saved image in the matching frame
-          _viewScale = fitScale;
-          _viewRotation = 0.0;
-          _viewTranslation = Offset(
-            (workspaceW - iw * fitScale) / 2,
-            (workspaceH - ih * fitScale) / 2,
-          );
-          _viewInitialized = true;
-          _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
-          _maxScale = fitScale * 80;
+          if (orientationsMatch){
+            // Only when orientations match: cover the crop frame (eliminate gaps) and center
+            final double scaleW = frameW / iw;
+            final double scaleH = frameH / ih;
+            final double coverScale = math.max(scaleW, scaleH);
+            _viewScale = coverScale;
+            _viewRotation = 0.0;
+            _viewTranslation = Offset(
+              _frameOrigin.dx + (frameW - iw * coverScale) / 2,
+              _frameOrigin.dy + (frameH - ih * coverScale) / 2,
+            );
+            _viewInitialized = true;
+            _minScale = (coverScale * 0.01).clamp(0.005, double.infinity);
+            _maxScale = coverScale * 80;
+          } else {
+            // If orientations differ: do not auto-fit; keep current view
+            // Still update scale limits relative to this image to keep gestures stable
+            _minScale = (exactScale * 0.01).clamp(0.005, double.infinity);
+            _maxScale = exactScale * 80;
+          }
           
           _showLibrary = false;
         });
@@ -4294,28 +4298,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         final workspaceW = constraints.maxWidth;
         final workspaceH = constraints.maxHeight;
         
-        // Calculate base dimensions that maintain same diagonal size in both orientations
-        // For 800x480 display, diagonal = sqrt(800^2 + 480^2) = 933.5
-        const double TARGET_DIAGONAL = 933.5;
-        
-        if (_isPortrait) {
-          // Portrait: 480 wide x 800 tall (swapped)
-          // Calculate dimensions maintaining the target diagonal
-          _frameWidth = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
-          _frameHeight = _frameWidth * (IMAGE_WIDTH / IMAGE_HEIGHT);
+        // Calculate crop frame dimensions with exact aspect ratio 800x480 or 480x800
+        const double margin = 0.9;
+        final double maxW = workspaceW * margin;
+        final double maxH = workspaceH * margin;
+        final double aspect = _isPortrait ? (IMAGE_HEIGHT / IMAGE_WIDTH) : (IMAGE_WIDTH / IMAGE_HEIGHT); // width/height
+        if (maxW / maxH > aspect) {
+          // height-limited
+          _frameHeight = maxH;
+          _frameWidth = _frameHeight * aspect;
         } else {
-          // Landscape: 800 wide x 480 tall
-          _frameWidth = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
-          _frameHeight = _frameWidth * (IMAGE_HEIGHT / IMAGE_WIDTH);
-        }
-        
-        // Scale down to fit workspace if needed
-        final scaleW = workspaceW * 0.9 / _frameWidth;
-        final scaleH = workspaceH * 0.9 / _frameHeight;
-        final scale = math.min(scaleW, scaleH);
-        if (scale < 1.0) {
-          _frameWidth *= scale;
-          _frameHeight *= scale;
+          // width-limited
+          _frameWidth = maxW;
+          _frameHeight = _frameWidth / aspect;
         }
         _frameOrigin = Offset(
           (workspaceW - _frameWidth)/2,
