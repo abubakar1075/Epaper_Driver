@@ -489,7 +489,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   void _dismissActiveDialog(){
     try{
       final ctx = _activeDialogContext;
-      if(ctx!=null){
+      if(ctx!=null && ctx.mounted){
         Navigator.of(ctx, rootNavigator: true).pop();
       }
     }catch(_){ } finally {
@@ -4217,10 +4217,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     top: 3,
                     left: 18,
                     child: SafeArea(
-                      child: Builder(
-                        builder: (builderContext) => GestureDetector(
-                          onTap: () => Scaffold.of(builderContext).openDrawer(),
-                          child: Container(
+                      child: GestureDetector(
+                        onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                        child: Container(
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(4),
@@ -4244,7 +4243,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                                 Container(height: 4, width: 28, color: Colors.black87),
                               ],
                             ),
-                          ),
                         ),
                       ),
                     ),
