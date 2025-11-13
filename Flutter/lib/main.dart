@@ -168,6 +168,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   double _frameWidth = 0;
   double _frameHeight = 0;
   Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
+  bool _needsRecenteringOnce = false; // request recenter after next frame recompute
   bool _isPortrait = false; // portrait orientation toggle
   Color _frameBorderColor = Colors.black; // dynamically adjusted for contrast
   // Slider-driven tuning
@@ -932,6 +933,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
     }
     Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
+    origin = _snapOffset(origin);
     // Compute fit scale for min/max scale limits only, don't auto-adjust user's view
     final iw = imgObj.width.toDouble();
     final ih = imgObj.height.toDouble();
@@ -958,10 +960,27 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final iw = img.width.toDouble();
     final ih = img.height.toDouble();
     _viewScale = scale;
-    _viewTranslation = Offset(
-      _frameOrigin.dx + _frameWidth/2 - iw*scale/2,
-      _frameOrigin.dy + _frameHeight/2 - ih*scale/2,
-    );
+    double tx = _frameOrigin.dx + _frameWidth/2 - iw*scale/2;
+    double ty = _frameOrigin.dy + _frameHeight/2 - ih*scale/2;
+    // Snap to device pixels to avoid half-pixel visual bias on high-DPI screens
+    try{
+      final dpr = ui.window.devicePixelRatio;
+      tx = (tx * dpr).roundToDouble() / dpr;
+      ty = (ty * dpr).roundToDouble() / dpr;
+    } catch(_) {}
+    _viewTranslation = Offset(tx, ty);
+  }
+
+  Offset _snapOffset(Offset o){
+    try{
+      final dpr = ui.window.devicePixelRatio;
+      return Offset(
+        (o.dx * dpr).roundToDouble() / dpr,
+        (o.dy * dpr).roundToDouble() / dpr,
+      );
+    } catch(_){
+      return o;
+    }
   }
 
   // ========================= AI IMAGES VIEW =========================
@@ -1921,15 +1940,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _frameHeight = frameH;
           _frameOrigin = frameOrigin;
           
-          // Simplified placement: center image on crop frame center; do not force cover-fit
+          // Placement: center image on crop frame center; if orientation matches, use exact edge-fit scale
           final double fitScale = math.min(frameW / iw, frameH / ih);
-          double centerScale = _viewScale;
+          double centerScale = exactScaleForFrame ?? _viewScale;
           if (!(centerScale.isFinite) || centerScale <= 0) centerScale = fitScale;
           _viewRotation = 0.0;
           _centerViewOnFrame(centerScale);
           _viewInitialized = true;
           _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
           _maxScale = fitScale * 80;
+          // Request one-time recenter after layout to eliminate any residual drift
+          _needsRecenteringOnce = true;
           
           _showLibrary = false;
         });
@@ -2240,66 +2261,46 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
 
   
 
-  // Reset pan/zoom/rotation to initial cover fit
+  // Reset pan/zoom/rotation and recenter using current frame rules
   void _resetView(){
-    if(_uiOriginal==null){ return; }
-    
-    // Calculate workspace and frame dimensions
+    final img = _uiOriginal; if(img==null) return;
     final double workspaceW = MediaQuery.of(context).size.width - 24;
     final double workspaceH = 300;
-    
-    const double TARGET_DIAGONAL = 933.5;
-    double frameW, frameH;
-    
-    if (_isPortrait) {
-      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
-      frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
+    const double margin = 0.9;
+    final double maxW = workspaceW * margin;
+    final double maxH = workspaceH * margin;
+    double aspect = _isPortrait ? (IMAGE_HEIGHT / IMAGE_WIDTH) : (IMAGE_WIDTH / IMAGE_HEIGHT);
+    double frameW = 0, frameH = 0;
+    final bool imgPortrait = img.height > img.width;
+    if (imgPortrait == _isPortrait){
+      final double s = math.min(maxW / img.width, maxH / img.height);
+      frameW = img.width * s;
+      frameH = img.height * s;
     } else {
-      frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_HEIGHT / IMAGE_WIDTH) * (IMAGE_HEIGHT / IMAGE_WIDTH));
-      frameH = frameW * (IMAGE_HEIGHT / IMAGE_WIDTH);
+      if (maxW / maxH > aspect) {
+        frameH = maxH;
+        frameW = frameH * aspect;
+      } else {
+        frameW = maxW;
+        frameH = frameW / aspect;
+      }
     }
-    
-    final scaleW = workspaceW * 0.9 / frameW;
-    final scaleH = workspaceH * 0.9 / frameH;
-    final scale = math.min(scaleW, scaleH);
-    if (scale < 1.0) {
-      frameW *= scale;
-      frameH *= scale;
-    }
-    
-    final iw = _uiOriginal!.width.toDouble();
-    final ih = _uiOriginal!.height.toDouble();
-    
-    // Check if this is a saved image (at display resolution)
-    final bool isSavedImage = (iw == 800 && ih == 480) || (iw == 480 && ih == 800);
-    
-    // For saved images, use max scale to fill frame (prevents tiny display)
-    // For regular photos, use min scale to fit entirely in frame
-    final fitScale = isSavedImage 
-        ? math.max(frameW / iw, frameH / ih)  // Fill frame
-        : math.min(frameW / iw, frameH / ih);  // Fit in frame
-    
+    Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
+    origin = _snapOffset(origin);
+    final double fitScale = math.min(frameW / img.width, frameH / img.height);
     setState((){
       _frameWidth = frameW;
       _frameHeight = frameH;
-      _frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
-      
-      _viewScale = fitScale;
+      _frameOrigin = origin;
       _viewRotation = 0.0;
-      _viewTranslation = Offset(
-        (workspaceW - iw * fitScale) / 2,
-        (workspaceH - ih * fitScale) / 2,
-      );
-      _viewInitialized = true; // Mark as initialized so it doesn't recalculate
+      _centerViewOnFrame(fitScale);
+      _viewInitialized = true;
       _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
       _maxScale = fitScale * 80;
-      
-      // changing view invalidates processed cache
       _processedImage = null; _processedBytes = null; _processedPngBytes = null;
-      // Update frame border color after reset
       _updateFrameBorderColor();
     });
-  // auto disabled
+    _needsRecenteringOnce = true;
   }
 
   Future<void> _exitApp() async {
@@ -4343,6 +4344,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           (workspaceW - _frameWidth)/2,
           (workspaceH - _frameHeight)/2,
         );
+        _frameOrigin = _snapOffset(_frameOrigin);
         if (!_viewInitialized && _uiOriginal != null) {
           final iw = _uiOriginal!.width.toDouble();
           final ih = _uiOriginal!.height.toDouble();
@@ -4363,6 +4365,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           // Update frame border color for initial image
           _updateFrameBorderColor();
           // Cropped preview now paints directly; no PNG cache needed
+        }
+        // If a Saved→Editor placement requested a recenter, apply it now using final frame values
+        if (_needsRecenteringOnce) {
+          final iw = _uiOriginal?.width.toDouble() ?? 0;
+          final ih = _uiOriginal?.height.toDouble() ?? 0;
+          final fitScaleNow = (iw>0 && ih>0) ? math.min(_frameWidth / iw, _frameHeight / ih) : 1.0;
+          final double scale = (_viewScale.isFinite && _viewScale > 0) ? _viewScale : fitScaleNow;
+          _viewRotation = 0.0;
+          _centerViewOnFrame(scale);
+          _needsRecenteringOnce = false;
         }
         return GestureDetector(
           onDoubleTap: _resetView,
