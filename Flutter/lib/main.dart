@@ -424,41 +424,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     try{
       final codec = await ui.instantiateImageCodec(e.pngBytes);
       final frame = await codec.getNextFrame();
-      ui.Image decoded = frame.image;
-      // If this entry was saved as portrait, rotate the decoded UI image 90° so it displays as portrait in the first window
-      if(e.wasVertical){
-        decoded = await _rotateUiImage90(decoded, clockwise: false); // -90° to convert 800x480 -> 480x800
-      }
+      final ui.Image decoded = frame.image; // Load exactly as stored - no automatic rotation
       if(mounted){ setState(()=> _uiOriginal = decoded); }
     }catch(_){ /* ignore; PNG fallback remains */ }
   }
 
-  // Rotate a ui.Image by 90 degrees. When clockwise is true, rotate +90°; otherwise rotate -90°.
-  Future<ui.Image> _rotateUiImage90(ui.Image src, {bool clockwise = true}) async {
-    final int newW = clockwise ? src.height : src.height;
-    final int newH = clockwise ? src.width : src.width;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, newW.toDouble(), newH.toDouble()));
-    if(clockwise){
-      // Move origin to the right edge, then rotate +90°
-      canvas.translate(newW.toDouble(), 0);
-      canvas.rotate(math.pi/2);
-    }else{
-      // Move origin to the bottom edge, then rotate -90°
-      canvas.translate(0, newH.toDouble());
-      canvas.rotate(-math.pi/2);
-    }
-    paintImage(
-      canvas: canvas,
-      rect: Rect.fromLTWH(0, 0, src.width.toDouble(), src.height.toDouble()),
-      image: src,
-      fit: BoxFit.contain,
-      alignment: Alignment.topLeft,
-    );
-    final picture = recorder.endRecording();
-    final rotated = await picture.toImage(newW, newH);
-    return rotated;
-  }
+  // Removed auto-rotation helper to enforce strict no-auto-rotation behavior
 
   // First window removed: no promo strip loader
 
@@ -846,9 +817,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             child: _uiOriginal!=null ? _buildCropFrame() : Center(
               child: _processedPngBytes!=null ? FittedBox(
                 fit: BoxFit.contain,
-                child: _verticalFrame
-                  ? RotatedBox(quarterTurns:3, child: Image.memory(_processedPngBytes!, fit: BoxFit.contain))
-                  : Image.memory(_processedPngBytes!, fit: BoxFit.contain),
+                child: Image.memory(_processedPngBytes!, fit: BoxFit.contain),
               ) : Text('Select or generate an image', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
             ),
           ),
@@ -1680,8 +1649,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     if(_originalImage==null){ return; }
   if(_processedBytes==null){ await _processImage(); }
     if(_processedBytes==null || _processedImage==null){ return; }
-    // Reuse cached PNG when available
-  final png = _processedPngBytes ?? Uint8List.fromList(img.encodePng(_processedImage!));
+    // Encode PNG for library in the same visual orientation as the current frame
+    // so that when reloaded into the editor it appears exactly as saved (no rotation).
+    img.Image pngImage = _processedImage!;
+    if(_verticalFrame){
+      // Portrait frame: store PNG as portrait (rotate -90 so width<height)
+      pngImage = img.copyRotate(pngImage, angle: -90);
+    }
+    final Uint8List png = Uint8List.fromList(img.encodePng(pngImage));
   final entry = _LibraryEntry(
     id: DateTime.now().millisecondsSinceEpoch.toString(),
     image: _processedImage!.clone(),
@@ -1829,9 +1804,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     child: Stack(children:[
                       Positioned.fill(child: Padding(
                         padding: const EdgeInsets.all(3),
-                        child: e.wasVertical
-                            ? RotatedBox(quarterTurns: 3, child: Image.memory(e.pngBytes, fit: BoxFit.cover))
-                            : Image.memory(e.pngBytes, fit: BoxFit.cover),
+                        child: Image.memory(e.pngBytes, fit: BoxFit.cover),
                       )),
                       Positioned(
                         left:4, top:4,
@@ -1875,20 +1848,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       final frame = await codec.getNextFrame();
       ui.Image uiImage = frame.image;
       
-      // If image was saved as portrait, rotate it back to portrait orientation
-      if(entry.wasVertical){
-        uiImage = await _rotateUiImage90(uiImage, clockwise: false); // Rotate back to portrait
-      }
+      // Load image exactly as stored - NO automatic rotation
+      // User will manually rotate with gestures if needed
       
       // Calculate workspace dimensions (same as in _recomputeViewForCurrentFrame)
       final double workspaceW = MediaQuery.of(context).size.width - 24;
       final double workspaceH = 300;
       
-      // Calculate frame dimensions for SAVED image's orientation (use entry.wasVertical)
+      // Calculate frame dimensions for CURRENT orientation (don't auto-change)
       const double TARGET_DIAGONAL = 933.5;
       double frameW, frameH;
       
-      if (entry.wasVertical) {
+      if (_verticalFrame) {
         frameW = TARGET_DIAGONAL / math.sqrt(1 + (IMAGE_WIDTH / IMAGE_HEIGHT) * (IMAGE_WIDTH / IMAGE_HEIGHT));
         frameH = frameW * (IMAGE_WIDTH / IMAGE_HEIGHT);
       } else {
@@ -1926,8 +1897,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _processedBytes = null;
           _processedPngBytes = null;
           _uiOriginal = uiImage;
-          // Set frame orientation to match saved image to prevent rotation
-          _verticalFrame = entry.wasVertical;
+          // Keep current orientation - don't auto-change (only via Portrait/Landscape button)
           _frameWidth = frameW;
           _frameHeight = frameH;
           _frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
