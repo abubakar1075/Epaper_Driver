@@ -819,7 +819,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             child: _uiOriginal!=null ? _buildCropFrame() : Center(
               child: _processedPngBytes!=null ? FittedBox(
                 fit: BoxFit.contain,
-                child: Image.memory(_processedPngBytes!, fit: BoxFit.contain),
+                child: Image.memory(_processedPngBytes!, fit: BoxFit.contain, filterQuality: FilterQuality.high),
               ) : Text('Select or generate an image', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
             ),
           ),
@@ -1043,7 +1043,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                 ? const CircularProgressIndicator()
                 : (_aiPngBytes==null
                     ? Text(_aiError ?? 'Enter a prompt and tap Generate', style: Theme.of(context).textTheme.titleMedium)
-                    : Image.memory(_aiPngBytes!, fit: BoxFit.contain)),
+                    : Image.memory(_aiPngBytes!, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
             ),
           ),
         ),
@@ -1756,7 +1756,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     children: [
                       AspectRatio(
                         aspectRatio: 16/9,
-                        child: Image.asset(fingerAsset, fit: BoxFit.contain),
+                        child: Image.asset(fingerAsset, fit: BoxFit.contain, filterQuality: FilterQuality.high),
                       ),
                     ],
                   ),
@@ -1845,7 +1845,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     child: Stack(children:[
                       Positioned.fill(child: Padding(
                         padding: const EdgeInsets.all(3),
-                        child: Image.memory(e.pngBytes, fit: BoxFit.cover),
+                        child: Image.memory(e.pngBytes, fit: BoxFit.cover, filterQuality: FilterQuality.high),
                       )),
                       Positioned(
                         left:4, top:4,
@@ -3423,7 +3423,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     children: [
                       AspectRatio(
                         aspectRatio: 16/9,
-                        child: Image.asset(fingerAsset, fit: BoxFit.contain),
+                        child: Image.asset(fingerAsset, fit: BoxFit.contain, filterQuality: FilterQuality.high),
                       ),
                     ],
                   ),
@@ -4210,6 +4210,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     child: Image.asset(
                       _headerAsset!,
                       fit: BoxFit.fitWidth,
+                      filterQuality: FilterQuality.high,
                       alignment: Alignment.topCenter,
                     ),
                   ),
@@ -4272,7 +4273,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                             height: MediaQuery.of(context).size.width*0.55,
                             decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 24, offset: Offset(0,10))]),
                             clipBehavior: Clip.antiAlias,
-                            child: Image.asset('Logo/Applogo.jpg', fit: BoxFit.cover),
+                            child: Image.asset('Logo/Applogo.jpg', fit: BoxFit.cover, filterQuality: FilterQuality.high),
                           ),
                           const SizedBox(height: 18),
                           const SizedBox(width: 46, child: LinearProgressIndicator(minHeight: 4)),
@@ -4514,7 +4515,14 @@ class _WorkspacePainter extends CustomPainter {
     canvas.translate(translation.dx, translation.dy);
     canvas.rotate(rotation);
     canvas.scale(scale, scale);
-    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,img.width.toDouble(), img.height.toDouble()), image: img, fit: BoxFit.fill, alignment: Alignment.center);
+    paintImage(
+      canvas: canvas,
+      rect: Rect.fromLTWH(0,0,img.width.toDouble(), img.height.toDouble()),
+      image: img,
+      fit: BoxFit.fill,
+      alignment: Alignment.center,
+      filterQuality: FilterQuality.high,
+    );
     canvas.restore();
   }
   @override
@@ -4536,7 +4544,14 @@ class _CroppedPreviewPainter extends CustomPainter {
     canvas.translate(translation.dx, translation.dy);
     canvas.rotate(rotation);
     canvas.scale(scale, scale);
-    paintImage(canvas: canvas, rect: Rect.fromLTWH(0,0,image.width.toDouble(), image.height.toDouble()), image: image, fit: BoxFit.fill, alignment: Alignment.center);
+    paintImage(
+      canvas: canvas,
+      rect: Rect.fromLTWH(0,0,image.width.toDouble(), image.height.toDouble()),
+      image: image,
+      fit: BoxFit.fill,
+      alignment: Alignment.center,
+      filterQuality: FilterQuality.high,
+    );
     canvas.restore();
   }
   @override
