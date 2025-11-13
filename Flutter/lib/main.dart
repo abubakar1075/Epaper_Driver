@@ -4591,6 +4591,8 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       if(await indexFile.exists()){
         await _loadLibraryIndex(indexFile);
       }
+      // Seed sample image from assets into Saved if missing
+      await _seedSampleImageIfMissing();
       _refresh();
     } catch (e) {
       _updateStatus('Library init error: $e');
@@ -4670,6 +4672,76 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       if(await pngFile.exists()) { await pngFile.delete(); }
       await _writeLibraryIndex();
     }catch(e){ _updateStatus('Delete file error: $e'); }
+  }
+
+  // Seed SamplePics/Image1.* into the library as a default asset, treated like a saved image
+  Future<void> _seedSampleImageIfMissing() async {
+    try{
+      // Avoid duplicate seeding
+      if (_library.any((e) => e.id.toLowerCase() == 'asset_image1')) return;
+      // Discover asset path via manifest (supports png/jpg variants)
+      final manifestText = await rootBundle.loadString('AssetManifest.json');
+      final Map<String, dynamic> manifest = jsonDecode(manifestText);
+      String? assetPath;
+      for (final key in manifest.keys) {
+        final k = key.toString().toLowerCase();
+        if (k.contains('samplepics/image1')) { assetPath = key; break; }
+      }
+      // Fallback to common extensions if manifest scan missed it
+      assetPath ??= await _tryFindFirstExistingAsset([
+        'SamplePics/Image1.png',
+        'SamplePics/Image1.jpg',
+        'SamplePics/Image1.jpeg',
+        'SamplePics/Image1.webp',
+      ]);
+      if (assetPath == null) return; // not packaged
+      // Load asset bytes
+      final data = await rootBundle.load(assetPath);
+      final Uint8List bytes = data.buffer.asUint8List();
+      // Decode
+      final img.Image? decoded = img.decodeImage(bytes);
+      if (decoded == null) return;
+      final bool wasPortrait = decoded.height > decoded.width;
+      // Build 800x480 base (landscape canvas) using fit letterbox
+      final img.Image base = _fitImage(decoded);
+      // Quantize + raw codes using the same pipeline as saving
+      final Tuple2<img.Image, Uint8List> q = _quantizeTo6ColorAndCreateRawBytes(base);
+      img.Image disp = q.item1; // 800x480
+      final Uint8List rawCodes = q.item2;
+      // Store PNG in the same visual orientation as the frame orientation marker
+      if (wasPortrait) {
+        disp = img.copyRotate(disp, angle: -90); // store portrait PNG
+      }
+      final Uint8List pngBytes = Uint8List.fromList(img.encodePng(disp));
+      // Create and persist entry
+      final entry = _LibraryEntry(
+        id: 'asset_image1',
+        image: q.item1.clone(),
+        rawCodes: rawCodes,
+        pngBytes: pngBytes,
+        created: DateTime.now(),
+        wasPortrait: wasPortrait,
+        isDefaultAsset: true,
+        title: 'Image1',
+      );
+      _library.insert(0, entry);
+      _refresh();
+      await _persistLibraryEntry(entry);
+      _updateStatus('Sample image added to Saved');
+    } catch (e){
+      _updateStatus('Seed sample error: $e');
+    }
+  }
+
+  // Try direct asset paths in order; returns first that exists, else null
+  Future<String?> _tryFindFirstExistingAsset(List<String> candidates) async {
+    for (final p in candidates) {
+      try {
+        await rootBundle.load(p);
+        return p;
+      } catch (_) {}
+    }
+    return null;
   }
 }
 
