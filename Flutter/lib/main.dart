@@ -4547,12 +4547,8 @@ class _PixabayImage {
   const _PixabayImage({required this.id, required this.previewUrl, required this.fullUrl, required this.width, required this.height, required this.author});
 }
 
-// Default asset list with renamed images
-const List<String> kDefaultAssetImages = [
-  'SamplePics/Image1.png',
-  'SamplePics/Image2.png',
-  'SamplePics/Image3.png',
-];
+// Default asset list - empty to not show sample images in Saved
+const List<String> kDefaultAssetImages = [];
 
 extension _LibraryPersistence on _EPaperImageSenderState {
   Future<void> _initPersistentLibrary() async {
@@ -4563,43 +4559,10 @@ extension _LibraryPersistence on _EPaperImageSenderState {
         await _libraryDir!.create(recursive: true);
       }
       final indexFile = File('${_libraryDir!.path}/index.json');
-      final firstLaunch = !await indexFile.exists();
-      if(!firstLaunch){
+      if(await indexFile.exists()){
         await _loadLibraryIndex(indexFile);
-        await _removeObsoletePortraitAssets(); // drop old lion/umbrella portrait defaults
-        await _ensureDefaultAssetsPresent(); // add new cat/leaves if missing
       }
-      if(firstLaunch){
-        final defaults = await _resolveDefaultAssetList();
-        for(final assetPath in defaults){
-          try{
-            final data = await rootBundle.load(assetPath);
-            final bytes = data.buffer.asUint8List();
-            final decoded = img.decodeImage(bytes);
-            if(decoded==null) continue;
-            final fitted = _fitImage(decoded);
-            final result = _quantizeTo6ColorAndCreateRawBytes(fitted);
-            final display = result.item1;
-            final raw = result.item2;
-            final png = Uint8List.fromList(img.encodePng(display));
-            final baseName = assetPath.split('/').last.toLowerCase();
-            final entry = _LibraryEntry(
-              id: 'asset_${assetPath.split('/').last}',
-              image: display.clone(),
-              rawCodes: raw,
-              pngBytes: png,
-              created: DateTime.now(),
-              wasVertical: _isPortraitAsset(baseName),
-              isDefaultAsset: true,
-              title: 'Saved',
-            );
-            _library.add(entry);
-            await _persistLibraryEntry(entry, writeIndex:false);
-          }catch(_){ }
-        }
-        await _writeLibraryIndex();
-      }
-  _refresh();
+      _refresh();
     } catch (e) {
       _updateStatus('Library init error: $e');
     }
@@ -4676,75 +4639,6 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       if(await pngFile.exists()) { await pngFile.delete(); }
       await _writeLibraryIndex();
     }catch(e){ _updateStatus('Delete file error: $e'); }
-  }
-
-  // Discover asset images under SamplePics/ by reading the AssetManifest (handles arbitrary filenames)
-  Future<List<String>> _discoverAssetManifestImages() async {
-    try{
-      final manifestJson = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> manifestMap = jsonDecode(manifestJson);
-      final list = manifestMap.keys.where((k)=> k.startsWith('SamplePics/') && (k.endsWith('.png')||k.endsWith('.jpg')||k.endsWith('.jpeg'))).toList();
-      list.sort();
-      return list;
-    }catch(_){ return const []; }
-  }
-
-  // Merge explicit list + discovered list (avoid duplicates)
-  Future<List<String>> _resolveDefaultAssetList() async {
-    final discovered = await _discoverAssetManifestImages();
-    final set = <String>{};
-    for(final p in kDefaultAssetImages){ set.add(p); }
-    for(final p in discovered){ set.add(p); }
-    return set.where((p)=> p.startsWith('SamplePics/')).toList();
-  }
-
-  // Add any missing default assets not already in library (id uses filename)
-  Future<void> _ensureDefaultAssetsPresent() async {
-    final defaults = await _resolveDefaultAssetList();
-    final existingIds = _library.map((e)=> e.id).toSet();
-    bool added = false;
-    for(final assetPath in defaults){
-      final assetId = 'asset_${assetPath.split('/').last}';
-      if(existingIds.contains(assetId)) continue;
-      try{
-        final data = await rootBundle.load(assetPath);
-        final bytes = data.buffer.asUint8List();
-        final decoded = img.decodeImage(bytes);
-        if(decoded==null) continue;
-        final fitted = _fitImage(decoded);
-        final result = _quantizeTo6ColorAndCreateRawBytes(fitted);
-        final display = result.item1;
-        final raw = result.item2;
-        final png = Uint8List.fromList(img.encodePng(display));
-        final baseName = assetPath.split('/').last.toLowerCase();
-        final entry = _LibraryEntry(
-          id: assetId,
-          image: display.clone(),
-          rawCodes: raw,
-          pngBytes: png,
-          created: DateTime.now(),
-          wasVertical: _isPortraitAsset(baseName),
-          isDefaultAsset: true,
-          title: _deriveAssetTitle(baseName),
-        );
-        _library.add(entry);
-        await _persistLibraryEntry(entry, writeIndex:false);
-        added = true;
-      }catch(_){ }
-    }
-    if(added){ await _writeLibraryIndex(); _refresh(); }
-  }
-
-  // Remove obsolete default portrait assets (lion / umbrella) that previously caused rotation issues.
-  Future<void> _removeObsoletePortraitAssets() async {
-  final obsolete = _library.where((e)=> e.isDefaultAsset && (e.id.contains('lion') || e.id.contains('umbrella'))).toList();
-    if(obsolete.isEmpty) return;
-    for(final e in obsolete){
-      _library.remove(e);
-      try{ await _deleteLibraryEntryFiles(e); }catch(_){ }
-    }
-    await _writeLibraryIndex();
-    _refresh();
   }
 }
 
