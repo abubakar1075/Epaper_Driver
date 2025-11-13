@@ -814,6 +814,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           // Frame / main workspace
           SizedBox(
             height: frameAreaH,
+            // Crop frame: the black rectangle area the user fits the image into
             child: _uiOriginal!=null ? _buildCropFrame() : Center(
               child: _processedPngBytes!=null ? FittedBox(
                 fit: BoxFit.contain,
@@ -2049,7 +2050,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   
 
   // Load an online image and set it as the current image
-  // Preview: show only "In Frame" (left); processing happens on Send
+  // Preview: show only "Frame" (left); processing happens on Send
   Widget _buildPreviewAndSliders(){
     return SizedBox(
       height: _isSending ? 190 : 210,
@@ -2088,7 +2089,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             );
           }
           
-          return _previewPanel('In Frame', _croppedOriginalPreviewSized(frameW, frameH, frameOrigin));
+          // Lower-half preview is called the "Frame"
+          return _previewPanel('Frame', _croppedOriginalPreviewSized(frameW, frameH, frameOrigin));
         },
       ),
     ),
@@ -2165,8 +2167,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                   child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                 ),
               ),
-              // Battery status bottom-left inside the "In Frame" panel (no separate bar)
-              if (title == 'In Frame' && (_batteryPercent != null || _isCharging))
+              // Battery status bottom-left inside the "Frame" panel (no separate bar)
+              if (title == 'Frame' && (_batteryPercent != null || _isCharging))
                 Positioned(
                   left: 4,
                   bottom: 4,
@@ -4283,6 +4285,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     ),
   );
 
+  // Crop frame builder: constructs the black rectangle ("crop frame") shown in the editor's first window.
+  // The crop frame is the area the user fits the image into; it changes orientation with the Portrait/Landscape button.
   Widget _buildCropFrame() {
     return SizedBox(
       height: 300, // keep constant to prevent image shift during sending
