@@ -923,13 +923,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       frameW = maxW;
       frameH = frameW / aspect;
     }
-    // Shrink crop frame by 5% in portrait, then reduce height by an extra 1%
-    if (_isPortrait) {
-      const double frameScale = 0.95; // 5% uniform shrink
-      frameW *= frameScale;
-      frameH *= frameScale;
-      frameH *= 0.99; // 1% height-only reduction
-    }
+    // No portrait-specific shrink; maintain exact hardware aspect ratio
     Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
     origin = _snapOffset(origin);
     // Compute fit scale for min/max scale limits only, don't auto-adjust user's view
@@ -1903,13 +1897,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         frameW = maxW;
         frameH = frameW / aspect;
       }
-      // Shrink crop frame by 5% in portrait, then reduce height by an extra 1%
-      if (_isPortrait) {
-        const double frameScale = 0.95; // 5% uniform shrink
-        frameW *= frameScale;
-        frameH *= frameScale;
-        frameH *= 0.99; // 1% height-only reduction
-      }
+      // No portrait-specific shrink; maintain exact hardware aspect ratio
       // Frame origin centered in workspace (exact aspect, no portrait skew)
       Offset frameOrigin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
       
@@ -1918,6 +1906,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // Fit calculations
       final iw = uiImage.width.toDouble();
       final ih = uiImage.height.toDouble(); // kept for clarity; used for exactScale equivalence and future logic
+      
+      // DEBUG: Print dimensions
+      print('═════════════════════════════════════════');
+      print('📸 LOADED IMAGE FROM SAVED');
+      print('Real image (hardware):  ${iw.toInt()}px × ${ih.toInt()}px');
+      print('Crop frame (preview):   ${frameW.toStringAsFixed(1)}px × ${frameH.toStringAsFixed(1)}px');
+      print('Saved orientation: ${entry.wasPortrait ? "Portrait" : "Landscape"}');
+      print('Current frame mode: ${_isPortrait ? "Portrait" : "Landscape"}');
+      print('Orientation match: ${entry.wasPortrait == _isPortrait}');
       
       // No pre-scaling here; scale will be chosen per-case below
       
@@ -1934,24 +1931,50 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _frameHeight = frameH;
           _frameOrigin = frameOrigin;
           
-          // Placement: center image on crop frame center; do not force edge-fit
+          // Calculate exact fit scale for saved images
           final double fitScale = math.min(frameW / iw, frameH / ih);
-          double centerScale = _viewScale;
-          if (!(centerScale.isFinite) || centerScale <= 0) centerScale = fitScale;
+          
+          print('Calculated fitScale: ${fitScale.toStringAsFixed(6)}');
+          print('  Width ratio:  ${frameW.toStringAsFixed(2)} / ${iw.toInt()} = ${(frameW / iw).toStringAsFixed(6)}');
+          print('  Height ratio: ${frameH.toStringAsFixed(2)} / ${ih.toInt()} = ${(frameH / ih).toStringAsFixed(6)}');
+          print('  Using min: ${fitScale.toStringAsFixed(6)}');
+          
+          // For saved images, use exact fitScale for perfect fit (don't use old _viewScale)
+          _viewScale = fitScale;
           _viewRotation = 0.0;
-          _centerViewOnFrame(centerScale);
-          // Mark uninitialized so automatic reset will recompute a perfect fit
-          _viewInitialized = false;
+          
+          print('Before _centerViewOnFrame:');
+          print('  _viewScale: ${_viewScale.toStringAsFixed(6)}');
+          print('  _viewTranslation: ${_viewTranslation.dx.toStringAsFixed(2)}, ${_viewTranslation.dy.toStringAsFixed(2)}');
+          
+          _centerViewOnFrame(fitScale);
+          
+          print('After _centerViewOnFrame:');
+          print('  _viewScale: ${_viewScale.toStringAsFixed(6)}');
+          print('  _viewTranslation: ${_viewTranslation.dx.toStringAsFixed(2)}, ${_viewTranslation.dy.toStringAsFixed(2)}');
+          print('  Scaled image size: ${(iw * _viewScale).toStringAsFixed(2)}px × ${(ih * _viewScale).toStringAsFixed(2)}px');
+          
+          // Mark as initialized so _buildCropFrame won't recalculate
+          _viewInitialized = true;
           _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
           _maxScale = fitScale * 80;
-          // Request one-time recenter after layout to eliminate any residual drift
-          _needsRecenteringOnce = true;
+          // No need to recenter - we've set it correctly
+          _needsRecenteringOnce = false;
+          
+          print('Final state:');
+          print('  _viewInitialized: true');
+          print('  _needsRecenteringOnce: false');
+          print('═════════════════════════════════════════');
           
           _showLibrary = false;
         });
-        // Auto reset/fit after first frame so user does not need double-tap
+        // Call _resetView after frame is built to ensure perfect centering
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if(mounted) { _resetView(); }
+          if(mounted) { 
+            print('🔄 Auto-calling _resetView() for perfect centering...');
+            _resetView();
+            print('✅ Image centered and fitted');
+          }
         });
       }
     }catch(e){ _updateStatus('Load error: $e'); }
@@ -4310,34 +4333,43 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         final workspaceW = constraints.maxWidth;
         final workspaceH = constraints.maxHeight;
         
-        // Calculate crop frame dimensions using hardware aspect only (no image-based resizing)
-        const double margin = 0.9;
-        final double maxW = workspaceW * margin;
-        final double maxH = workspaceH * margin;
-        double aspect = _isPortrait ? (IMAGE_HEIGHT / IMAGE_WIDTH) : (IMAGE_WIDTH / IMAGE_HEIGHT); // width/height
-        if (maxW / maxH > aspect) {
-          // height-limited
-          _frameHeight = maxH;
-          _frameWidth = _frameHeight * aspect;
+        print('🖼️ _buildCropFrame() called:');
+        print('  _viewInitialized: $_viewInitialized');
+        print('  _viewScale: ${_viewScale.toStringAsFixed(6)}');
+        print('  Current frame: ${_frameWidth.toStringAsFixed(2)}px × ${_frameHeight.toStringAsFixed(2)}px');
+        
+        // Only recalculate frame if not already initialized
+        // When loading saved images, frame is pre-calculated and should not be changed
+        if (!_viewInitialized || _frameWidth == 0 || _frameHeight == 0) {
+          print('  Recalculating frame dimensions...');
+          // Calculate crop frame dimensions using hardware aspect only (no image-based resizing)
+          const double margin = 0.9;
+          final double maxW = workspaceW * margin;
+          final double maxH = workspaceH * margin;
+          double aspect = _isPortrait ? (IMAGE_HEIGHT / IMAGE_WIDTH) : (IMAGE_WIDTH / IMAGE_HEIGHT); // width/height
+          if (maxW / maxH > aspect) {
+            // height-limited
+            _frameHeight = maxH;
+            _frameWidth = _frameHeight * aspect;
+          } else {
+            // width-limited
+            _frameWidth = maxW;
+            _frameHeight = _frameWidth / aspect;
+          }
+          
+          print('  New frame: ${_frameWidth.toStringAsFixed(2)}px × ${_frameHeight.toStringAsFixed(2)}px');
         } else {
-          // width-limited
-          _frameWidth = maxW;
-          _frameHeight = _frameWidth / aspect;
+          print('  ✅ Keeping existing frame dimensions (already initialized)');
         }
-        // Shrink crop frame by 5% in portrait, then reduce height by an extra 1%
-        if (_isPortrait) {
-          const double frameScale = 0.95; // 5% uniform shrink
-          _frameWidth *= frameScale;
-          _frameHeight *= frameScale;
-          // Additional 1% height-only reduction as requested
-          _frameHeight *= 0.99;
-        }
+        
+        // No portrait-specific shrink; maintain exact hardware aspect ratio
         _frameOrigin = Offset(
           (workspaceW - _frameWidth)/2,
           (workspaceH - _frameHeight)/2,
         );
         _frameOrigin = _snapOffset(_frameOrigin);
         if (!_viewInitialized && _uiOriginal != null) {
+          print('  ⚠️ !_viewInitialized - recalculating scale!');
           final iw = _uiOriginal!.width.toDouble();
           final ih = _uiOriginal!.height.toDouble();
           
@@ -4345,6 +4377,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           // Saved images will have fitScale close to 1.0, photos will be scaled down to fit
           final fitScale = math.min(_frameWidth / iw, _frameHeight / ih);
           
+          print('  New fitScale: ${fitScale.toStringAsFixed(6)}');
           _viewScale = fitScale;
           // Allow zooming out to a small fraction of fit scale, in, to large magnification
           _minScale = fitScale * 0.01; // 1% of fit size (very far zoom out)
@@ -4357,17 +4390,28 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           // Update frame border color for initial image
           _updateFrameBorderColor();
           // Cropped preview now paints directly; no PNG cache needed
+        } else {
+          print('  ✅ _viewInitialized=true, keeping existing scale');
         }
         // If a Saved→Editor placement requested a recenter, apply it now using final frame values
         if (_needsRecenteringOnce) {
+          print('  ⚠️ _needsRecenteringOnce is true - recentering!');
           final iw = _uiOriginal?.width.toDouble() ?? 0;
           final ih = _uiOriginal?.height.toDouble() ?? 0;
           final fitScaleNow = (iw>0 && ih>0) ? math.min(_frameWidth / iw, _frameHeight / ih) : 1.0;
           final double scale = (_viewScale.isFinite && _viewScale > 0) ? _viewScale : fitScaleNow;
+          print('  Recentering with scale: ${scale.toStringAsFixed(6)}');
           _viewRotation = 0.0;
           _centerViewOnFrame(scale);
           _needsRecenteringOnce = false;
         }
+        
+        if (_uiOriginal != null) {
+          final scaledW = _uiOriginal!.width * _viewScale;
+          final scaledH = _uiOriginal!.height * _viewScale;
+          print('  Final rendered: Image ${scaledW.toStringAsFixed(2)}×${scaledH.toStringAsFixed(2)} in Frame ${_frameWidth.toStringAsFixed(2)}×${_frameHeight.toStringAsFixed(2)}');
+        }
+        
         return GestureDetector(
           onDoubleTap: _resetView,
           onScaleStart: (d){
