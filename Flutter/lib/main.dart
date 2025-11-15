@@ -4715,33 +4715,57 @@ extension _LibraryPersistence on _EPaperImageSenderState {
   // Seed SamplePics/Image1.* into the library as a default asset, treated like a saved image
   Future<void> _seedSampleImageIfMissing() async {
     try{
+      print('🌱 Starting sample image seeding...');
       // Respect user deletion: if flag exists, do not re-seed
       final delFlag = _asset1DeletedFlagFile;
-      if (delFlag != null && await delFlag.exists()) return;
+      if (delFlag != null && await delFlag.exists()) {
+        print('🌱 Skip: User deleted sample image');
+        return;
+      }
       // Avoid duplicate seeding
-      if (_library.any((e) => e.id.toLowerCase() == 'asset_image1')) return;
+      if (_library.any((e) => e.id.toLowerCase() == 'asset_image1')) {
+        print('🌱 Skip: Sample image already in library');
+        return;
+      }
+      print('🌱 Searching for asset in manifest...');
       // Discover asset path via manifest (supports png/jpg variants)
       final manifestText = await rootBundle.loadString('AssetManifest.json');
       final Map<String, dynamic> manifest = jsonDecode(manifestText);
       String? assetPath;
       for (final key in manifest.keys) {
-        final k = key.toString().toLowerCase();
-        if (k.contains('samplepics/image1')) { assetPath = key; break; }
+        // Use exact case for release builds (case-sensitive)
+        if (key.contains('SamplePics/Image1') || key.contains('samplepics/image1')) { 
+          assetPath = key; 
+          print('🌱 Found in manifest: $assetPath');
+          break; 
+        }
       }
       // Fallback to common extensions if manifest scan missed it
-      assetPath ??= await _tryFindFirstExistingAsset([
-        'SamplePics/Image1.png',
-        'SamplePics/Image1.jpg',
-        'SamplePics/Image1.jpeg',
-        'SamplePics/Image1.webp',
-      ]);
-      if (assetPath == null) return; // not packaged
+      if (assetPath == null) {
+        print('🌱 Not in manifest, trying direct paths...');
+        assetPath = await _tryFindFirstExistingAsset([
+          'SamplePics/Image1.png',
+          'SamplePics/Image1.jpg',
+          'SamplePics/Image1.jpeg',
+          'SamplePics/Image1.webp',
+        ]);
+      }
+      if (assetPath == null) {
+        print('🌱 ERROR: Asset not found in bundle');
+        return; // not packaged
+      }
+      print('🌱 Loading asset bytes from: $assetPath');
       // Load asset bytes
       final data = await rootBundle.load(assetPath);
       final Uint8List bytes = data.buffer.asUint8List();
+      print('🌱 Loaded ${bytes.length} bytes, decoding...');
       // Decode
       final img.Image? decoded = img.decodeImage(bytes);
-      if (decoded == null) return;
+      if (decoded == null) {
+        print('🌱 ERROR: Failed to decode image');
+        return;
+      }
+      print('🌱 Decoded ${decoded.width}x${decoded.height}, processing...');
       final bool wasPortrait = decoded.height > decoded.width;
       // Build 800x480 base (landscape canvas) using fit letterbox
       final img.Image base = _fitImage(decoded);
@@ -4754,6 +4778,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
         disp = img.copyRotate(disp, angle: -90); // store portrait PNG
       }
       final Uint8List pngBytes = Uint8List.fromList(img.encodePng(disp));
+      print('🌱 Creating library entry...');
       // Create and persist entry
       final entry = _LibraryEntry(
         id: 'asset_image1',
@@ -4767,9 +4792,13 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       );
       _library.insert(0, entry);
       _refresh();
+      print('🌱 Persisting to disk...');
       await _persistLibraryEntry(entry);
+      print('🌱 ✓ Sample image successfully added');
       _updateStatus('Sample image added to Saved');
-    } catch (e){
+    } catch (e, stack){
+      print('🌱 ERROR: $e');
+      print('🌱 Stack: $stack');
     }
   }
 
