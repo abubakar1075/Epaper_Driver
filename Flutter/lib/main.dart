@@ -139,6 +139,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // Periodic connection status for bottom bar
   Timer? _connectionStatusTimer;
   Timer? _batteryStatusTimer; // Poll battery while charging
+  Timer? _statusMessageTimer; // Clear status message after 3 seconds
   String _connectionStatusText = 'Not connected';
   // Stay on the second screen even if temporarily disconnected (for background auto-reconnect)
   // First window removed; app always starts on connected UI.
@@ -482,6 +483,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     _connStateSub?.cancel(); _connStateSub = null;
     _connectionStatusTimer?.cancel();
     _batteryStatusTimer?.cancel();
+    _statusMessageTimer?.cancel();
     _aiPromptController.dispose();
     _pixabaySearchController.dispose();
     _disconnectDevice();
@@ -1223,7 +1225,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _updateStatus('Firmware up-to-date: v$deviceVersion');
         }
       } else {
-        _updateStatus('Version check completed');
+        _updateStatus('Ready to Send', persist: true);
       }
     } catch (e) {
       if (mounted) {
@@ -2356,7 +2358,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   }
 
   // Update the status message
-  void _updateStatus(String message, {bool force = false}) {
+  void _updateStatus(String message, {bool force = false, bool persist = false}) {
     final now = DateTime.now();
     if(_isSending && !force && now.difference(_lastStatusUpdate).inMilliseconds < 350 && !message.startsWith('Progress')){ return; }
     _lastStatusUpdate = now;
@@ -2372,7 +2374,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       return; // Don't show these messages
     }
     
-    if(mounted){ setState(()=> _statusMessage = message); }
+    if(mounted){ 
+      setState(()=> _statusMessage = message); 
+      
+      // Cancel existing timer
+      _statusMessageTimer?.cancel();
+      
+      // Only start auto-clear timer if message is not persistent
+      if (!persist) {
+        _statusMessageTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() => _statusMessage = '');
+          }
+        });
+      }
+    }
   }
 
   // Verify actual BLE connection state; fields may be stale during reconnects
@@ -3010,6 +3026,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       
       // Check firmware version after successful connection
       _checkFirmwareVersion();
+      
+      // Show Ready to Send after a brief delay (let firmware check display first)
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted && _connectedDevice != null) {
+          _updateStatus('Ready to Send', persist: true);
+        }
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -4287,10 +4310,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          'Status: ',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-        ),
         Expanded(
           child: Text(
             _statusMessage,
