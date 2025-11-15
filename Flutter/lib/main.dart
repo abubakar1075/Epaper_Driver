@@ -1940,13 +1940,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           if (!(centerScale.isFinite) || centerScale <= 0) centerScale = fitScale;
           _viewRotation = 0.0;
           _centerViewOnFrame(centerScale);
-          _viewInitialized = true;
+          // Mark uninitialized so automatic reset will recompute a perfect fit
+          _viewInitialized = false;
           _minScale = (fitScale * 0.01).clamp(0.005, double.infinity);
           _maxScale = fitScale * 80;
           // Request one-time recenter after layout to eliminate any residual drift
           _needsRecenteringOnce = true;
           
           _showLibrary = false;
+        });
+        // Auto reset/fit after first frame so user does not need double-tap
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if(mounted) { _resetView(); }
         });
       }
     }catch(e){ _updateStatus('Load error: $e'); }
