@@ -1527,7 +1527,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         'safesearch':'true',
         'order':'popular',
         'per_page':'200',
-        'orientation': _isPortrait ? 'portrait' : 'landscape', // Filter by current orientation
       };
       if(_selectedPixabayCategory != 'all'){
         params['category'] = _selectedPixabayCategory;
@@ -1549,14 +1548,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         final w = h['imageWidth'];
         final ht = h['imageHeight'];
         
-        // Additional client-side validation to ensure correct orientation
         final width = w is int ? w : int.tryParse('$w') ?? 0;
         final height = ht is int ? ht : int.tryParse('$ht') ?? 0;
-        final isPortrait = height > width;
-        
-        // Skip images that don't match the selected orientation
-        if(_isPortrait && !isPortrait) continue;
-        if(!_isPortrait && isPortrait) continue;
         
         out.add(_PixabayImage(
           id: '${h['id'] ?? ''}',
@@ -1596,7 +1589,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         'safesearch':'true',
         'order':'popular',
         'per_page':'200',
-        'orientation': _isPortrait ? 'portrait' : 'landscape', // Filter by current orientation
       };
       if(cat != 'all') params['category'] = cat;
       final uri = Uri.https('pixabay.com','/api/', params);
@@ -1616,14 +1608,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         final w = h['imageWidth'];
         final ht = h['imageHeight'];
         
-        // Additional client-side validation to ensure correct orientation
         final width = w is int ? w : int.tryParse('$w') ?? 0;
         final height = ht is int ? ht : int.tryParse('$ht') ?? 0;
-        final isPortrait = height > width;
-        
-        // Skip images that don't match the selected orientation
-        if(_isPortrait && !isPortrait) continue;
-        if(!_isPortrait && isPortrait) continue;
         
         out.add(_PixabayImage(
           id: '${h['id'] ?? ''}',
