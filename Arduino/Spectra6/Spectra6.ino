@@ -289,14 +289,27 @@ void handleTapDetection() {
       touchReleasedAfterLongPress = false; // Mark that touch needs to be released
       tapCount = 0; // Reset tap counter
       
+      // Turn off Bluetooth
+      Serial.println("Turning off Bluetooth...");
+      if (BLE.connected()) {
+        BLE.disconnect();
+        delay(100);
+      }
+      BLE.end();
+      bleActive = false;
+      Serial.println("Bluetooth turned off.");
+      
       // Next image (1->2->3->1)
       currentImageIndex = (currentImageIndex % 3) + 1;
       saveCurrentImageIndex(currentImageIndex);
       Serial.print("Switching to Image_"); Serial.println(currentImageIndex);
+      Serial.println("Updating e-paper display...");
       displayImageFromSPIFFS();
-      // Reset idle timer so device stays awake for 30s after user action
-      connectionStartTime = millis();
-      Serial.println("Idle timer reset after long-press image change");
+      Serial.println("Display updated.");
+      
+      // Go to deep sleep immediately
+      Serial.println("Going to deep sleep...");
+      goToSleep();
     }
   }
   
@@ -666,9 +679,17 @@ void setup() {
         displayImageFromSPIFFS();
         
         Serial.println("Image changed via long press on wakeup");
+        Serial.println("Going to deep sleep...");
         
         // Set flag to skip redundant hardware initialization
         hardwareInitializedOnWake = true;
+        
+        // Go directly to sleep (no need to turn off BLE as it hasn't started yet)
+        touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
+        esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_39, ESP_EXT1_WAKEUP_ANY_HIGH);
+        esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
+        Serial.flush();
+        esp_deep_sleep_start();
       }
     }
   }
@@ -909,54 +930,35 @@ void loop() {
   extern void bleTick();
   bleTick();
   
-  // If we have new data received via BLE, display it and wait 3s before sleep
+  // If we have new data received via BLE, turn off BLE, display it, and go to sleep
   if (dataReceived) {
+    Serial.println("Image transfer complete. Turning off Bluetooth...");
+    
+    // Disconnect and stop BLE
+    if (BLE.connected()) {
+      BLE.disconnect();
+      delay(100); // Wait for disconnect to complete
+    }
+    BLE.end();
+    bleActive = false;
+    Serial.println("Bluetooth turned off.");
+    
     if (!skipDisplay) {
       // Image verified OK - display it
-      Serial.println("New data received via BLE. Displaying image...");
+      Serial.println("Updating e-paper display...");
       displayImageFromSPIFFS();
-      Serial.println("Image displayed. Keeping BLE active for 3 seconds...");
+      Serial.println("Display updated.");
     } else {
       // Image corrupted - skip display
-      Serial.println("Image corrupted - skipping display.");
-      Serial.println("Keeping BLE active for 3 seconds...");
+      Serial.println("Image corrupted - skipping display update.");
       skipDisplay = false;  // Reset flag for next transfer
     }
     
     dataReceived = false; // Reset flag
     
-    // Keep BLE active for 3 seconds to allow another image transfer
-    unsigned long waitStart = millis();
-    while (millis() - waitStart < 3000) {
-      BLE.poll();  // Keep BLE responsive
-      
-      // If new data starts arriving, reset idle timer and break out
-      if (!receivingSize) {
-        Serial.println("New image transfer detected! Cancelling sleep...");
-        connectionStartTime = millis();
-        break;
-      }
-      
-      delay(10);
-    }
-    
-    // If no new transfer started, check USB voltage before sleeping
-    if (receivingSize) {
-      // Check GPIO39 voltage before sleeping
-      int gpio39Raw = analogRead(39);
-      float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
-      float usbVoltage = gpio39Voltage * 2.0;  // 2:1 voltage divider
-      
-      if (usbVoltage > 4.5) {
-        // Charging detected - don't sleep
-        Serial.printf("Charging detected (%.2fV) - staying awake...\n", usbVoltage);
-        connectionStartTime = millis();  // Reset timer
-      } else {
-        // No charging - safe to sleep
-        Serial.println("No new transfer. Going to sleep...");
-        goToSleep();
-      }
-    }
+    // Go to deep sleep immediately after display
+    Serial.println("Going to deep sleep...");
+    goToSleep();
   }
   
   // Small delay to avoid hogging CPU
