@@ -1147,7 +1147,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       _updateStatus('Generated locally');
     } catch (e) {
       if(mounted){ setState(()=> _aiError = 'Failed to generate: $e'); }
-      _updateStatus('AI generation error');
     }
   }
 
@@ -1186,7 +1185,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
       _updateStatus('AI image loaded into editor');
     }catch(_){
-      _updateStatus('Failed to load AI image');
     }
   }
 
@@ -1233,7 +1231,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _versionCheckCompleted = true; // Mark as completed even on error
         });
       }
-      _updateStatus('Version check failed: $e');
     }
   }
   
@@ -1562,7 +1559,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
       if(mounted){ setState((){ _pixabayResults=out; if(out.isEmpty) _pixabayError='No results'; }); }
       _updateStatus(out.isEmpty ? 'No results for "$q"' : 'Found ${out.length} images');
-    }catch(e){ if(mounted){ setState(()=> _pixabayError='Search failed: $e'); } _updateStatus('Search failed'); }
+    }catch(e){ if(mounted){ setState(()=> _pixabayError='Search failed: $e'); } }
     finally{ if(mounted){ setState(()=> _isPixabaySearching=false); } }
   }
 
@@ -1622,7 +1619,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
       if(mounted){ setState((){ _pixabayResults=out; _pixabayError = out.isEmpty ? 'No results' : null; }); }
       _updateStatus(out.isEmpty ? 'No results' : 'Found ${out.length} images');
-    }catch(e){ if(mounted){ setState(()=> _pixabayError='Search failed: $e'); } _updateStatus('Search failed'); }
+    }catch(e){ if(mounted){ setState(()=> _pixabayError='Search failed: $e'); } }
     finally{ if(mounted){ setState(()=> _isPixabaySearching=false); } }
   }
 
@@ -1652,7 +1649,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       });
       WidgetsBinding.instance.addPostFrameCallback((_){ if(mounted) _recomputeViewForCurrentFrame(context); });
       _updateStatus('Loaded Pixabay image by ${chosen.author}');
-    }catch(e){ if(mounted){ setState(()=> _pixabayError='Import failed: $e'); } _updateStatus('Import failed'); }
+    }catch(e){ if(mounted){ setState(()=> _pixabayError='Import failed: $e'); } }
     finally{ if(mounted){ setState(()=> _isPixabayImporting=false); } }
   }
 
@@ -1973,7 +1970,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           }
         });
       }
-    }catch(e){ _updateStatus('Load error: $e'); }
+    }catch(e){ }
   }
 
   void _deleteSelectedLibraryItem(){
@@ -2444,7 +2441,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       final Uint8List imageBytes = await _originalImage!.readAsBytes();
       img.Image? originalImage = img.decodeImage(imageBytes);
       if (originalImage == null) {
-        _updateStatus("Failed to decode image");
         return;
       }
   // Build 800x480 from interactive frame (pan/zoom/rotate)
@@ -2461,10 +2457,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           _processedBytes = processedBytes;
           _processedPngBytes = Uint8List.fromList(img.encodePng(convertedImage));
         }); }
-        _updateStatus("Image processed successfully (${processedBytes.length} bytes)");
+        _updateStatus("Image ready");
       }
     } catch (e) {
-      _updateStatus("Error processing image: $e");
     }
   }
 
@@ -2852,7 +2847,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           }
         }
       }, onError: (e) {
-        _updateStatus("Scan error: $e");
       });
       
       // When scan completes
@@ -2878,7 +2872,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         }
       }
     } catch (e) {
-      _updateStatus("Error scanning: $e");
       if (mounted) {
         setState(() {
           _isScanning = false;
@@ -2909,13 +2902,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           await device.requestMtu(512);
           _mtuRequestedForThisConnection = true;
         } catch (e) {
-          _updateStatus("Could not negotiate MTU: $e");
           // Continue anyway with smaller chunks
         }
       }
       
       // Discover services with timeout to prevent hanging
-      _updateStatus("Discovering services...");
+      _updateStatus("Setting up connection...");
       List<BluetoothService> services;
       try {
         services = await device.discoverServices().timeout(
@@ -2926,7 +2918,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         );
       } catch (e) {
         // If service discovery fails, try reconnecting once
-        _updateStatus("Service discovery failed, retrying connection...");
+        _updateStatus("Retrying connection...");
         await device.disconnect();
         await Future.delayed(const Duration(milliseconds: 500));
         await device.connect();
@@ -3017,7 +3009,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // Check firmware version after successful connection
       _checkFirmwareVersion();
     } catch (e) {
-      _updateStatus("Connection failed: $e");
       if (mounted) {
         setState(() {
           _isConnecting = false;
@@ -3038,7 +3029,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       });
       _updateStatus("Disconnected");
     } catch (e) {
-      _updateStatus("Error disconnecting: $e");
     }
   }
 
@@ -3117,7 +3107,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         _updateStatus("Device is charging");
         break;
       case ACK_SIZE_RECEIVED:
-        _updateStatus("Size received by device");
         break;
         
       case ACK_PROGRESS:
@@ -3126,7 +3115,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           setState(() {
             _transferProgress = progress;
           });
-          _updateStatus("Transfer progress: $progress%");
         }
         break;
         
@@ -3146,7 +3134,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             _isSending = false;
           });
         }
-        _updateStatus("Error reported by device");
         break;
         
       default:
@@ -3186,7 +3173,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       
       // Pack the rotated image data for efficient BLE transfer (2 pixels per byte)
       Uint8List packedData = _packPixels(toSend);
-      _updateStatus("Packed data size: ${packedData.length} bytes", force: true);
       
       // First send a 1-byte type + 4-byte little-endian size header
       int totalSize = packedData.length;
@@ -3196,7 +3182,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       bd.setUint32(1, totalSize, Endian.little);
       // Send the header
       await _rxCharacteristic!.write(header);
-      _updateStatus("Sent image header: $totalSize bytes", force: true);
+      _updateStatus("Starting image transfer...", force: true);
       
       // Short delay to ensure Arduino processes the header
       await Future.delayed(const Duration(milliseconds: 12));
@@ -3207,17 +3193,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       
       // Stream chunks without allocating new lists (zero-copy views)
       int dynamicChunk = BLE_CHUNK_SIZE;
-      final int totalChunks = (packedData.length + dynamicChunk - 1) ~/ dynamicChunk;
-      _updateStatus("Sending $totalChunks chunks...", force: true);
+      _updateStatus("Sending image...", force: true);
       for (int i = 0; i < packedData.length;) {
         // Bound chunk by remaining bytes and current dynamic chunk size
         final int end = math.min(i + dynamicChunk, packedData.length);
         final Uint8List view = Uint8List.sublistView(packedData, i, end);
-        // Only show status updates occasionally to reduce overhead
-        final int chunkIndex = (i ~/ (dynamicChunk == 0 ? 1 : dynamicChunk));
-        if (chunkIndex % 20 == 0 || end == packedData.length) {
-          _updateStatus("Sending chunk ${chunkIndex+1}/$totalChunks", force: true);
-        }
         
         try {
           await _rxCharacteristic!.write(view, withoutResponse: true);
@@ -3227,7 +3207,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           // Advance only on success
           i = end;
         } catch (e) {
-          _updateStatus("Error sending chunk at $i (size ${view.length}): $e", force: true);
           // Adaptive fallback: reduce dynamic chunk size and retry same offset
           dynamicChunk = math.max(20, dynamicChunk ~/ 2);
           await Future.delayed(const Duration(milliseconds: 25));
@@ -3251,25 +3230,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
               _transferSpeed = speedKBps;
             });
           }
-          
-          // Only update detailed status every 10%
-          if (progress % 10 == 0 || progress == 100) {
-            _updateStatus("Progress: $progress% - Speed: ${speedKBps.toStringAsFixed(2)} KB/s");
-          }
         }
       }
       
       // Final transfer statistics
       int endTime = DateTime.now().millisecondsSinceEpoch;
       double totalTime = (endTime - startTime) / 1000;
-      double avgSpeed = (totalSize / 1024) / totalTime;
       
-      _updateStatus("Data transfer complete: $totalSize bytes in ${totalTime.toStringAsFixed(2)} seconds", force: true);
-      _updateStatus("Average speed: ${avgSpeed.toStringAsFixed(2)} KB/s", force: true);
+      _updateStatus("Image sent successfully in ${totalTime.toStringAsFixed(1)} seconds", force: true);
       
       // We don't set _isSending to false here - wait for ACK_COMPLETE
     } catch (e) {
-  _updateStatus("Error sending data: $e", force: true);
       if (mounted) {
         setState(() {
           _isSending = false;
@@ -3466,12 +3437,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         try {
           final bd = await rootBundle.load(path);
           otaBytes = bd.buffer.asUint8List();
-          _updateStatus("Loaded OTA: ${path.split('/').last} (${otaBytes.length} bytes)");
+          _updateStatus("Firmware file loaded");
           break;
         } catch (_) {}
       }
       if (otaBytes == null || otaBytes.isEmpty) {
-        _updateStatus("No OTA .bin found in assets/OTAFile");
+        _updateStatus("Firmware file not found");
         return;
       }
 
@@ -3501,7 +3472,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           sent = end;
           i = end;
         } catch (e) {
-          _updateStatus("OTA: error at $i (size ${view.length}): $e", force: true);
+          _updateStatus("Transfer error, retrying...", force: true);
           dynamicChunkOta = math.max(20, dynamicChunkOta ~/ 2);
           await Future.delayed(const Duration(milliseconds: 25));
           if (dynamicChunkOta <= 20 && view.length <= 20) {
@@ -3516,19 +3487,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         final progress = (sent * 100 ~/ totalSize);
         setState(() { _transferSpeed = speed; _transferProgress = progress; });
 
-        if (i % (BLE_CHUNK_SIZE * 20) == 0) {
-          _updateStatus("OTA $progress% - ${speed.toStringAsFixed(1)} KB/s");
-        }
         await Future.delayed(const Duration(milliseconds: 1));
       }
 
       final end = DateTime.now().millisecondsSinceEpoch;
       final totalSec = (end - start) / 1000.0;
-      final avg = (totalSize / 1024.0) / totalSec;
-      _updateStatus("OTA data sent: $totalSize bytes in ${totalSec.toStringAsFixed(2)}s, ${avg.toStringAsFixed(1)} KB/s");
+      _updateStatus("Firmware sent successfully in ${totalSec.toStringAsFixed(1)} seconds");
       // keep _isSending true until ACK_COMPLETE from device
     } catch (e) {
-      _updateStatus("OTA send failed: $e");
       setState(() { _isSending = false; });
     }
   }
@@ -4626,7 +4592,6 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       await _seedSampleImageIfMissing();
       _refresh();
     } catch (e) {
-      _updateStatus('Library init error: $e');
     }
   }
 
@@ -4665,7 +4630,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
           }catch(_){ }
         }
       }
-    }catch(e){ _updateStatus('Load library error: $e'); }
+    }catch(e){ }
   }
 
   Future<void> _persistLibraryEntry(_LibraryEntry entry, {bool writeIndex = true}) async {
@@ -4676,7 +4641,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       await rawFile.writeAsBytes(entry.rawCodes, flush: true);
       await pngFile.writeAsBytes(entry.pngBytes, flush: true);
       if(writeIndex){ await _writeLibraryIndex(); }
-    }catch(e){ _updateStatus('Persist error: $e'); }
+    }catch(e){ }
   }
 
   Future<void> _writeLibraryIndex() async {
@@ -4691,7 +4656,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
         'wasVertical': e.wasPortrait,
       }).toList();
       await indexFile.writeAsString(jsonEncode(list), flush: true);
-    }catch(e){ _updateStatus('Index write error: $e'); }
+    }catch(e){ }
   }
 
   Future<void> _deleteLibraryEntryFiles(_LibraryEntry entry) async {
@@ -4709,7 +4674,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
         }
       }
       await _writeLibraryIndex();
-    }catch(e){ _updateStatus('Delete file error: $e'); }
+    }catch(e){ }
   }
 
   // Seed SamplePics/Image1.* into the library as a default asset, treated like a saved image
@@ -4770,7 +4735,6 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       await _persistLibraryEntry(entry);
       _updateStatus('Sample image added to Saved');
     } catch (e){
-      _updateStatus('Seed sample error: $e');
     }
   }
 
