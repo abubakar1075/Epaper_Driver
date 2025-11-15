@@ -138,6 +138,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   bool _isCharging = false; // charging status from device
   // Periodic connection status for bottom bar
   Timer? _connectionStatusTimer;
+  Timer? _batteryStatusTimer; // Poll battery while charging
   String _connectionStatusText = 'Not connected';
   // Stay on the second screen even if temporarily disconnected (for background auto-reconnect)
   // First window removed; app always starts on connected UI.
@@ -480,6 +481,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     _scanSub?.cancel(); _scanSub = null;
     _connStateSub?.cancel(); _connStateSub = null;
     _connectionStatusTimer?.cancel();
+    _batteryStatusTimer?.cancel();
     _aiPromptController.dispose();
     _pixabaySearchController.dispose();
     _disconnectDevice();
@@ -3066,10 +3068,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             if (mounted) {
               setState(() {
                 _batteryPercent = batt;
-                _isCharging = false; // Text battery update means not charging
+                _isCharging = false; // Text battery update means not charging (charger removed)
               });
             }
-            _updateStatus('$msg');
+            // Show battery when charger removed
+            _updateStatus('Battery: $batt%');
           } else {
             _updateStatus(msg);
           }
@@ -3087,24 +3090,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       case ACK_BATTERY:
         if (data.length >= 2) {
           final int batt = data[1].clamp(0, 100);
+          print('🔋 Battery status received: $batt%');
           if (mounted) {
             setState(() {
               _batteryPercent = batt;
               _isCharging = false; // Battery percentage means not charging
             });
           }
-          _updateStatus("Battery = $batt%");
+          _updateStatus("Battery: $batt%");
+          
+          // Stop polling timer when battery received (charger unplugged)
+          _batteryStatusTimer?.cancel();
         }
         break;
       case ACK_CHARGING:
-        // Charging status received
+        // Charging status received - always show immediately
+        print('🔌 Charging status received');
         if (mounted) {
           setState(() {
             _batteryPercent = null; // Clear percentage when charging
             _isCharging = true;
           });
         }
-        _updateStatus("Device is charging");
+        _updateStatus("Charger connected");
+        
+        // Start polling battery status every second while charging
+        _batteryStatusTimer?.cancel();
+        _batteryStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (_isCharging && mounted) {
+            _updateStatus("Charging...");
+          }
+        });
         break;
       case ACK_SIZE_RECEIVED:
         break;

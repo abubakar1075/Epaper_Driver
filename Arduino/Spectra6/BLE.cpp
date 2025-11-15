@@ -367,6 +367,27 @@ void onBLEConnected(BLEDevice central) {
   
   Serial.print("Initial chunk size set to: ");
   Serial.println(chunkSize);
+  
+  // Send battery/charging status on connection (with longer delay for stability)
+  delay(300); // Longer delay to ensure connection is fully stable
+  int gpio39Raw = analogRead(39);
+  float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
+  float usbVoltage = gpio39Voltage * 2.0;  // 2:1 voltage divider
+  
+  if (usbVoltage > 4.5) {
+    // Charging detected - send charging status
+    uint8_t chargingMsg[] = {ACK_CHARGING, 0x01};
+    txCharacteristic.writeValue(chargingMsg, sizeof(chargingMsg));
+    Serial.println("Charging status sent on connection");
+  } else {
+    // Not charging - send battery percentage
+    uint8_t batt = getBatteryPercent();
+    uint8_t battMsg[] = {ACK_BATTERY, batt};
+    txCharacteristic.writeValue(battMsg, sizeof(battMsg));
+    Serial.print("Battery percent sent on connection: ");
+    Serial.print(batt);
+    Serial.println("%");
+  }
 }
 
 // BLE disconnection event handler
@@ -418,6 +439,25 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
       txCharacteristic.writeValue(versionMsg, versionLen + 1);
       Serial.print("Version query received, sent: ");
       Serial.println(version);
+      
+      // Send battery status after version response
+      delay(100);
+      int gpio39Raw = analogRead(39);
+      float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
+      float usbVoltage = gpio39Voltage * 2.0;
+      
+      if (usbVoltage > 4.5) {
+        uint8_t chargingMsg[] = {ACK_CHARGING, 0x01};
+        txCharacteristic.writeValue(chargingMsg, sizeof(chargingMsg));
+        Serial.println("Charging status sent after version query");
+      } else {
+        uint8_t batt = getBatteryPercent();
+        uint8_t battMsg[] = {ACK_BATTERY, batt};
+        txCharacteristic.writeValue(battMsg, sizeof(battMsg));
+        Serial.print("Battery sent after version query: ");
+        Serial.print(batt);
+        Serial.println("%");
+      }
       return;
     }
     else if (command == CMD_CALIBRATE) {
@@ -616,29 +656,6 @@ void onRxCharacteristicWritten(BLEDevice central, BLECharacteristic characterist
     // Send acknowledgment for header/size
     sendAcknowledgment(ACK_SIZE_RECEIVED);
     Serial.println("Size received, ready for data");
-    // Send battery/charging status once, at the start
-    if (!batterySentForThisTransfer) {
-      // Check GPIO39 voltage to determine if charging
-      int gpio39Raw = analogRead(39);
-      float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
-      float usbVoltage = gpio39Voltage * 2.0;  // 2:1 voltage divider
-      
-      if (usbVoltage > 4.5) {
-        // Charging detected - send charging status
-        uint8_t chargingMsg[] = {ACK_CHARGING, 0x01};
-        txCharacteristic.writeValue(chargingMsg, sizeof(chargingMsg));
-        Serial.println("Charging status sent at start");
-      } else {
-        // Not charging - send battery percentage
-        uint8_t batt = getBatteryPercent();
-        uint8_t battMsg[] = {ACK_BATTERY, batt};
-        txCharacteristic.writeValue(battMsg, sizeof(battMsg));
-        Serial.print("Battery percent sent at start: ");
-        Serial.print(batt);
-        Serial.println("%");
-      }
-      batterySentForThisTransfer = true;
-    }
 
     // If there are leftover bytes in this packet after the header, treat them as the first data chunk
     int leftover = dataLength - usedForHeader;
