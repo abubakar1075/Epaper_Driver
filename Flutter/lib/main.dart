@@ -3476,12 +3476,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         try {
           final bd = await rootBundle.load(path);
           otaBytes = bd.buffer.asUint8List();
-          _updateStatus("Firmware file loaded");
+          _updateStatus("Update file ready");
           break;
         } catch (_) {}
       }
       if (otaBytes == null || otaBytes.isEmpty) {
-        _updateStatus("Firmware file not found");
+        _updateStatus("Update file not found");
         return;
       }
 
@@ -3531,7 +3531,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
 
       final end = DateTime.now().millisecondsSinceEpoch;
       final totalSec = (end - start) / 1000.0;
-      _updateStatus("Firmware sent successfully in ${totalSec.toStringAsFixed(1)} seconds");
+      _updateStatus("Update sent successfully in ${totalSec.toStringAsFixed(1)} seconds");
       // keep _isSending true until ACK_COMPLETE from device
     } catch (e) {
       setState(() { _isSending = false; });
