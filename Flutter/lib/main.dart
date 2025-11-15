@@ -1672,28 +1672,38 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
 
   // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
   Future<void> _addCurrentToLibrary() async {
-    // Process on-demand if not already processed
+    // Save the cropped area from the ORIGINAL high-quality image
     if(_originalImage==null){ return; }
-  if(_processedBytes==null){ await _processImage(); }
-    if(_processedBytes==null || _processedImage==null){ return; }
-    // Encode PNG for library in the same visual orientation as the current frame
-    // so that when reloaded into the editor it appears exactly as saved (no rotation).
-    img.Image pngImage = _processedImage!;
+    
+    // 1) Crop from ORIGINAL image to get high-quality PNG
+    final Uint8List bytes = await _originalImage!.readAsBytes();
+    final img.Image? original = img.decodeImage(bytes);
+    if(original == null) return;
+    final img.Image croppedOriginal = _generateCroppedBaseImage(original);
+    
+    // 2) Store the cropped area in the orientation it's displayed
+    img.Image pngImage = croppedOriginal;
     if(_isPortrait){
-      // Portrait frame: store PNG as portrait (rotate -90 so width<height)
+      // Portrait frame: rotate -90 so PNG is portrait (width<height)
       pngImage = img.copyRotate(pngImage, angle: -90);
     }
     final Uint8List png = Uint8List.fromList(img.encodePng(pngImage));
-  final entry = _LibraryEntry(
-    id: DateTime.now().millisecondsSinceEpoch.toString(),
-    image: _processedImage!.clone(),
-    rawCodes: Uint8List.fromList(_processedBytes!),
-    pngBytes: png,
-    created: DateTime.now(),
-    wasPortrait: _isPortrait,
-    isDefaultAsset: false,
-  title: 'Saved',
-  );
+    
+    // 3) Generate 6-color quantized version ONLY for the raw codes (for sending)
+    final Tuple2<img.Image, Uint8List> q = _quantizeTo6ColorAndCreateRawBytes(croppedOriginal);
+    final img.Image processedDisplay = q.item1;
+    final Uint8List processedRaw = q.item2;
+    
+    final entry = _LibraryEntry(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      image: processedDisplay.clone(),     // 6-color version for quick preview
+      rawCodes: Uint8List.fromList(processedRaw), // raw codes ready for send
+      pngBytes: png,                        // HIGH-QUALITY original PNG for editor
+      created: DateTime.now(),
+      wasPortrait: _isPortrait,
+      isDefaultAsset: false,
+      title: 'Saved',
+    );
     setState((){ _library.insert(0, entry); });
     _updateStatus('Added to library (total ${_library.length})');
     _persistLibraryEntry(entry);
