@@ -3548,10 +3548,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.blue.shade700, Colors.blue.shade500],
+                image: DecorationImage(
+                  image: AssetImage('Framepic/drawerbutton.jpg'),
+                  fit: BoxFit.cover,
                 ),
               ),
               child: Column(
@@ -3574,16 +3573,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                   const Text(
                     'CanvasBT',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Colors.black,
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Text(
-                    'E-Paper Image Transfer',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
                     ),
                   ),
                 ],
