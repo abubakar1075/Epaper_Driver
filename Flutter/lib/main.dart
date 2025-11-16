@@ -1371,7 +1371,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       // Show result
       if (success) {
         _showSuccessDialog(
-          'Calibration Complete! ✅',
+          'Calibration Complete!',
           'The capacitive touch sensor has been successfully calibrated. The frame\'s LED should have flashed 3 times to confirm. Your frame is now ready to use with optimal touch sensitivity.',
         );
       } else {
