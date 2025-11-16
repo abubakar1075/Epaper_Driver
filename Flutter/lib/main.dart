@@ -4226,8 +4226,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     ),
                   ),
                   Positioned(
-                    top: 3,
-                    left: 18,
+                    top: 48,
+                    left: 11,
                     child: SafeArea(
                       child: GestureDetector(
                         onTap: () => _scaffoldKey.currentState?.openDrawer(),
@@ -4243,16 +4243,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                                 ),
                               ],
                             ),
-                            padding: const EdgeInsets.all(4),
+                            padding: const EdgeInsets.all(5),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Container(height: 4, width: 28, color: Colors.black87),
-                                const SizedBox(height: 4),
-                                Container(height: 4, width: 28, color: Colors.black87),
-                                const SizedBox(height: 4),
-                                Container(height: 4, width: 28, color: Colors.black87),
+                                Container(height: 4.5, width: 30, color: Colors.black87),
+                                const SizedBox(height: 4.5),
+                                Container(height: 4.5, width: 30, color: Colors.black87),
+                                const SizedBox(height: 4.5),
+                                Container(height: 4.5, width: 30, color: Colors.black87),
                               ],
                             ),
                         ),
