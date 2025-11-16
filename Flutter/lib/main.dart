@@ -2297,13 +2297,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       frameW = maxW;
       frameH = frameW / aspect;
     }
-    // Apply portrait-only shrink (5%) and extra 1% height reduction to match editor behavior
-    if (_isPortrait) {
-      const double frameScale = 0.95; // 5% uniform shrink
-      frameW *= frameScale;
-      frameH *= frameScale;
-      frameH *= 0.99; // 1% height-only reduction
-    }
+    // No portrait-specific shrink; maintain exact hardware aspect ratio
     Offset origin = Offset((workspaceW - frameW)/2, (workspaceH - frameH)/2);
     origin = _snapOffset(origin);
     final double fitScale = math.min(frameW / img.width, frameH / img.height);
