@@ -19327,66 +19327,6 @@ Switches electrical signals</description>
 </deviceset>
 </devicesets>
 </library>
-<library name="USBC6PIN4">
-<packages>
-<package name="USBC6PIN">
-<wire x1="-4.45" y1="-1.15" x2="4.55" y2="-1.15" width="0.127" layer="21"/>
-<wire x1="4.55" y1="-1.15" x2="4.55" y2="1.85" width="0.127" layer="21"/>
-<wire x1="4.55" y1="1.85" x2="-4.45" y2="1.85" width="0.127" layer="21"/>
-<wire x1="-4.45" y1="1.85" x2="-4.45" y2="-1.15" width="0.127" layer="21"/>
-<smd name="P$3" x="2.8" y="1" dx="1.3" dy="0.89" layer="1" rot="R90"/>
-<smd name="P$4" x="-2.7" y="1" dx="1.3" dy="0.89" layer="1" rot="R90"/>
-<smd name="P$6" x="-1.6" y="1" dx="1.3" dy="0.79" layer="1" rot="R90"/>
-<smd name="P$7" x="1.7" y="1" dx="1.3" dy="0.79" layer="1" rot="R90"/>
-<smd name="P$8" x="0.6" y="1" dx="1.3" dy="0.79" layer="1" rot="R90"/>
-<smd name="P$9" x="-0.5" y="1" dx="1.3" dy="0.79" layer="1" rot="R90"/>
-<pad name="P$1" x="-4.05" y="0.25" drill="0.55" diameter="0.7" shape="long" rot="R90"/>
-<pad name="P$2" x="4.15" y="0.25" drill="0.55" diameter="0.7" shape="long" rot="R90"/>
-<text x="-2.05" y="-0.95" size="0.5" layer="21">USBC Vertical</text>
-</package>
-</packages>
-<symbols>
-<symbol name="USBC6PIN">
-<wire x1="-5.08" y1="7.62" x2="-5.08" y2="-10.16" width="0.254" layer="94"/>
-<wire x1="-5.08" y1="-10.16" x2="10.16" y2="-10.16" width="0.254" layer="94"/>
-<wire x1="10.16" y1="-10.16" x2="10.16" y2="7.62" width="0.254" layer="94"/>
-<wire x1="10.16" y1="7.62" x2="-5.08" y2="7.62" width="0.254" layer="94"/>
-<pin name="P$1" x="15.24" y="5.08" length="middle" rot="R180"/>
-<pin name="P$2" x="15.24" y="2.54" length="middle" rot="R180"/>
-<pin name="P$3" x="15.24" y="0" length="middle" rot="R180"/>
-<pin name="P$4" x="15.24" y="-2.54" length="middle" rot="R180"/>
-<pin name="P$5" x="15.24" y="-5.08" length="middle" rot="R180"/>
-<pin name="P$6" x="15.24" y="-7.62" length="middle" rot="R180"/>
-<text x="5.08" y="10.16" size="1.27" layer="94">USBC2PIN</text>
-<pin name="P$7" x="2.54" y="12.7" length="middle" rot="R270"/>
-<pin name="P$8" x="2.54" y="-15.24" length="middle" rot="R90"/>
-</symbol>
-</symbols>
-<devicesets>
-<deviceset name="USBC6PIN">
-<gates>
-<gate name="G$1" symbol="USBC6PIN" x="0" y="0"/>
-</gates>
-<devices>
-<device name="" package="USBC6PIN">
-<connects>
-<connect gate="G$1" pin="P$1" pad="P$4"/>
-<connect gate="G$1" pin="P$2" pad="P$6"/>
-<connect gate="G$1" pin="P$3" pad="P$9"/>
-<connect gate="G$1" pin="P$4" pad="P$8"/>
-<connect gate="G$1" pin="P$5" pad="P$7"/>
-<connect gate="G$1" pin="P$6" pad="P$3"/>
-<connect gate="G$1" pin="P$7" pad="P$1"/>
-<connect gate="G$1" pin="P$8" pad="P$2"/>
-</connects>
-<technologies>
-<technology name=""/>
-</technologies>
-</device>
-</devices>
-</deviceset>
-</devicesets>
-</library>
 <library name="TACTILE1">
 <packages>
 <package name="TACTILE">
@@ -19420,6 +19360,73 @@ Switches electrical signals</description>
 <connects>
 <connect gate="G$1" pin="P$1" pad="P$1"/>
 <connect gate="G$1" pin="P$2" pad="P$2"/>
+</connects>
+<technologies>
+<technology name=""/>
+</technologies>
+</device>
+</devices>
+</deviceset>
+</devicesets>
+</library>
+<library name="USBC6PIN2">
+<packages>
+<package name="USBC6PIN">
+<wire x1="0" y1="0" x2="9" y2="0" width="0.127" layer="21"/>
+<wire x1="9" y1="0" x2="9" y2="3" width="0.127" layer="21"/>
+<wire x1="9" y1="3" x2="0" y2="3" width="0.127" layer="21"/>
+<wire x1="0" y1="3" x2="0" y2="0" width="0.127" layer="21"/>
+<smd name="P$1" x="8.65" y="1.45" dx="1.3" dy="0.55" layer="1" rot="R90"/>
+<smd name="P$3" x="7.25" y="2.15" dx="1.3" dy="0.89" layer="1" rot="R90"/>
+<smd name="P$4" x="1.75" y="2.15" dx="1.3" dy="0.89" layer="1" rot="R90"/>
+<smd name="P$6" x="2.85" y="2.15" dx="1.3" dy="0.79" layer="1" rot="R90"/>
+<smd name="P$7" x="6.15" y="2.15" dx="1.3" dy="0.79" layer="1" rot="R90"/>
+<smd name="P$8" x="5.05" y="2.15" dx="1.3" dy="0.79" layer="1" rot="R90"/>
+<smd name="P$9" x="3.95" y="2.15" dx="1.3" dy="0.79" layer="1" rot="R90"/>
+<rectangle x1="8.45" y1="0.9" x2="8.85" y2="2" layer="46"/>
+<smd name="P$2" x="0.35" y="1.45" dx="1.3" dy="0.55" layer="1" rot="R90"/>
+<rectangle x1="0.15" y1="0.9" x2="0.55" y2="2" layer="46"/>
+<smd name="P$5" x="0.35" y="1.45" dx="1.3" dy="0.55" layer="16" rot="R90"/>
+<smd name="P$11" x="8.65" y="1.45" dx="1.3" dy="0.55" layer="16" rot="R90"/>
+</package>
+</packages>
+<symbols>
+<symbol name="USBC6PIN">
+<wire x1="-5.08" y1="7.62" x2="-5.08" y2="-10.16" width="0.254" layer="94"/>
+<wire x1="-5.08" y1="-10.16" x2="10.16" y2="-10.16" width="0.254" layer="94"/>
+<wire x1="10.16" y1="-10.16" x2="10.16" y2="7.62" width="0.254" layer="94"/>
+<wire x1="10.16" y1="7.62" x2="-5.08" y2="7.62" width="0.254" layer="94"/>
+<pin name="P$1" x="15.24" y="5.08" length="middle" rot="R180"/>
+<pin name="P$2" x="15.24" y="2.54" length="middle" rot="R180"/>
+<pin name="P$3" x="15.24" y="0" length="middle" rot="R180"/>
+<pin name="P$4" x="15.24" y="-2.54" length="middle" rot="R180"/>
+<pin name="P$5" x="15.24" y="-5.08" length="middle" rot="R180"/>
+<pin name="P$6" x="15.24" y="-7.62" length="middle" rot="R180"/>
+<pin name="P$7" x="2.54" y="12.7" length="middle" rot="R270"/>
+<pin name="P$8" x="0" y="12.7" length="middle" rot="R270"/>
+<pin name="P$9" x="2.54" y="-15.24" length="middle" rot="R90"/>
+<pin name="P$10" x="0" y="-15.24" length="middle" rot="R90"/>
+<text x="5.08" y="10.16" size="1.27" layer="94">USBC2PIN</text>
+</symbol>
+</symbols>
+<devicesets>
+<deviceset name="USBC6PIN">
+<gates>
+<gate name="G$1" symbol="USBC6PIN" x="0" y="0"/>
+</gates>
+<devices>
+<device name="" package="USBC6PIN">
+<connects>
+<connect gate="G$1" pin="P$1" pad="P$3"/>
+<connect gate="G$1" pin="P$10" pad="P$5"/>
+<connect gate="G$1" pin="P$2" pad="P$7"/>
+<connect gate="G$1" pin="P$3" pad="P$8"/>
+<connect gate="G$1" pin="P$4" pad="P$9"/>
+<connect gate="G$1" pin="P$5" pad="P$6"/>
+<connect gate="G$1" pin="P$6" pad="P$4"/>
+<connect gate="G$1" pin="P$7" pad="P$1"/>
+<connect gate="G$1" pin="P$8" pad="P$11"/>
+<connect gate="G$1" pin="P$9" pad="P$2"/>
 </connects>
 <technologies>
 <technology name=""/>
@@ -19563,7 +19570,6 @@ Switches electrical signals</description>
 <part name="J6" library="SparkFun-Connectors" deviceset="CONN_03" device="PAD"/>
 <part name="U4" library="microbuilder" deviceset="VREG_SOT23-5" device="" value="MP6211 3.3V"/>
 <part name="JP4" library="SparkFun-Jumpers" deviceset="JUMPER-SMT_3_1-NC_TRACE" device="_SILK" package3d_urn="urn:adsk.eagle:package:39288/1"/>
-<part name="U$4" library="USBC6PIN4" deviceset="USBC6PIN" device=""/>
 <part name="GND13" library="SparkFun-PowerSymbols" deviceset="GND" device=""/>
 <part name="R30" library="rcl" library_urn="urn:adsk.eagle:library:334" deviceset="R-EU_" device="M0805" package3d_urn="urn:adsk.eagle:package:23556/2" value="5.1K"/>
 <part name="R13" library="rcl" library_urn="urn:adsk.eagle:library:334" deviceset="R-EU_" device="M0805" package3d_urn="urn:adsk.eagle:package:23556/2" value="5.1K"/>
@@ -19575,6 +19581,7 @@ Switches electrical signals</description>
 <part name="JP6" library="SparkFun-Jumpers" deviceset="JUMPER-SMT_3_1-NC_TRACE" device="_SILK" package3d_urn="urn:adsk.eagle:package:39288/1"/>
 <part name="JP7" library="SparkFun-Jumpers" deviceset="JUMPER-SMT_3_1-NC_TRACE" device="_SILK" package3d_urn="urn:adsk.eagle:package:39288/1"/>
 <part name="SV3" library="con-lsta" library_urn="urn:adsk.eagle:library:161" deviceset="FE05-1" device="" package3d_urn="urn:adsk.eagle:package:8190/1"/>
+<part name="U$4" library="USBC6PIN2" deviceset="USBC6PIN" device=""/>
 </parts>
 <sheets>
 <sheet>
@@ -20200,7 +20207,6 @@ Switches electrical signals</description>
 <attribute name="NAME" x="33.622" y="31.024" size="1.778" layer="95" font="vector" align="center"/>
 <attribute name="VALUE" x="38.394" y="59.33" size="1.778" layer="96" font="vector" align="center"/>
 </instance>
-<instance part="U$4" gate="G$1" x="115.47" y="26.35" smashed="yes"/>
 <instance part="GND13" gate="1" x="137.45" y="11.23" smashed="yes">
 <attribute name="VALUE" x="133.44" y="13.216" size="1.778" layer="96" font="vector" align="top-center"/>
 </instance>
@@ -20236,6 +20242,7 @@ Switches electrical signals</description>
 <attribute name="VALUE" x="227.25" y="31.65" size="1.778" layer="96" rot="R180"/>
 <attribute name="NAME" x="227.25" y="13.108" size="1.778" layer="95" rot="R180"/>
 </instance>
+<instance part="U$4" gate="G$1" x="114.71" y="26.34" smashed="yes"/>
 </instances>
 <busses>
 </busses>
@@ -21045,14 +21052,18 @@ Switches electrical signals</description>
 <label x="37.78" y="38.98" size="1.778" layer="95"/>
 </segment>
 <segment>
-<pinref part="U$4" gate="G$1" pin="P$1"/>
 <wire x1="130.71" y1="31.43" x2="137.45" y2="31.43" width="0.1524" layer="91"/>
 <wire x1="137.45" y1="31.43" x2="137.45" y2="18.73" width="0.1524" layer="91"/>
-<pinref part="U$4" gate="G$1" pin="P$6"/>
 <wire x1="137.45" y1="18.73" x2="137.45" y2="13.77" width="0.1524" layer="91"/>
 <wire x1="130.71" y1="18.73" x2="137.45" y2="18.73" width="0.1524" layer="91"/>
 <junction x="137.45" y="18.73"/>
 <pinref part="GND13" gate="1" pin="GND"/>
+<pinref part="U$4" gate="G$1" pin="P$1"/>
+<wire x1="129.95" y1="31.42" x2="130.71" y2="31.42" width="0.1524" layer="91"/>
+<wire x1="130.71" y1="31.42" x2="130.71" y2="31.43" width="0.1524" layer="91"/>
+<pinref part="U$4" gate="G$1" pin="P$6"/>
+<wire x1="129.95" y1="18.72" x2="130.71" y2="18.72" width="0.1524" layer="91"/>
+<wire x1="130.71" y1="18.72" x2="130.71" y2="18.73" width="0.1524" layer="91"/>
 </segment>
 <segment>
 <pinref part="GND14" gate="1" pin="GND"/>
@@ -21226,12 +21237,16 @@ Switches electrical signals</description>
 <label x="90.21" y="79.57" size="1.778" layer="95"/>
 </segment>
 <segment>
-<pinref part="U$4" gate="G$1" pin="P$5"/>
 <wire x1="130.71" y1="21.27" x2="143.18" y2="21.27" width="0.1524" layer="91"/>
 <wire x1="143.18" y1="21.27" x2="143.18" y2="28.89" width="0.1524" layer="91"/>
-<pinref part="U$4" gate="G$1" pin="P$2"/>
 <wire x1="143.18" y1="28.89" x2="130.71" y2="28.89" width="0.1524" layer="91"/>
 <label x="137.73" y="29.45" size="1.778" layer="95"/>
+<pinref part="U$4" gate="G$1" pin="P$2"/>
+<wire x1="129.95" y1="28.88" x2="130.71" y2="28.88" width="0.1524" layer="91"/>
+<wire x1="130.71" y1="28.88" x2="130.71" y2="28.89" width="0.1524" layer="91"/>
+<pinref part="U$4" gate="G$1" pin="P$5"/>
+<wire x1="129.95" y1="21.26" x2="130.71" y2="21.26" width="0.1524" layer="91"/>
+<wire x1="130.71" y1="21.26" x2="130.71" y2="21.27" width="0.1524" layer="91"/>
 </segment>
 <segment>
 <pinref part="JP5" gate="G$1" pin="1"/>
@@ -21686,18 +21701,29 @@ Switches electrical signals</description>
 </net>
 <net name="SHLD" class="0">
 <segment>
-<pinref part="U$4" gate="G$1" pin="P$7"/>
-<pinref part="U$4" gate="G$1" pin="P$8"/>
-<wire x1="118.01" y1="11.11" x2="108.67" y2="11.1" width="0.1524" layer="91"/>
-<wire x1="108.67" y1="11.1" x2="108.67" y2="39.04" width="0.1524" layer="91"/>
-<wire x1="108.67" y1="39.04" x2="118.01" y2="39.05" width="0.1524" layer="91"/>
-<wire x1="118.01" y1="39.05" x2="119.77" y2="39.05" width="0.1524" layer="91"/>
-<junction x="118.01" y="39.05"/>
-<wire x1="119.77" y1="39.05" x2="119.77" y2="35.01" width="0.1524" layer="91"/>
+<wire x1="117.98" y1="9.23" x2="108.64" y2="9.22" width="0.1524" layer="91"/>
+<wire x1="108.64" y1="9.22" x2="108.7" y2="40.41" width="0.1524" layer="91"/>
+<wire x1="108.7" y1="40.41" x2="118.04" y2="40.42" width="0.1524" layer="91"/>
+<wire x1="118.04" y1="40.42" x2="119.77" y2="39.05" width="0.1524" layer="91"/>
+<wire x1="119.77" y1="39.05" x2="119.77" y2="38.63" width="0.1524" layer="91"/>
+<wire x1="119.77" y1="38.63" x2="119.77" y2="35.01" width="0.1524" layer="91"/>
 <wire x1="119.77" y1="35.01" x2="119.81" y2="35.01" width="0.1524" layer="91"/>
 <pinref part="SHLD" gate="G$1" pin="2"/>
 <wire x1="119.77" y1="35.01" x2="158.92" y2="34.96" width="0.1524" layer="91"/>
 <wire x1="158.92" y1="34.96" x2="158.88" y2="24.87" width="0.1524" layer="91"/>
+<pinref part="U$4" gate="G$1" pin="P$10"/>
+<pinref part="U$4" gate="G$1" pin="P$9"/>
+<wire x1="114.71" y1="11.1" x2="117.25" y2="11.1" width="0.1524" layer="91"/>
+<wire x1="117.25" y1="11.1" x2="117.98" y2="11.1" width="0.1524" layer="91"/>
+<wire x1="117.98" y1="11.1" x2="117.98" y2="9.23" width="0.1524" layer="91"/>
+<junction x="117.25" y="11.1"/>
+<pinref part="U$4" gate="G$1" pin="P$8"/>
+<pinref part="U$4" gate="G$1" pin="P$7"/>
+<wire x1="114.71" y1="39.04" x2="117.25" y2="39.04" width="0.1524" layer="91"/>
+<wire x1="117.25" y1="39.04" x2="117.66" y2="38.63" width="0.1524" layer="91"/>
+<wire x1="117.66" y1="38.63" x2="119.77" y2="38.63" width="0.1524" layer="91"/>
+<junction x="117.25" y="39.04"/>
+<junction x="119.77" y="38.63"/>
 </segment>
 </net>
 <net name="N$15" class="0">
@@ -21839,20 +21865,16 @@ Switches electrical signals</description>
 <label x="38.69" y="44.06" size="1.778" layer="95"/>
 </segment>
 </net>
-<net name="N$42" class="0">
-<segment>
-<pinref part="U$4" gate="G$1" pin="P$3"/>
-<pinref part="R13" gate="G$1" pin="2"/>
-<wire x1="130.71" y1="26.35" x2="153.2" y2="26.41" width="0.1524" layer="91"/>
-<wire x1="153.2" y1="26.41" x2="153.2" y2="23.53" width="0.1524" layer="91"/>
-</segment>
-</net>
 <net name="N$41" class="0">
 <segment>
+<wire x1="130.71" y1="23.81" x2="146.6" y2="23.81" width="0.1524" layer="91"/>
 <pinref part="U$4" gate="G$1" pin="P$4"/>
-<pinref part="R30" gate="G$1" pin="2"/>
-<wire x1="130.71" y1="23.81" x2="146.62" y2="23.81" width="0.1524" layer="91"/>
-<wire x1="146.62" y1="23.81" x2="146.62" y2="22.34" width="0.1524" layer="91"/>
+<wire x1="146.6" y1="23.81" x2="146.62" y2="23.81" width="0.1524" layer="91"/>
+<wire x1="129.95" y1="23.8" x2="130.71" y2="23.8" width="0.1524" layer="91"/>
+<wire x1="130.71" y1="23.8" x2="130.71" y2="23.81" width="0.1524" layer="91"/>
+<pinref part="R13" gate="G$1" pin="2"/>
+<wire x1="153.2" y1="23.53" x2="153.2" y2="23.81" width="0.1524" layer="91"/>
+<wire x1="153.2" y1="23.81" x2="146.62" y2="23.81" width="0.1524" layer="91"/>
 </segment>
 </net>
 <net name="TP" class="0">
@@ -21892,6 +21914,14 @@ Switches electrical signals</description>
 <wire x1="100.77" y1="57.59" x2="100.77" y2="57.58" width="0.1524" layer="91"/>
 <wire x1="100.77" y1="57.58" x2="100.09" y2="57.58" width="0.1524" layer="91"/>
 <label x="98.97" y="57.74" size="1.778" layer="95"/>
+</segment>
+</net>
+<net name="N$42" class="0">
+<segment>
+<pinref part="U$4" gate="G$1" pin="P$3"/>
+<pinref part="R30" gate="G$1" pin="2"/>
+<wire x1="129.95" y1="26.34" x2="146.62" y2="26.34" width="0.1524" layer="91"/>
+<wire x1="146.62" y1="26.34" x2="146.62" y2="22.34" width="0.1524" layer="91"/>
 </segment>
 </net>
 </nets>

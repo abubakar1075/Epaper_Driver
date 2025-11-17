@@ -1,4 +1,4 @@
-Designator,MidX,Mid Y,Layer,Rotation
+Designator,Mid X,Mid Y,Layer,Rotation
 C1,67.9,23.9,Top,270
 C10,72.26,13.11,Top,270
 C11,67.02,13.11,Top,270
@@ -79,7 +79,7 @@ R9,54.44,13,Top,270
 S3,39.87,15.31,Top,270
 S4,13.8,30.15,Top,180
 SHLD,15,17.85,Top,180
-U$4,5.9,19.5,Top,180
+U$4,6.17,19.96,Top,180
 U1,32.95,3.75,Top,270
 U2,20.35,3,Top,180
 U3,28.6,21.83,Top,90
