@@ -3965,7 +3965,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.shopping_cart, color: Colors.purple, size: 28),
-              title: const Text('Shop the Frame', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              title: const Text('Shop CanvasBT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
               onTap: () async {
                 Navigator.pop(context);
