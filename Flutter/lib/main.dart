@@ -183,7 +183,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   final List<_LibraryEntry> _library = [];
   int? _selectedLibraryIndex; // selected index in saved images view
   bool _showLibrary = false; // toggle to show SAVED IMAGES window when connected
-  bool _showOnline = false; // toggle to show LIBRARY (Pixabay online images) window when connected
+  bool _showOnline = false; // toggle to show LIBRARY (Pexels + Pixabay online images) window when connected
+  // Pexels state (Library window with online images)
+  static const String _pexelsApiKey = 'WeY9gbQbzCMawv6rb5cYLci2iUn8QtYs4GjsRG7itW9lKM7UP6xNX2K9';
+  final TextEditingController _pexelsSearchController = TextEditingController();
+  List<_OnlineImage> _combinedResults = []; // Combined Pexels + Pixabay results
+  int? _selectedOnlineIndex;
+  bool _isOnlineSearching = false;
+  bool _isOnlineImporting = false;
+  String? _onlineError;
+  // Pexels categories (similar to Pixabay)
+  static const List<String> _pexelsCategories = [
+    'all','nature','people','technology','animals','food','travel','business','fashion','architecture','sports','health','abstract','art','music'
+  ];
+  String _selectedPexelsCategory = 'all';
   // Pixabay state (Library window with online images)
   static const String _pixabayApiKey = '53177368-45f6645edfdd15979265678fc';
   final TextEditingController _pixabaySearchController = TextEditingController();
@@ -747,7 +760,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           child: SizedBox(
             height: 32,
             child: ElevatedButton(
-              onPressed: (){ setState((){ _showOnline = true; _pixabayError = null; }); },
+              onPressed: (){ setState((){ _showOnline = true; _onlineError = null; }); },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 backgroundColor: Colors.orange.shade500,
@@ -774,7 +787,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   }
 
   // Main connected view router
-  // Navigation: _showLibrary = SAVED IMAGES window, _showOnline = LIBRARY (Pixabay) window, _showAi = AI window
+  // Navigation: _showLibrary = SAVED IMAGES window, _showOnline = LIBRARY (Pexels + Pixabay) window, _showAi = AI window
   Widget _buildConnected(){
     if(_showAi){
       return _buildAiView();
@@ -782,7 +795,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     if(_showLibrary){  // SAVED IMAGES window
       return _buildLibraryView();
     }
-    if(_showOnline){  // LIBRARY window (Pixabay)
+    if(_showOnline){  // LIBRARY window (Pexels + Pixabay)
       return _buildOnlineView();
     }
     // Adaptive, constraint-driven layout: guarantees everything fits without vertical scroll.
@@ -1048,7 +1061,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final prompt = _aiPromptController.text.trim();
     try{
       // Attempt free text-to-image via Pollinations (no API key) with multiple URL variants.
-      const String aiPrefix = 'colourful painiting use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6 for';
+      const String aiPrefix = 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6 for';
       final safePrompt = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
       final encoded = Uri.encodeComponent(safePrompt);
       final seed = (safePrompt.hashCode & 0x7fffffff).toString();
@@ -1067,7 +1080,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       await _generateAiImageLocally(safePrompt);
     } catch (e){
       // Fallback to local synthesis on any error
-      const String aiPrefix = 'Paiting colourful (black,white,red,yellow,blue,green) ';
+      const String aiPrefix = 'colourful (black,white,red,yellow,blue,green) ';
       final fallback = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
       await _generateAiImageLocally(fallback);
     } finally {
@@ -1515,8 +1528,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     final q = _pixabaySearchController.text.trim();
     if(q.isEmpty){ setState(()=> _pixabayError='Enter a search term'); return; }
     
-    // Add "abstract" to the search query (hidden from user)
-    final searchQuery = 'abstract $q';
+    // Add "abstract textured colourful" to the search query (hidden from user)
+    final searchQuery = 'abstract textured colourful $q';
     
     setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
     _updateStatus('Searching "$q" on Pixabay...');
@@ -1573,15 +1586,198 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     if(_selectedPixabayIndex!=null){ _updateStatus('Selected Pixabay image'); }
   }
 
-  // Search using only the selected category (independent of the text query)
+  // Pexels + Pixabay Combined Search
+  Future<void> _searchOnlineImages() async {
+    FocusScope.of(context).unfocus();
+    final q = _pexelsSearchController.text.trim();
+    if(q.isEmpty){ setState(()=> _onlineError='Enter a search term'); return; }
+    
+    setState((){ _isOnlineSearching=true; _onlineError=null; _combinedResults=[]; _selectedOnlineIndex=null; });
+    _updateStatus('Searching "$q" on Pexels and Pixabay...');
+    
+    final List<_OnlineImage> allResults = [];
+    int pexelsCount = 0;
+    int pixabayCount = 0;
+    
+    // 1. Search Pexels first (max 80 per page allowed by API)
+    try{
+      final pexelsUri = Uri.https('api.pexels.com','/v1/search', {
+        'query': q,
+        'per_page': '80',
+        'orientation': 'landscape',
+      });
+      final pexelsResp = await http.get(pexelsUri, headers:{
+        HttpHeaders.authorizationHeader: _pexelsApiKey,
+        HttpHeaders.acceptHeader:'application/json',
+        HttpHeaders.userAgentHeader:'CanvasBT'
+      });
+      if(pexelsResp.statusCode==200){
+        final pexelsData = json.decode(pexelsResp.body) as Map<String,dynamic>;
+        final photos = pexelsData['photos'] as List<dynamic>? ?? const [];
+        for(final p in photos){
+          if(p is! Map) continue;
+          final src = p['src'] as Map<String,dynamic>?;
+          if(src == null) continue;
+          final preview = (src['medium'] as String? ?? src['small'] as String? ?? '').trim();
+          final full = (src['original'] as String? ?? src['large2x'] as String? ?? src['large'] as String? ?? '').trim();
+          if(preview.isEmpty || full.isEmpty) continue;
+          allResults.add(_OnlineImage(
+            id: 'pexels_${p['id'] ?? ''}',
+            previewUrl: preview,
+            fullUrl: full,
+            width: p['width'] as int? ?? 0,
+            height: p['height'] as int? ?? 0,
+            author: (p['photographer'] as String? ?? 'Pexels User').trim(),
+            source: 'Pexels',
+          ));
+        }
+        pexelsCount = allResults.length;
+      }
+    }catch(e){
+      // Silently ignore Pexels errors and continue with Pixabay
+    }
+    
+    // 2. Search Pixabay (max 200 per page allowed by API)
+    try{
+      final searchQuery = 'abstract textured colourful $q';
+      final pixabayParams = <String,String>{
+        'key': _pixabayApiKey,
+        'q': searchQuery,
+        'image_type':'photo',
+        'safesearch':'true',
+        'order':'popular',
+        'per_page':'200',
+      };
+      if(_selectedPixabayCategory != 'all'){
+        pixabayParams['category'] = _selectedPixabayCategory;
+      }
+      final pixabayUri = Uri.https('pixabay.com','/api/', pixabayParams);
+      final pixabayResp = await http.get(pixabayUri, headers:{
+        HttpHeaders.acceptHeader:'application/json',
+        HttpHeaders.userAgentHeader:'CanvasBT'
+      });
+      if(pixabayResp.statusCode==200){
+        final pixabayData = json.decode(pixabayResp.body) as Map<String,dynamic>;
+        final hits = pixabayData['hits'] as List<dynamic>? ?? const [];
+        for(final h in hits){
+          if(h is! Map) continue;
+          final preview = (h['previewURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+          final full = (h['largeImageURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+          if(preview.isEmpty || full.isEmpty) continue;
+          final w = h['imageWidth'];
+          final ht = h['imageHeight'];
+          final width = w is int ? w : int.tryParse('$w') ?? 0;
+          final height = ht is int ? ht : int.tryParse('$ht') ?? 0;
+          allResults.add(_OnlineImage(
+            id: 'pixabay_${h['id'] ?? ''}',
+            previewUrl: preview,
+            fullUrl: full,
+            width: width,
+            height: height,
+            author: (h['user'] as String? ?? 'Pixabay User').trim(),
+            source: 'Pixabay',
+          ));
+        }
+        pixabayCount = allResults.length - pexelsCount;
+      }
+    }catch(e){
+      // Silently ignore Pixabay errors
+    }
+    
+    if(mounted){ 
+      setState((){ 
+        _combinedResults=allResults; 
+        if(allResults.isEmpty) _onlineError='No results'; 
+      }); 
+    }
+    
+    // Build status message showing results from each source
+    String statusMsg = '';
+    if(allResults.isEmpty){
+      statusMsg = 'No results for "$q"';
+    } else {
+      final parts = <String>[];
+      if(pexelsCount > 0) parts.add('$pexelsCount from Pexels');
+      if(pixabayCount > 0) parts.add('$pixabayCount from Pixabay');
+      statusMsg = 'Found ${allResults.length} images (${parts.join(', ')})';
+    }
+    _updateStatus(statusMsg);
+    
+    if(mounted){ setState(()=> _isOnlineSearching=false); }
+  }
+
+  void _selectOnlineImage(int i){
+    if(i<0 || i>=_combinedResults.length) return;
+    setState((){ _selectedOnlineIndex = (_selectedOnlineIndex==i) ? null : i; });
+    if(_selectedOnlineIndex!=null){
+      final img = _combinedResults[_selectedOnlineIndex!];
+      _updateStatus('Selected ${img.source} image');
+    }
+  }
+
+  // Search Pexels by category
+  Future<void> _searchPexelsByCategory(String category) async {
+    final cat = (category.isEmpty) ? 'all' : category;
+    setState((){ _isOnlineSearching=true; _onlineError=null; _combinedResults=[]; _selectedOnlineIndex=null; });
+    _updateStatus('Browsing $cat images on Pexels...');
+    
+    final List<_OnlineImage> allResults = [];
+    
+    try{
+      // Search Pexels with category as query (max 80 per page allowed by API)
+      final query = cat == 'all' ? 'popular' : cat;
+      final pexelsUri = Uri.https('api.pexels.com','/v1/search', {
+        'query': query,
+        'per_page': '80',
+        'orientation': 'landscape',
+      });
+      final pexelsResp = await http.get(pexelsUri, headers:{
+        HttpHeaders.authorizationHeader: _pexelsApiKey,
+        HttpHeaders.acceptHeader:'application/json',
+        HttpHeaders.userAgentHeader:'CanvasBT'
+      });
+      if(pexelsResp.statusCode==200){
+        final pexelsData = json.decode(pexelsResp.body) as Map<String,dynamic>;
+        final photos = pexelsData['photos'] as List<dynamic>? ?? const [];
+        for(final p in photos){
+          if(p is! Map) continue;
+          final src = p['src'] as Map<String,dynamic>?;
+          if(src == null) continue;
+          final preview = (src['medium'] as String? ?? src['small'] as String? ?? '').trim();
+          final full = (src['original'] as String? ?? src['large2x'] as String? ?? src['large'] as String? ?? '').trim();
+          if(preview.isEmpty || full.isEmpty) continue;
+          allResults.add(_OnlineImage(
+            id: 'pexels_${p['id'] ?? ''}',
+            previewUrl: preview,
+            fullUrl: full,
+            width: p['width'] as int? ?? 0,
+            height: p['height'] as int? ?? 0,
+            author: (p['photographer'] as String? ?? 'Pexels User').trim(),
+            source: 'Pexels',
+          ));
+        }
+      }
+    }catch(e){
+      // Silently ignore Pexels errors
+    }
+    
+    if(mounted){ setState((){ _combinedResults=allResults; if(allResults.isEmpty) _onlineError='No results'; }); }
+    _updateStatus(allResults.isEmpty ? 'No results for $cat' : 'Found ${allResults.length} images');
+    if(mounted){ setState(()=> _isOnlineSearching=false); }
+  }
+
+  // Search using only the selected Pixabay category (independent of the text query)
   Future<void> _searchPixabayByCategory(String category) async {
     final cat = (category.isEmpty) ? 'all' : category;
-    setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
+    setState((){ _isOnlineSearching=true; _onlineError=null; _combinedResults=[]; _selectedOnlineIndex=null; });
     _updateStatus('Browsing $cat images on Pixabay...');
+    
+    final List<_OnlineImage> allResults = [];
+    
     try{
-      // Add "abstract" to category search query (hidden from user)
+      // Add "abstract textured colourful" to category search query (hidden from user)
       final baseQuery = cat == 'all' ? 'popular' : cat;
-      final searchQuery = 'abstract $baseQuery';
+      final searchQuery = 'abstract textured colourful $baseQuery';
       
       final params = <String,String>{
         'key': _pixabayApiKey,
@@ -1597,34 +1793,38 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         HttpHeaders.acceptHeader:'application/json',
         HttpHeaders.userAgentHeader:'CanvasBT'
       });
-      if(resp.statusCode!=200) throw HttpException('HTTP ${resp.statusCode}');
-      final data = json.decode(resp.body) as Map<String,dynamic>;
-      final hits = data['hits'] as List<dynamic>? ?? const [];
-      final out = <_PixabayImage>[];
-      for(final h in hits){
-        if(h is! Map) continue;
-        final preview = (h['previewURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
-        final full = (h['largeImageURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
-        if(preview.isEmpty || full.isEmpty) continue;
-        final w = h['imageWidth'];
-        final ht = h['imageHeight'];
-        
-        final width = w is int ? w : int.tryParse('$w') ?? 0;
-        final height = ht is int ? ht : int.tryParse('$ht') ?? 0;
-        
-        out.add(_PixabayImage(
-          id: '${h['id'] ?? ''}',
-          previewUrl: preview,
-          fullUrl: full,
-          width: width,
-          height: height,
-          author: (h['user'] as String? ?? 'Pixabay User').trim(),
-        ));
+      if(resp.statusCode==200){
+        final data = json.decode(resp.body) as Map<String,dynamic>;
+        final hits = data['hits'] as List<dynamic>? ?? const [];
+        for(final h in hits){
+          if(h is! Map) continue;
+          final preview = (h['previewURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+          final full = (h['largeImageURL'] as String? ?? h['webformatURL'] as String? ?? '').trim();
+          if(preview.isEmpty || full.isEmpty) continue;
+          final w = h['imageWidth'];
+          final ht = h['imageHeight'];
+          
+          final width = w is int ? w : int.tryParse('$w') ?? 0;
+          final height = ht is int ? ht : int.tryParse('$ht') ?? 0;
+          
+          allResults.add(_OnlineImage(
+            id: 'pixabay_${h['id'] ?? ''}',
+            previewUrl: preview,
+            fullUrl: full,
+            width: width,
+            height: height,
+            author: (h['user'] as String? ?? 'Pixabay User').trim(),
+            source: 'Pixabay',
+          ));
+        }
       }
-      if(mounted){ setState((){ _pixabayResults=out; _pixabayError = out.isEmpty ? 'No results' : null; }); }
-      _updateStatus(out.isEmpty ? 'No results' : 'Found ${out.length} images');
-    }catch(e){ if(mounted){ setState(()=> _pixabayError='Search failed: $e'); } }
-    finally{ if(mounted){ setState(()=> _isPixabaySearching=false); } }
+    }catch(e){
+      // Silently ignore Pixabay errors
+    }
+    
+    if(mounted){ setState((){ _combinedResults=allResults; if(allResults.isEmpty) _onlineError='No results'; }); }
+    _updateStatus(allResults.isEmpty ? 'No results' : 'Found ${allResults.length} images');
+    if(mounted){ setState(()=> _isOnlineSearching=false); }
   }
 
   Future<void> _useSelectedPixabayImage() async {
@@ -1655,6 +1855,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       _updateStatus('Loaded Pixabay image by ${chosen.author}');
     }catch(e){ if(mounted){ setState(()=> _pixabayError='Import failed: $e'); } }
     finally{ if(mounted){ setState(()=> _isPixabayImporting=false); } }
+  }
+
+  Future<void> _useSelectedOnlineImage() async {
+    final idx = _selectedOnlineIndex; if(idx==null) return;
+    final chosen = _combinedResults[idx];
+    setState(()=> _isOnlineImporting=true);
+    _updateStatus('Downloading ${chosen.source} image...');
+    try{
+      final resp = await http.get(Uri.parse(chosen.fullUrl), headers:{
+        HttpHeaders.authorizationHeader: chosen.source == 'Pexels' ? _pexelsApiKey : '',
+        HttpHeaders.userAgentHeader:'CanvasBT-app',
+        HttpHeaders.acceptHeader:'image/*'
+      });
+      if(resp.statusCode!=200) throw HttpException('HTTP ${resp.statusCode}');
+      final bytes = resp.bodyBytes; if(bytes.isEmpty) throw const FormatException('Empty image');
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/${chosen.source.toLowerCase()}_${chosen.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(bytes);
+      final codec = await ui.instantiateImageCodec(bytes); final frame = await codec.getNextFrame(); final uiImg = frame.image;
+      if(!mounted) return;
+      setState((){
+        _originalImage = file;
+        _uiOriginal = uiImg;
+        _processedImage = null; _processedBytes=null; _processedPngBytes=null;
+        _showOnline = false; _viewInitialized=false; _selectedOnlineIndex=null;
+        // Keep current orientation - don't auto-change
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_){ if(mounted) _recomputeViewForCurrentFrame(context); });
+      _updateStatus('Loaded ${chosen.source} image by ${chosen.author}');
+    }catch(e){ if(mounted){ setState(()=> _onlineError='Import failed: $e'); } }
+    finally{ if(mounted){ setState(()=> _isOnlineImporting=false); } }
   }
 
   // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
@@ -1991,18 +2222,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   // ========================= LIBRARY WINDOW (Pixabay online images) =========================
   Widget _buildOnlineView(){
     final String status;
-    if(_pixabayError!=null){ status = _pixabayError!; }
-    else if(_selectedPixabayIndex!=null){ final d=_pixabayResults[_selectedPixabayIndex!]; status='Selected • ${d.author}'; }
-    else if(_pixabayResults.isNotEmpty){ status='Tap a thumbnail to select'; }
-    else { status='Search Pixabay for images'; }
+    if(_onlineError!=null){ status = _onlineError!; }
+    else if(_selectedOnlineIndex!=null){ final d=_combinedResults[_selectedOnlineIndex!]; status='Selected • ${d.author} (${d.source})'; }
+    else if(_combinedResults.isNotEmpty){ status='Tap a thumbnail to select'; }
+    else { status='Search Pexels and Pixabay for images'; }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children:[
       Row(crossAxisAlignment: CrossAxisAlignment.center, children:[
         _smallBtn('Back', ()=> setState(()=> _showOnline=false), icon: Icons.arrow_back, backgroundColor: Colors.grey.shade600),
         const SizedBox(width:8),
-        _smallBtn(_isPixabayImporting? 'Importing' : 'Use in Editor', (_selectedPixabayIndex==null || _isPixabayImporting)? null : _useSelectedPixabayImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
+        _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedOnlineIndex==null || _isOnlineImporting)? null : _useSelectedOnlineImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
         const SizedBox(width:8),
         Expanded(child: Text('Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600))),
-        IconButton(onPressed: (_isPixabaySearching || _pixabaySearchController.text.trim().isEmpty)? null : _searchPixabayImages, icon: const Icon(Icons.refresh)),
+        IconButton(onPressed: (_isOnlineSearching || _pexelsSearchController.text.trim().isEmpty)? null : _searchOnlineImages, icon: const Icon(Icons.refresh)),
       ]),
       const SizedBox(height:4),
       Padding(
@@ -2010,12 +2241,138 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
         child: Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
       ),
       const SizedBox(height:6),
-      _buildPixabaySearchRow(),
+      _buildOnlineSearchRow(),
       const SizedBox(height:8),
-      Expanded(child: _buildPixabayResultsSection()),
+      Expanded(child: _buildOnlineResultsSection()),
       const SizedBox(height:6),
       _statusCard(),
     ]);
+  }
+
+  Widget _buildOnlineSearchRow(){
+    String _titleCase(String s){ if(s.isEmpty) return s; return s[0].toUpperCase()+s.substring(1); }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children:[
+      Row(children:[
+        Expanded(child: TextField(
+          controller: _pexelsSearchController,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_)=> _searchOnlineImages(),
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: 'Search (e.g. car)',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
+          ),
+        )),
+        const SizedBox(width:8),
+        SizedBox(height:44, child: ElevatedButton.icon(
+          onPressed: _isOnlineSearching? null : _searchOnlineImages,
+          icon: const Icon(Icons.search, size:18),
+          label: Text(_isOnlineSearching? 'Searching...' : 'Search'),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
+        )),
+      ]),
+      const SizedBox(height:8),
+      // Pexels Categories
+      SizedBox(
+        height: 40,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(right: 8.0),
+                child: Text('Pexels:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+              ..._pexelsCategories.map((c){
+                final selected = _selectedPexelsCategory == c;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text(_titleCase(c)),
+                    selected: selected,
+                    selectedColor: Colors.green.shade600,
+                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12),
+                    onSelected: (_){
+                      setState(()=> _selectedPexelsCategory = c);
+                      // Category triggers its own search independent of text field
+                      if(!_isOnlineSearching){ _searchPexelsByCategory(c); }
+                    },
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height:8),
+      // Pixabay Categories
+      SizedBox(
+        height: 40,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(right: 8.0),
+                child: Text('Pixabay:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+              ..._pixabayCategories.map((c){
+                final selected = _selectedPixabayCategory == c;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text(_titleCase(c)),
+                    selected: selected,
+                    selectedColor: Colors.blue.shade600,
+                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12),
+                    onSelected: (_){
+                      setState(()=> _selectedPixabayCategory = c);
+                      // Category triggers its own search independent of text field
+                      if(!_isOnlineSearching){ _searchPixabayByCategory(c); }
+                    },
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildOnlineResultsSection(){
+    if(_isOnlineSearching){ return const Center(child: CircularProgressIndicator()); }
+    if(_combinedResults.isEmpty){ return Center(child: Text(_onlineError??'Enter a search term above')); }
+    return GridView.builder(
+      padding: const EdgeInsets.all(6),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        childAspectRatio: 1,
+      ),
+      itemCount: _combinedResults.length,
+      itemBuilder: (context, index){
+        final d = _combinedResults[index]; final sel = index==_selectedOnlineIndex;
+        return GestureDetector(onTap: ()=> _selectOnlineImage(index), child: AnimatedContainer(
+          duration: const Duration(milliseconds:180),
+          decoration: BoxDecoration(
+            border: Border.all(color: sel? Colors.teal.shade600 : Colors.grey.shade400, width: sel? 3:0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ClipRRect(borderRadius: BorderRadius.circular(6), child: Stack(children:[
+            Positioned.fill(child: Image.network(
+              d.previewUrl, 
+              fit: BoxFit.cover, 
+              headers: d.source == 'Pexels' 
+                ? { HttpHeaders.authorizationHeader: _pexelsApiKey } 
+                : const { HttpHeaders.userAgentHeader:'CanvasBT-app' }
+            )),
+          ])),
+        ));
+      },
+    );
   }
 
   Widget _buildPixabaySearchRow(){
@@ -2028,7 +2385,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           onSubmitted: (_)=> _searchPixabayImages(),
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
-            hintText: 'Search (e.g. sunset)',
+            hintText: 'Search (e.g. car)',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
           ),
@@ -4578,6 +4935,18 @@ class _LibraryEntry {
   final bool isDefaultAsset; // true if from bundled assets
   final String title; // display name
   const _LibraryEntry({required this.id, required this.image, required this.rawCodes, required this.pngBytes, required this.created, required this.wasPortrait, required this.isDefaultAsset, required this.title});
+}
+
+// Combined online image data holder (supports both Pexels and Pixabay)
+class _OnlineImage {
+  final String id;
+  final String previewUrl;
+  final String fullUrl;
+  final int width;
+  final int height;
+  final String author;
+  final String source; // 'Pexels' or 'Pixabay'
+  const _OnlineImage({required this.id, required this.previewUrl, required this.fullUrl, required this.width, required this.height, required this.author, required this.source});
 }
 
 // Simple data holder for Pixabay search results
