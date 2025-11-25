@@ -49,6 +49,9 @@ dependencies:
   
   # HTTP requests
   http: ^1.1.0
+  
+  # URL launcher
+  url_launcher: ^6.2.0
 
 dev_dependencies:
   flutter_test:

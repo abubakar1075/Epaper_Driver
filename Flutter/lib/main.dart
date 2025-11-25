@@ -30,6 +30,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:tuple/tuple.dart';
 import 'package:path_provider/path_provider.dart'; // persistent storage dir
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 // Tracks which action the user intended when tapping while disconnected
 enum _PendingSend { none, image, ota }
@@ -3959,6 +3960,25 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
               onTap: () {
                 Navigator.pop(context);
                 _showPoliciesDialog();
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.shopping_cart, color: Colors.purple, size: 28),
+              title: const Text('Shop the Frame', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+              onTap: () async {
+                Navigator.pop(context);
+                final Uri url = Uri.parse('https://inventorstech.io/index.php/our-product/');
+                try {
+                  await launchUrl(url, mode: LaunchMode.externalApplication);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not open browser. Please visit: inventorstech.io')),
+                    );
+                  }
+                }
               },
             ),
             const Divider(height: 1),
