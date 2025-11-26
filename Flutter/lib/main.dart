@@ -227,6 +227,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   bool _aiIsGenerating = false;
   Uint8List? _aiPngBytes;
   String? _aiError;
+  String _aiLoadingMessage = 'Creating your masterpiece...';
+  Timer? _aiLoadingMessageTimer;
   // AI art style presets
   String? _selectedAiStyle; // null = no style, otherwise one of: 'realism', 'whimsy', 'vibrance', 'inkwork'
   static const Map<String, String> _aiStylePrompts = {
@@ -506,6 +508,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     _connectionStatusTimer?.cancel();
     _batteryStatusTimer?.cancel();
     _statusMessageTimer?.cancel();
+    _aiLoadingMessageTimer?.cancel();
     _aiPromptController.dispose();
     _pixabaySearchController.dispose();
     _disconnectDevice();
@@ -1013,7 +1016,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           // Use in Editor next
           _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage, icon: Icons.open_in_new),
           const Spacer(),
-          // Generate last, with green color, aligned right
+          // Simple Generate last, with green color, aligned right
           ElevatedButton.icon(
             onPressed: _aiIsGenerating ? null : _generateAiImage,
             style: ElevatedButton.styleFrom(
@@ -1023,7 +1026,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
               textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
             icon: const Icon(Icons.auto_awesome, size: 18),
-            label: Text(_aiIsGenerating ? 'Generating...' : 'Generate'),
+            label: Text(_aiIsGenerating ? 'Generating...' : 'Simple Generate'),
           ),
         ]),
         const SizedBox(height: 8),
@@ -1067,21 +1070,30 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
               child: _aiIsGenerating
                 ? Column(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
+                    children: [
+                      const CircularProgressIndicator(
+                        strokeWidth: 3,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      ),
+                      const SizedBox(height: 20),
                       Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        padding: const EdgeInsets.symmetric(horizontal: 30),
                         child: Text(
-                          'Please wait, we are generating image for you',
-                          style: TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+                          _aiLoadingMessage,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
                     ],
                   )
                 : (_aiPngBytes==null
-                    ? Text(_aiError ?? 'Enter a prompt and tap Generate', style: Theme.of(context).textTheme.titleMedium)
+                    ? Text(_aiError ?? 'Enter a prompt and tap a style button or Simple Generate',
+                        style: const TextStyle(fontSize: 14, color: Colors.black54),
+                        textAlign: TextAlign.center)
                     : Image.memory(_aiPngBytes!, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
             ),
           ),
@@ -1116,8 +1128,42 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     );
   }
 
+  void _startAiLoadingMessages() {
+    // Cancel any existing timer
+    _aiLoadingMessageTimer?.cancel();
+    
+    // Engaging loading messages that rotate every 5 seconds
+    final messages = [
+      'Creating your masterpiece...',
+      'Mixing colors and magic...',
+      'Adding artistic touches...',
+      'Almost there, looking great!',
+      'Finalizing the details...',
+      'Perfecting your vision...',
+      'Polishing the artwork...',
+      'Fine-tuning the colors...',
+      'Adding final touches...',
+      'Making it picture perfect...',
+      'Just a moment more...',
+      'Bringing your idea to life...',
+    ];
+    
+    int messageIndex = 0;
+    setState(() => _aiLoadingMessage = messages[messageIndex]);
+    
+    _aiLoadingMessageTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted && _aiIsGenerating) {
+        messageIndex = (messageIndex + 1) % messages.length;
+        setState(() => _aiLoadingMessage = messages[messageIndex]);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
   Future<void> _generateAiImageWithStyle(String styleId) async {
     setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
+    _startAiLoadingMessages();
     final prompt = _aiPromptController.text.trim();
     try{
       // Build prompt with ONLY the style pre-prompt (no Generate button prefix)
@@ -1160,12 +1206,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
       await _generateAiImageLocally(fallbackPrompt.trim());
     } finally {
+      _aiLoadingMessageTimer?.cancel();
       if(mounted){ setState(()=> _aiIsGenerating = false); }
     }
   }
 
   Future<void> _generateAiImage() async {
     setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
+    _startAiLoadingMessages();
     final prompt = _aiPromptController.text.trim();
     try{
       // Build prompt with ONLY the color optimization prefix (Generate button works independently)
@@ -1200,6 +1248,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       }
       await _generateAiImageLocally(fallbackPrompt.trim());
     } finally {
+      _aiLoadingMessageTimer?.cancel();
       if(mounted){ setState(()=> _aiIsGenerating = false); }
     }
   }
