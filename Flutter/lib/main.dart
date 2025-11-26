@@ -381,7 +381,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     
     // Add listener to auto-load CanvasBT gallery when switching to that tab
     _libraryTabController?.addListener(() {
-      if (_libraryTabController?.index == 1 && _canvasBTResults.isEmpty && !_isCanvasBTLoading) {
+      if (_libraryTabController?.index == 0 && _canvasBTResults.isEmpty && !_isCanvasBTLoading) {
         // Auto-load CanvasBT gallery when first switching to that tab
         _loadCanvasBTGallery();
       }
@@ -2374,16 +2374,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         const SizedBox(width:8),
         // Show appropriate "Use in Editor" button based on active tab
         if (_libraryTabController?.index == 0)
-          _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedOnlineIndex==null || _isOnlineImporting)? null : _useSelectedOnlineImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600)
+          _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedCanvasBTIndex==null || _isOnlineImporting)? null : _useSelectedCanvasBTImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600)
         else
-          _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedCanvasBTIndex==null || _isOnlineImporting)? null : _useSelectedCanvasBTImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
+          _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedOnlineIndex==null || _isOnlineImporting)? null : _useSelectedOnlineImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
         const SizedBox(width:8),
         Expanded(child: Text('Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600))),
-        // Refresh button only for Search tab
+        // Refresh button based on active tab
         if (_libraryTabController?.index == 0)
-          IconButton(onPressed: (_isOnlineSearching || _pexelsSearchController.text.trim().isEmpty)? null : _searchOnlineImages, icon: const Icon(Icons.refresh))
+          IconButton(onPressed: _isCanvasBTLoading? null : _loadCanvasBTGallery, icon: const Icon(Icons.refresh))
         else
-          IconButton(onPressed: _isCanvasBTLoading? null : _loadCanvasBTGallery, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: (_isOnlineSearching || _pexelsSearchController.text.trim().isEmpty)? null : _searchOnlineImages, icon: const Icon(Icons.refresh)),
       ]),
       const SizedBox(height:4),
       // Status message row
@@ -2395,13 +2395,45 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       // TabBar
       TabBar(
         controller: _libraryTabController,
-        tabs: const [
-          Tab(text: 'Search'),
-          Tab(text: 'CanvasBT'),
+        tabs: [
+          Tab(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: _libraryTabController?.index == 0 ? Colors.green.shade600 : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'CanvasBT',
+                style: TextStyle(
+                  color: _libraryTabController?.index == 0 ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          Tab(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: _libraryTabController?.index == 1 ? Colors.blue.shade600 : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'Pexels & Pixabay',
+                style: TextStyle(
+                  color: _libraryTabController?.index == 1 ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         ],
-        labelColor: Colors.teal.shade700,
-        unselectedLabelColor: Colors.grey.shade600,
-        indicatorColor: Colors.teal.shade700,
+        indicator: const BoxDecoration(),
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        onTap: (_) {
+          setState(() {}); // Rebuild to update tab colors
+        },
       ),
       const SizedBox(height:8),
       // TabBarView content
@@ -2409,8 +2441,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         child: TabBarView(
           controller: _libraryTabController,
           children: [
-            _buildSearchTab(),
             _buildCanvasBTTab(),
+            _buildSearchTab(),
           ],
         ),
       ),
@@ -2422,18 +2454,18 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // Build status message based on active tab
   String _buildLibraryStatusMessage() {
     if (_libraryTabController?.index == 0) {
-      // Search tab
-      if(_onlineError!=null){ return _onlineError!; }
-      else if(_selectedOnlineIndex!=null){ final d=_combinedResults[_selectedOnlineIndex!]; return 'Selected • ${d.author} (${d.source})'; }
-      else if(_combinedResults.isNotEmpty){ return 'Tap a thumbnail to select'; }
-      else { return 'Search Pexels and Pixabay for images'; }
-    } else {
       // CanvasBT tab
       if(_canvasBTError!=null){ return _canvasBTError!; }
       else if(_selectedCanvasBTIndex!=null){ final d=_canvasBTResults[_selectedCanvasBTIndex!]; return 'Selected • ${d.author}'; }
       else if(_canvasBTResults.isNotEmpty){ return 'Tap a thumbnail to select'; }
       else if(_isCanvasBTLoading){ return 'Loading CanvasBT gallery...'; }
       else { return 'Tap refresh to load CanvasBT gallery images'; }
+    } else {
+      // Search tab
+      if(_onlineError!=null){ return _onlineError!; }
+      else if(_selectedOnlineIndex!=null){ final d=_combinedResults[_selectedOnlineIndex!]; return 'Selected • ${d.author} (${d.source})'; }
+      else if(_combinedResults.isNotEmpty){ return 'Tap a thumbnail to select'; }
+      else { return 'Search Pexels and Pixabay for images'; }
     }
   }
 
