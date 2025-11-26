@@ -227,6 +227,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   bool _aiIsGenerating = false;
   Uint8List? _aiPngBytes;
   String? _aiError;
+  // AI art style presets
+  String? _selectedAiStyle; // null = no style, otherwise one of: 'realism', 'whimsy', 'vibrance', 'inkwork'
+  static const Map<String, String> _aiStylePrompts = {
+    'realism': 'Realistic watercolor painting, soft brush strokes, natural colors, lifelike textures, gentle atmosphere',
+    'whimsy': 'Whimsical watercolor illustration, bright colors, playful style, charming characters, imaginative composition',
+    'vibrance': 'Colorful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
+    'inkwork': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal color, hand-drawn aesthetic',
+  };
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
   // automatically dismiss it and send once the device connects.
   BuildContext? _activeDialogContext;
@@ -1029,6 +1037,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
           minLines: 1,
           maxLines: 3,
         ),
+        const SizedBox(height: 10),
+        // Art style selector buttons in a single row
+        Row(
+          children: [
+            Expanded(child: _buildStyleChip('realism', 'Realism', Icons.brush, Colors.blue)),
+            const SizedBox(width: 3),
+            Expanded(child: _buildStyleChip('whimsy', 'Whimsy', Icons.auto_awesome, Colors.purple)),
+            const SizedBox(width: 3),
+            Expanded(child: _buildStyleChip('vibrance', 'Vibrance', Icons.wb_sunny, Colors.orange)),
+            const SizedBox(width: 3),
+            Expanded(child: _buildStyleChip('inkwork', 'Inkwork', Icons.edit, Colors.grey)),
+          ],
+        ),
         const SizedBox(height: 6),
         const Text(
           'Uses a free online generator and needs internet. Generation may take a few seconds.',
@@ -1057,13 +1078,48 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     );
   }
 
-  Future<void> _generateAiImage() async {
+  Widget _buildStyleChip(String styleId, String label, IconData icon, Color color) {
+    return ActionChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          )),
+        ],
+      ),
+      backgroundColor: color,
+      side: BorderSide.none,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      onPressed: _aiIsGenerating ? null : () {
+        // Generate immediately with this style's pre-prompt
+        _generateAiImageWithStyle(styleId);
+      },
+    );
+  }
+
+  Future<void> _generateAiImageWithStyle(String styleId) async {
     setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
     final prompt = _aiPromptController.text.trim();
     try{
-      // Attempt free text-to-image via Pollinations (no API key) with multiple URL variants.
-      const String aiPrefix = 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6 for';
-      final safePrompt = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
+      // Build prompt with ONLY the style pre-prompt (no Generate button prefix)
+      String fullPrompt = '';
+      
+      // Add style pre-prompt
+      if (_aiStylePrompts.containsKey(styleId)) {
+        fullPrompt = _aiStylePrompts[styleId]!;
+      }
+      
+      // Add user prompt
+      if (prompt.isNotEmpty) {
+        fullPrompt += ', $prompt';
+      }
+      
+      final safePrompt = fullPrompt.trim();
       final encoded = Uri.encodeComponent(safePrompt);
       final seed = (safePrompt.hashCode & 0x7fffffff).toString();
       // Use editor orientation (_isPortrait) instead of a separate AI toggle
@@ -1081,9 +1137,66 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       await _generateAiImageLocally(safePrompt);
     } catch (e){
       // Fallback to local synthesis on any error
-      const String aiPrefix = 'colourful (black,white,red,yellow,blue,green) ';
-      final fallback = (aiPrefix + (prompt.isEmpty ? '' : prompt)).trim();
-      await _generateAiImageLocally(fallback);
+      String fallbackPrompt = '';
+      if (_aiStylePrompts.containsKey(styleId)) {
+        fallbackPrompt = _aiStylePrompts[styleId]!;
+      }
+      if (prompt.isNotEmpty) {
+        fallbackPrompt += ', $prompt';
+      }
+      await _generateAiImageLocally(fallbackPrompt.trim());
+    } finally {
+      if(mounted){ setState(()=> _aiIsGenerating = false); }
+    }
+  }
+
+  Future<void> _generateAiImage() async {
+    setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
+    final prompt = _aiPromptController.text.trim();
+    try{
+      // Build the complete prompt with optional style pre-prompt
+      String fullPrompt = '';
+      
+      // Add style pre-prompt if selected
+      if (_selectedAiStyle != null && _aiStylePrompts.containsKey(_selectedAiStyle)) {
+        fullPrompt = _aiStylePrompts[_selectedAiStyle]! + ', ';
+      }
+      
+      // Add color optimization prefix for Spectra 6
+      fullPrompt += 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6';
+      
+      // Add user prompt
+      if (prompt.isNotEmpty) {
+        fullPrompt += ', $prompt';
+      }
+      
+      final safePrompt = fullPrompt.trim();
+      final encoded = Uri.encodeComponent(safePrompt);
+      final seed = (safePrompt.hashCode & 0x7fffffff).toString();
+      // Use editor orientation (_isPortrait) instead of a separate AI toggle
+      final genW = _isPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH;  // 480 if portrait
+      final genH = _isPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT;  // 800 if portrait
+      final candidates = <Uri>[
+        Uri.parse('https://image.pollinations.ai/prompt/$encoded?width=$genW&height=$genH&seed=$seed&nologo=true'),
+        Uri.parse('https://image.pollinations.ai/prompt/$encoded?size=${genW}x$genH&seed=$seed&nologo=true'),
+      ];
+      for(final url in candidates){
+        final ok = await _tryFetchImage(url).timeout(const Duration(seconds: 20), onTimeout: () => false);
+        if(ok){ return; }
+      }
+      // If all remote attempts fail, fall back to local synthesis
+      await _generateAiImageLocally(safePrompt);
+    } catch (e){
+      // Fallback to local synthesis on any error
+      String fallbackPrompt = '';
+      if (_selectedAiStyle != null && _aiStylePrompts.containsKey(_selectedAiStyle)) {
+        fallbackPrompt = _aiStylePrompts[_selectedAiStyle]! + ', ';
+      }
+      fallbackPrompt += 'colourful (black,white,red,yellow,blue,green)';
+      if (prompt.isNotEmpty) {
+        fallbackPrompt += ', $prompt';
+      }
+      await _generateAiImageLocally(fallbackPrompt.trim());
     } finally {
       if(mounted){ setState(()=> _aiIsGenerating = false); }
     }
@@ -1123,11 +1236,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
 
   Future<void> _generateAiImageLocally(String prompt) async {
     try{
-      // Ensure the local generator also reflects the requested style prefix if not already present.
-      const String aiPrefix = 'Paiting colourful (black,white,red,yellow,blue,green) ';
-      if(!prompt.startsWith(aiPrefix)){
-        prompt = (aiPrefix + prompt).trim();
-      }
+      // Don't add any prefix - use the prompt as-is (style pre-prompt already included by caller)
       // Use editor orientation for canvas size
       final int w = _isPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH;
       final int h = _isPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT;
