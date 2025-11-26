@@ -4756,7 +4756,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         style: TextStyle(fontSize: 14, color: Colors.black87),
                       ),
                       const SizedBox(height: 8),
-                      _buildNumberedPoint('1', 'Make sure your frame is powered on and connected via Bluetooth'),
+                      _buildNumberedPoint('1', 'Ensure your frame is ON (LED should be blinking). If not, connect to charging to keep it powered during calibration'),
                       _buildNumberedPoint('2', 'Do NOT touch the sensor area during calibration'),
                       _buildNumberedPoint('3', 'Tap the "Calibrate Now" button below'),
                       _buildNumberedPoint('4', 'Wait for the frame\'s LED to flash 3 times confirming success'),
@@ -4808,6 +4808,55 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       _buildBulletPoint('If touch still doesn\'t work after calibration, try cleaning the sensor area with a soft cloth'),
                       _buildBulletPoint('Metal objects near the sensor can interfere - ensure proper mounting'),
                       _buildBulletPoint('Extreme temperatures may require recalibration'),
+                      const SizedBox(height: 20),
+                      
+                      // Optimal Touch Technique
+                      const Text(
+                        'How to Touch the Frame for Best Results',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.touch_app, color: Colors.blue.shade700, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Maximum Sensitivity Tips',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              '✓ Use your finger pad (soft, fleshy part) for best contact\n'
+                              '✓ Firm, brief touch works better than light grazing\n'
+                              '✓ Touch the corner sensor area directly, not the frame edge\n'
+                              '✓ Keep fingers clean and dry for optimal conductivity\n'
+                              '✓ Press with moderate pressure for 0.5-1 second',
+                              style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.6),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'The finger pad provides the largest surface area and highest conductivity due to natural moisture and salts in your skin, ensuring reliable detection.',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.4),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
