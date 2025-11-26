@@ -218,7 +218,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   int? _selectedCanvasBTIndex;
   bool _isCanvasBTLoading = false;
   String? _canvasBTError;
-  static const String _canvasBTFolderUrl = 'https://drive.google.com/drive/folders/1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
+  String _selectedCanvasBTCategory = 'Mix'; // Default category
+  // CanvasBT category folder IDs
+  static const Map<String, String> _canvasBTCategories = {
+    'High-Fidelity': '1j64UUf9y-1Ser8ZedzpxEwZw7YWEwyHV',
+    'Color-Rich': '1VMK2WzAOhr-HA1Y3x685WnlNo6VoZS8B',
+    'Low-Motion': '13h1a3_ow5YgAuQouQOCwR490Xqdp8rHR',
+    'Mix': '1vt5crxDtFXRp0I7hVbj1HkLO4UO3I4dB',
+  };
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -2486,18 +2493,60 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Info text
+        // Category buttons
         Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text(
-            'Curated images optimized for your 6-color e-paper display',
-            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey.shade700),
-            textAlign: TextAlign.center,
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildCategoryButton('Mix', Colors.pink.shade600),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: _buildCategoryButton('High-Fidelity', Colors.purple.shade600),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: _buildCategoryButton('Color-Rich', Colors.orange.shade600),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: _buildCategoryButton('Low-Motion', Colors.teal.shade600),
+              ),
+            ],
           ),
         ),
         const SizedBox(height:4),
         Expanded(child: _buildCanvasBTResultsSection()),
       ],
+    );
+  }
+
+  // Build category button for CanvasBT
+  Widget _buildCategoryButton(String category, Color color) {
+    final isSelected = _selectedCanvasBTCategory == category;
+    return ElevatedButton(
+      onPressed: () {
+        setState(() => _selectedCanvasBTCategory = category);
+        _loadCanvasBTGallery();
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? color : Colors.grey.shade300,
+        foregroundColor: isSelected ? Colors.white : Colors.black87,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        elevation: isSelected ? 3 : 1,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      child: Text(
+        category,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+        ),
+        textAlign: TextAlign.center,
+      ),
     );
   }
 
@@ -2570,10 +2619,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // Load CanvasBT gallery from Google Drive folder
   Future<void> _loadCanvasBTGallery() async {
     setState((){ _isCanvasBTLoading=true; _canvasBTError=null; _canvasBTResults=[]; _selectedCanvasBTIndex=null; });
-    _updateStatus('Loading CanvasBT gallery...');
+    _updateStatus('Loading $_selectedCanvasBTCategory gallery...');
     
     try{
-      const String folderId = '1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
+      final String folderId = _canvasBTCategories[_selectedCanvasBTCategory] ?? _canvasBTCategories['Mix']!;
       
       // Fetch the public folder page
       final url = 'https://drive.google.com/drive/folders/$folderId';
