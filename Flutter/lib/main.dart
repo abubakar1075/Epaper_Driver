@@ -1065,7 +1065,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
             ),
             child: Center(
               child: _aiIsGenerating
-                ? const CircularProgressIndicator()
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          'Please wait, we are generating image for you',
+                          style: TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  )
                 : (_aiPngBytes==null
                     ? Text(_aiError ?? 'Enter a prompt and tap Generate', style: Theme.of(context).textTheme.titleMedium)
                     : Image.memory(_aiPngBytes!, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
@@ -1154,16 +1168,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
     final prompt = _aiPromptController.text.trim();
     try{
-      // Build the complete prompt with optional style pre-prompt
-      String fullPrompt = '';
-      
-      // Add style pre-prompt if selected
-      if (_selectedAiStyle != null && _aiStylePrompts.containsKey(_selectedAiStyle)) {
-        fullPrompt = _aiStylePrompts[_selectedAiStyle]! + ', ';
-      }
-      
-      // Add color optimization prefix for Spectra 6
-      fullPrompt += 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6';
+      // Build prompt with ONLY the color optimization prefix (Generate button works independently)
+      String fullPrompt = 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6';
       
       // Add user prompt
       if (prompt.isNotEmpty) {
@@ -1188,11 +1194,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
       await _generateAiImageLocally(safePrompt);
     } catch (e){
       // Fallback to local synthesis on any error
-      String fallbackPrompt = '';
-      if (_selectedAiStyle != null && _aiStylePrompts.containsKey(_selectedAiStyle)) {
-        fallbackPrompt = _aiStylePrompts[_selectedAiStyle]! + ', ';
-      }
-      fallbackPrompt += 'colourful (black,white,red,yellow,blue,green)';
+      String fallbackPrompt = 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6';
       if (prompt.isNotEmpty) {
         fallbackPrompt += ', $prompt';
       }
@@ -1235,45 +1237,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   }
 
   Future<void> _generateAiImageLocally(String prompt) async {
-    try{
-      // Don't add any prefix - use the prompt as-is (style pre-prompt already included by caller)
-      // Use editor orientation for canvas size
-      final int w = _isPortrait ? IMAGE_HEIGHT : IMAGE_WIDTH;
-      final int h = _isPortrait ? IMAGE_WIDTH : IMAGE_HEIGHT;
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder, Rect.fromLTWH(0,0,w.toDouble(),h.toDouble()));
-      final hash = prompt.hashCode;
-      Color c1 = HSVColor.fromAHSV(1.0, (hash & 0xFF).toDouble() % 360, 0.5, 0.95).toColor();
-      Color c2 = HSVColor.fromAHSV(1.0, ((hash>>8) & 0xFF).toDouble() % 360, 0.7, 0.7).toColor();
-      final paint = Paint()
-        ..shader = ui.Gradient.linear(const Offset(0,0), Offset(w.toDouble(), h.toDouble()), [c1, c2]);
-      canvas.drawRect(Rect.fromLTWH(0,0,w.toDouble(),h.toDouble()), paint);
-  final words = prompt.isEmpty ? ['CanvasBT','art'] : prompt.split(RegExp(r'\s+')).take(5).toList();
-      final rng = math.Random(hash);
-      for(int i=0;i<words.length;i++){
-        final px = rng.nextDouble()*w;
-        final py = rng.nextDouble()*h;
-        final sz = 30.0 + rng.nextDouble()*120.0;
-        final p = Paint()..color = HSVColor.fromAHSV(0.8, (rng.nextInt(360)).toDouble(), 0.6, 0.9).toColor();
-        canvas.drawCircle(Offset(px,py), sz, p);
-      }
-      final textPainter = TextPainter(
-  text: TextSpan(text: prompt.isEmpty ? 'CanvasBT' : prompt, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
-        textAlign: TextAlign.center,
-        textDirection: TextDirection.ltr,
-        maxLines: 2,
-        ellipsis: '…',
-      );
-      textPainter.layout(maxWidth: w*0.9);
-      textPainter.paint(canvas, Offset((w - textPainter.width)/2, (h - textPainter.height)/2));
-      final picture = recorder.endRecording();
-      final uiImage = await picture.toImage(w, h);
-      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
-      final png = byteData!.buffer.asUint8List();
-      if(mounted){ setState(()=> _aiPngBytes = png); }
-      _updateStatus('Generated locally');
-    } catch (e) {
-      if(mounted){ setState(()=> _aiError = 'Failed to generate: $e'); }
+    // Skip local generation - user doesn't want temporary images with text
+    // Just show error message instead
+    if(mounted){ 
+      setState(()=> _aiError = 'Failed to generate image. Please check your internet connection and try again.'); 
     }
   }
 
