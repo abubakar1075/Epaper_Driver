@@ -1745,7 +1745,15 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     final q = _pexelsSearchController.text.trim();
     if(q.isEmpty){ setState(()=> _onlineError='Enter a search term'); return; }
     
-    setState((){ _isOnlineSearching=true; _onlineError=null; _combinedResults=[]; _selectedOnlineIndex=null; });
+    // Reset category selections when searching
+    setState((){ 
+      _isOnlineSearching=true; 
+      _onlineError=null; 
+      _combinedResults=[]; 
+      _selectedOnlineIndex=null;
+      _selectedPexelsCategory = 'all';
+      _selectedPixabayCategory = 'all';
+    });
     _updateStatus('Searching "$q" on Pexels and Pixabay...');
     
     final List<_OnlineImage> allResults = [];
@@ -1871,7 +1879,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // Search Pexels by category
   Future<void> _searchPexelsByCategory(String category) async {
     final cat = (category.isEmpty) ? 'all' : category;
-    setState((){ _isOnlineSearching=true; _onlineError=null; _combinedResults=[]; _selectedOnlineIndex=null; });
+    setState((){ 
+      _isOnlineSearching=true; 
+      _onlineError=null; 
+      _combinedResults=[]; 
+      _selectedOnlineIndex=null;
+      _selectedPixabayCategory = 'all'; // Reset Pixabay selection
+    });
     _updateStatus('Browsing $cat images on Pexels...');
     
     final List<_OnlineImage> allResults = [];
@@ -1922,7 +1936,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // Search using only the selected Pixabay category (independent of the text query)
   Future<void> _searchPixabayByCategory(String category) async {
     final cat = (category.isEmpty) ? 'all' : category;
-    setState((){ _isOnlineSearching=true; _onlineError=null; _combinedResults=[]; _selectedOnlineIndex=null; });
+    setState((){ 
+      _isOnlineSearching=true; 
+      _onlineError=null; 
+      _combinedResults=[]; 
+      _selectedOnlineIndex=null;
+      _selectedPexelsCategory = 'all'; // Reset Pexels selection
+    });
     _updateStatus('Browsing $cat images on Pixabay...');
     
     final List<_OnlineImage> allResults = [];
