@@ -799,7 +799,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           child: SizedBox(
             height: 32,
             child: ElevatedButton(
-              onPressed: (){ setState((){ _showOnline = true; _onlineError = null; }); },
+              onPressed: (){ 
+                setState((){ 
+                  _showOnline = true; 
+                  _onlineError = null; 
+                });
+                // Auto-load CanvasBT gallery on first open
+                if(_libraryTabController?.index == 0 && _canvasBTResults.isEmpty && !_isCanvasBTLoading) {
+                  _loadCanvasBTGallery();
+                }
+              },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 backgroundColor: Colors.orange.shade500,
