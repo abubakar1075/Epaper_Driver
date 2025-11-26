@@ -4589,8 +4589,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
                     ),
                   ),
                   Positioned(
-                    top: 48,
-                    left: 11,
+                    top: 36,
+                    left: 16,
                     child: SafeArea(
                       child: GestureDetector(
                         onTap: () => _scaffoldKey.currentState?.openDrawer(),
