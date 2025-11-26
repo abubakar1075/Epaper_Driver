@@ -75,7 +75,7 @@ class EPaperImageSender extends StatefulWidget {
   State<EPaperImageSender> createState() => _EPaperImageSenderState();
 }
 
-class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTickerProviderStateMixin {
+class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProviderStateMixin {
   // GlobalKey for accessing scaffold context in async methods
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
@@ -211,6 +211,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     'all','backgrounds','fashion','nature','science','education','feelings','health','people','religion','places','animals','industry','computer','food','sports','transportation','travel','buildings','business','music'
   ];
   String _selectedPixabayCategory = 'all';
+  // Library Tab Controller
+  TabController? _libraryTabController;
+  // CanvasBT Gallery state (Google Drive images)
+  List<_OnlineImage> _canvasBTResults = [];
+  int? _selectedCanvasBTIndex;
+  bool _isCanvasBTLoading = false;
+  String? _canvasBTError;
+  static const String _canvasBTFolderUrl = 'https://drive.google.com/drive/folders/1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -368,6 +376,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
   _introCtrl.forward();
   Future.delayed(const Duration(milliseconds: 1800), (){ if(mounted){ setState(()=> _showIntro = false); } });
     
+    // Initialize Library TabController
+    _libraryTabController = TabController(length: 2, vsync: this);
+    
+    // Add listener to auto-load CanvasBT gallery when switching to that tab
+    _libraryTabController?.addListener(() {
+      if (_libraryTabController?.index == 1 && _canvasBTResults.isEmpty && !_isCanvasBTLoading) {
+        // Auto-load CanvasBT gallery when first switching to that tab
+        _loadCanvasBTGallery();
+      }
+    });
+    
     // Track Bluetooth adapter state
     _btStateSub = FlutterBluePlus.adapterState.listen((s){
       final isOn = (s == BluetoothAdapterState.on);
@@ -511,6 +530,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
     _aiLoadingMessageTimer?.cancel();
     _aiPromptController.dispose();
     _pixabaySearchController.dispose();
+    _libraryTabController?.dispose();
     _disconnectDevice();
     super.dispose();
   }
@@ -2347,32 +2367,280 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with SingleTicker
 
   // ========================= LIBRARY WINDOW (Pixabay online images) =========================
   Widget _buildOnlineView(){
-    final String status;
-    if(_onlineError!=null){ status = _onlineError!; }
-    else if(_selectedOnlineIndex!=null){ final d=_combinedResults[_selectedOnlineIndex!]; status='Selected • ${d.author} (${d.source})'; }
-    else if(_combinedResults.isNotEmpty){ status='Tap a thumbnail to select'; }
-    else { status='Search Pexels and Pixabay for images'; }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children:[
+      // Top bar with Back, Use in Editor, Title, and Refresh
       Row(crossAxisAlignment: CrossAxisAlignment.center, children:[
         _smallBtn('Back', ()=> setState(()=> _showOnline=false), icon: Icons.arrow_back, backgroundColor: Colors.grey.shade600),
         const SizedBox(width:8),
-        _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedOnlineIndex==null || _isOnlineImporting)? null : _useSelectedOnlineImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
+        // Show appropriate "Use in Editor" button based on active tab
+        if (_libraryTabController?.index == 0)
+          _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedOnlineIndex==null || _isOnlineImporting)? null : _useSelectedOnlineImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600)
+        else
+          _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedCanvasBTIndex==null || _isOnlineImporting)? null : _useSelectedCanvasBTImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
         const SizedBox(width:8),
         Expanded(child: Text('Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600))),
-        IconButton(onPressed: (_isOnlineSearching || _pexelsSearchController.text.trim().isEmpty)? null : _searchOnlineImages, icon: const Icon(Icons.refresh)),
+        // Refresh button only for Search tab
+        if (_libraryTabController?.index == 0)
+          IconButton(onPressed: (_isOnlineSearching || _pexelsSearchController.text.trim().isEmpty)? null : _searchOnlineImages, icon: const Icon(Icons.refresh))
+        else
+          IconButton(onPressed: _isCanvasBTLoading? null : _loadCanvasBTGallery, icon: const Icon(Icons.refresh)),
       ]),
       const SizedBox(height:4),
+      // Status message row
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4.0),
-        child: Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+        child: Text(_buildLibraryStatusMessage(), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
       ),
       const SizedBox(height:6),
-      _buildOnlineSearchRow(),
+      // TabBar
+      TabBar(
+        controller: _libraryTabController,
+        tabs: const [
+          Tab(text: 'Search'),
+          Tab(text: 'CanvasBT'),
+        ],
+        labelColor: Colors.teal.shade700,
+        unselectedLabelColor: Colors.grey.shade600,
+        indicatorColor: Colors.teal.shade700,
+      ),
       const SizedBox(height:8),
-      Expanded(child: _buildOnlineResultsSection()),
+      // TabBarView content
+      Expanded(
+        child: TabBarView(
+          controller: _libraryTabController,
+          children: [
+            _buildSearchTab(),
+            _buildCanvasBTTab(),
+          ],
+        ),
+      ),
       const SizedBox(height:6),
       _statusCard(),
     ]);
+  }
+
+  // Build status message based on active tab
+  String _buildLibraryStatusMessage() {
+    if (_libraryTabController?.index == 0) {
+      // Search tab
+      if(_onlineError!=null){ return _onlineError!; }
+      else if(_selectedOnlineIndex!=null){ final d=_combinedResults[_selectedOnlineIndex!]; return 'Selected • ${d.author} (${d.source})'; }
+      else if(_combinedResults.isNotEmpty){ return 'Tap a thumbnail to select'; }
+      else { return 'Search Pexels and Pixabay for images'; }
+    } else {
+      // CanvasBT tab
+      if(_canvasBTError!=null){ return _canvasBTError!; }
+      else if(_selectedCanvasBTIndex!=null){ final d=_canvasBTResults[_selectedCanvasBTIndex!]; return 'Selected • ${d.author}'; }
+      else if(_canvasBTResults.isNotEmpty){ return 'Tap a thumbnail to select'; }
+      else if(_isCanvasBTLoading){ return 'Loading CanvasBT gallery...'; }
+      else { return 'Tap refresh to load CanvasBT gallery images'; }
+    }
+  }
+
+  // Build Search tab content (Pexels + Pixabay)
+  Widget _buildSearchTab(){
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildOnlineSearchRow(),
+        const SizedBox(height:8),
+        Expanded(child: _buildOnlineResultsSection()),
+      ],
+    );
+  }
+
+  // Build CanvasBT tab content (Google Drive gallery)
+  Widget _buildCanvasBTTab(){
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Info text
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(
+            'Curated images optimized for your 6-color e-paper display',
+            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey.shade700),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height:4),
+        Expanded(child: _buildCanvasBTResultsSection()),
+      ],
+    );
+  }
+
+  // Build CanvasBT gallery results grid
+  Widget _buildCanvasBTResultsSection(){
+    if(_isCanvasBTLoading){ return const Center(child: CircularProgressIndicator()); }
+    if(_canvasBTResults.isEmpty){ 
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.photo_library, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(_canvasBTError ?? 'Tap refresh to load gallery', style: TextStyle(color: Colors.grey.shade600)),
+          ],
+        ),
+      ); 
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(6),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        childAspectRatio: 1,
+      ),
+      itemCount: _canvasBTResults.length,
+      itemBuilder: (context, index){
+        final d = _canvasBTResults[index]; 
+        final sel = index==_selectedCanvasBTIndex;
+        return GestureDetector(
+          onTap: ()=> _selectCanvasBTImage(index), 
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds:180),
+            decoration: BoxDecoration(
+              border: Border.all(color: sel? Colors.teal.shade600 : Colors.grey.shade400, width: sel? 3:0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6), 
+              child: Stack(
+                children:[
+                  Positioned.fill(
+                    child: Image.network(
+                      d.previewUrl, 
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey.shade200,
+                          child: Icon(Icons.broken_image, color: Colors.grey.shade400),
+                        );
+                      },
+                    )
+                  ),
+                ]
+              )
+            ),
+          )
+        );
+      },
+    );
+  }
+
+  void _selectCanvasBTImage(int i){
+    if(i<0 || i>=_canvasBTResults.length) return;
+    setState((){ _selectedCanvasBTIndex = (_selectedCanvasBTIndex==i) ? null : i; });
+    if(_selectedCanvasBTIndex!=null){ _updateStatus('Selected CanvasBT image'); }
+  }
+
+  // Load CanvasBT gallery from Google Drive folder
+  Future<void> _loadCanvasBTGallery() async {
+    setState((){ _isCanvasBTLoading=true; _canvasBTError=null; _canvasBTResults=[]; _selectedCanvasBTIndex=null; });
+    _updateStatus('Loading CanvasBT gallery...');
+    
+    try{
+      const String folderId = '1KX35Io5MsDq4AnsZFM1HSdZH7HY3fBS-';
+      
+      // Fetch the public folder page
+      final url = 'https://drive.google.com/drive/folders/$folderId';
+      final resp = await http.get(Uri.parse(url));
+      
+      if(resp.statusCode != 200) {
+        throw Exception('Cannot access folder');
+      }
+      
+      // Find all file IDs in the HTML (they're 33 characters typically)
+      final html = resp.body;
+      final pattern = RegExp(r'["\[]([a-zA-Z0-9_-]{33})["\]]');
+      final matches = pattern.allMatches(html);
+      
+      final List<_OnlineImage> images = [];
+      final seen = <String>{};
+      
+      for(final match in matches){
+        final id = match.group(1);
+        if(id == null || id == folderId || seen.contains(id)) continue;
+        seen.add(id);
+        
+        images.add(_OnlineImage(
+          id: id,
+          previewUrl: 'https://drive.google.com/thumbnail?id=$id&sz=w400',
+          fullUrl: 'https://drive.google.com/uc?export=download&id=$id',
+          width: 800,
+          height: 480,
+          author: 'CanvasBT',
+          source: 'CanvasBT',
+        ));
+        
+        if(images.length >= 50) break;
+      }
+      
+      if(mounted){
+        setState((){
+          _canvasBTResults = images;
+          _isCanvasBTLoading = false;
+        });
+      }
+      
+      _updateStatus('Loaded ${images.length} images');
+    }catch(e){
+      if(mounted){ 
+        setState((){
+          _canvasBTError='Could not load gallery';
+          _isCanvasBTLoading = false;
+        }); 
+      }
+    }
+  }
+
+  // Use selected CanvasBT image in editor
+  Future<void> _useSelectedCanvasBTImage() async {
+    if(_selectedCanvasBTIndex==null || _selectedCanvasBTIndex!<0 || _selectedCanvasBTIndex!>=_canvasBTResults.length) return;
+    setState((){ _isOnlineImporting = true; });
+    _updateStatus('Importing CanvasBT image...');
+    try{
+      final d = _canvasBTResults[_selectedCanvasBTIndex!];
+      final resp = await http.get(Uri.parse(d.fullUrl), headers:{
+        HttpHeaders.userAgentHeader:'CanvasBT-app'
+      });
+      if(resp.statusCode!=200) throw HttpException('HTTP ${resp.statusCode}');
+      final bytes = resp.bodyBytes;
+      if(bytes.isEmpty) throw Exception('Empty response');
+      
+      // Write to temp file
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/canvasbt_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(bytes);
+      
+      // Load UI image before setState
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final uiImage = frame.image;
+      
+      if(mounted){
+        setState((){
+          _originalImage = file;
+          _uiOriginal = uiImage;
+          _processedImage = null;
+          _processedBytes = null;
+          _processedPngBytes = null;
+          _viewInitialized = false;
+          _showOnline = false;
+          _selectedCanvasBTIndex = null;
+        });
+        
+        WidgetsBinding.instance.addPostFrameCallback((_){
+          if(mounted){ _recomputeViewForCurrentFrame(context); }
+        });
+      }
+      _updateStatus('CanvasBT image loaded into editor');
+    }catch(e){
+      _updateStatus('Failed to import: $e');
+    }finally{
+      if(mounted){ setState(()=> _isOnlineImporting = false); }
+    }
   }
 
   Widget _buildOnlineSearchRow(){
