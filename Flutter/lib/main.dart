@@ -1077,17 +1077,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           maxLines: 3,
         ),
         const SizedBox(height: 10),
-        // Art style selector buttons in a single row
-        Row(
-          children: [
-            Expanded(child: _buildStyleChip('realism', 'Realism', Icons.brush, Colors.blue)),
-            const SizedBox(width: 3),
-            Expanded(child: _buildStyleChip('playful', 'Playful', Icons.auto_awesome, Colors.purple)),
-            const SizedBox(width: 3),
-            Expanded(child: _buildStyleChip('vibrant', 'Vibrant', Icons.wb_sunny, Colors.orange)),
-            const SizedBox(width: 3),
-            Expanded(child: _buildStyleChip('monochromatic', 'Monochromatic', Icons.edit, Colors.grey)),
-          ],
+        // Art style selector buttons in a scrollable row
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _buildStyleChip('realism', 'Realism', Icons.brush, Colors.blue),
+              const SizedBox(width: 4),
+              _buildStyleChip('playful', 'Playful', Icons.auto_awesome, Colors.purple),
+              const SizedBox(width: 4),
+              _buildStyleChip('vibrant', 'Vibrant', Icons.wb_sunny, Colors.orange),
+              const SizedBox(width: 4),
+              _buildStyleChip('monochromatic', 'Monochromatic', Icons.edit, Colors.grey),
+            ],
+          ),
         ),
         const SizedBox(height: 6),
         const Text(
@@ -1171,13 +1175,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     // Engaging loading messages that rotate every 5 seconds
     final messages = [
       'Creating your masterpiece...',
-      'Mixing colors and magic...',
+      'Mixing colours and magic...',
       'Adding artistic touches...',
       'Almost there, looking great!',
-      'Finalizing the details...',
+      'Finalising the details...',
       'Perfecting your vision...',
       'Polishing the artwork...',
-      'Fine-tuning the colors...',
+      'Fine-tuning the colours...',
       'Adding final touches...',
       'Making it picture perfect...',
       'Just a moment more...',
