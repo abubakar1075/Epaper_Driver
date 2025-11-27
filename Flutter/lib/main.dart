@@ -5,7 +5,7 @@
 // 1. Scan + auto-connect to BLE device (name starts with "EPD").
 // 2. Pick an image from gallery.
 // 3. Pan / Zoom / Rotate to frame the exact display region (800x480).
-// 4. Convert to 6-color hardware palette with optional dithering.
+// 4. Convert to 6-colour hardware palette with optional dithering.
 // 5. Process image on demand before sending.
 // 6. Save processed images to an in-memory library & resend later.
 // 7. Send image over BLE in chunks with progress + speed.
@@ -102,7 +102,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   static const int TRANSFER_TYPE_IMAGE = 0x10;
   static const int TRANSFER_TYPE_OTA   = 0x20;
 
-  // Hardware palette for 6-color e-paper display - exact RGB values from Python script
+  // Hardware palette for 6-colour e-paper display - exact RGB values from Python script
   static const List<ColorMap> hwPalette = [
     ColorMap(0x00, Color.fromRGBO(0, 0, 0, 1)),       // Black
     ColorMap(0xFF, Color.fromRGBO(255, 255, 255, 1)), // White
@@ -112,7 +112,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     ColorMap(0x1C, Color.fromRGBO(0, 150, 0, 1)),     // Green (0, 150, 0)
   ];
   
-  // Image enhancement (values are derived from the single "Color" slider)
+  // Image enhancement (values are derived from the single "Colour" slider)
   double _brightness = 1.0;
   double _contrast = 1.0;
   double _saturation = 1.0;
@@ -171,7 +171,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   double _frameWidth = 0;
   double _frameHeight = 0;
   Offset _frameOrigin = Offset.zero; // top-left of crop frame inside workspace
-  bool _needsRecenteringOnce = false; // request recenter after next frame recompute
+  bool _needsRecenteringOnce = false; // request recentre after next frame recompute
   bool _isPortrait = false; // portrait orientation toggle
   Color _frameBorderColor = Colors.black; // dynamically adjusted for contrast
   // Slider-driven tuning
@@ -247,10 +247,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // AI art style presets
   String? _selectedAiStyle; // null = no style, otherwise one of: 'realism', 'whimsy', 'vibrance', 'inkwork'
   static const Map<String, String> _aiStylePrompts = {
-    'realism': 'Realistic watercolor painting, soft brush strokes, natural colors, lifelike textures, gentle atmosphere',
-    'whimsy': 'Whimsical watercolor illustration, bright colors, playful style, charming characters, imaginative composition',
-    'vibrance': 'Colorful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
-    'inkwork': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal color, hand-drawn aesthetic',
+    'realism': 'Realistic watercolor painting, soft brush strokes, natural colours, lifelike textures, gentle atmosphere',
+    'whimsy': 'Whimsical watercolor illustration, bright colours, playful style, charming characters, imaginative composition',
+    'vibrance': 'Colourful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
+    'inkwork': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal colour, hand-drawn aesthetic',
   };
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
   // automatically dismiss it and send once the device connects.
@@ -356,7 +356,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     );
   }
 
-  // Convert single "Color" slider (0..1) to brightness / contrast / saturation multipliers.
+  // Convert single "Colour" slider (0..1) to brightness / contrast / saturation multipliers.
   void _updateEnhancementFromBoost(){
     // Keep ranges modest: extreme pre-enhancement causes harsh palette banding.
     final b = _strongColorBoost;
@@ -376,14 +376,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   @override
   void initState(){
     super.initState();
-    // Initialize animated splash
+    // Initialise animated splash
     _introCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
     _introScale = CurvedAnimation(parent: _introCtrl, curve: Curves.easeOutBack);
     _introOpacity = CurvedAnimation(parent: _introCtrl, curve: Curves.easeIn);
   _introCtrl.forward();
   Future.delayed(const Duration(milliseconds: 1800), (){ if(mounted){ setState(()=> _showIntro = false); } });
     
-    // Initialize Library TabController
+    // Initialise Library TabController
     _libraryTabController = TabController(length: 2, vsync: this);
     
     // Add listener to auto-load CanvasBT gallery when switching to that tab
@@ -403,12 +403,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       }
     });
     
-    // Initialize app after first frame with proper sequencing
+    // Initialise app after first frame with proper sequencing
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Step 1: Request permissions
       await _checkPermissions();
       
-      // Step 2: Initialize Library and load first image
+      // Step 2: Initialise Library and load first image
       await _initPersistentLibrary();
       if(mounted){ await _tryLoadFirstLibraryImageOnStartup(); }
       
@@ -482,7 +482,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     }catch(_){ /* ignore; PNG fallback remains */ }
   }
 
-  // Removed auto-rotation helper to enforce strict no-auto-rotation behavior
+  // Removed auto-rotation helper to enforce strict no-auto-rotation behaviour
 
   // First window removed: no promo strip loader
 
@@ -1011,7 +1011,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     });
   }
 
-  // Center the image so its center aligns with the crop frame center
+  // Centre the image so its centre aligns with the crop frame centre
   void _centerViewOnFrame(double scale){
     final img = _uiOriginal; if(img==null) return;
     final iw = img.width.toDouble();
@@ -1252,8 +1252,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     _startAiLoadingMessages();
     final prompt = _aiPromptController.text.trim();
     try{
-      // Build prompt with ONLY the color optimization prefix (Generate button works independently)
-      String fullPrompt = 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6';
+      // Build prompt with ONLY the colour optimisation prefix (Generate button works independently)
+      String fullPrompt = 'colourful use solid black,white,red,yellow,blue,green colours, beautiful looking for Spectra 6';
       
       // Add user prompt
       if (prompt.isNotEmpty) {
@@ -1278,7 +1278,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       await _generateAiImageLocally(safePrompt);
     } catch (e){
       // Fallback to local synthesis on any error
-      String fallbackPrompt = 'colourful use solid black,white,red,yellow,blue,green colors, beautiful looking for Spectra 6';
+      String fallbackPrompt = 'colourful use solid black,white,red,yellow,blue,green colours, beautiful looking for Spectra 6';
       if (prompt.isNotEmpty) {
         fallbackPrompt += ', $prompt';
       }
@@ -1562,7 +1562,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       print('Error sending calibration command: $e');
       _showErrorDialog(
         'Calibration Failed',
-        'An error occurred while sending the calibration command: $e\n\nPlease check your Bluetooth connection and try again.',
+        'An error occurred whilst sending the calibration command: $e\n\nPlease check your Bluetooth connection and try again.',
       );
     }
   }
@@ -2142,7 +2142,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         builder: (ctx){
           _activeDialogContext = ctx;
           return AlertDialog(
-            title: const Text('Please Touch the frame'),
+            title: const Text('Please touch the frame'),
             content: fingerAsset==null
               ? const SizedBox.shrink()
               : SizedBox(
@@ -4284,7 +4284,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         builder: (ctx){
           _activeDialogContext = ctx;
           return AlertDialog(
-            title: const Text('Please Touch the frame'),
+            title: const Text('Please touch the frame'),
             content: fingerAsset==null
               ? const SizedBox.shrink()
               : SizedBox(
@@ -4624,7 +4624,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('No Setup Required - Bluetooth connects automatically when you touch the frame'),
-                      _buildBulletPoint('Fast Transfer - Optimized BLE protocol sends images in seconds'),
+                      _buildBulletPoint('Fast Transfer - Optimised BLE protocol sends images in seconds'),
                       _buildBulletPoint('Offline Ready - All image processing happens on your phone'),
                       _buildBulletPoint('5-Day Refresh - Frame automatically refreshes display to prevent ghosting'),
                       const SizedBox(height: 20),
