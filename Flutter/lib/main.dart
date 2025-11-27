@@ -195,7 +195,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   String? _onlineError;
   // Pexels categories (similar to Pixabay)
   static const List<String> _pexelsCategories = [
-    'all','nature','people','technology','animals','food','travel','business','fashion','architecture','sports','health','abstract','art','music'
+    'all','art','music','nature','travel','people','technology','animals','food','business','fashion','architecture','sports','health','abstract'
   ];
   String _selectedPexelsCategory = 'all';
   // Pixabay state (Library window with online images)
@@ -208,7 +208,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   String? _pixabayError;
   // Pixabay categories
   static const List<String> _pixabayCategories = [
-    'all','backgrounds','fashion','nature','science','education','feelings','health','people','religion','places','animals','industry','computer','food','sports','transportation','travel','buildings','business','music'
+    'all','backgrounds','music','fashion','nature','science','education','feelings','health','people','religion','places','animals','industry','computer','food','sports','transportation','travel','buildings','business'
   ];
   String _selectedPixabayCategory = 'all';
   // Library Tab Controller
