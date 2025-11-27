@@ -245,12 +245,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   String _aiLoadingMessage = 'Creating your masterpiece...';
   Timer? _aiLoadingMessageTimer;
   // AI art style presets
-  String? _selectedAiStyle; // null = no style, otherwise one of: 'realism', 'whimsy', 'vibrance', 'inkwork'
+  String? _selectedAiStyle; // null = no style, otherwise one of: 'realism', 'playful', 'vibrant', 'monochromatic'
   static const Map<String, String> _aiStylePrompts = {
     'realism': 'Realistic watercolor painting, soft brush strokes, natural colours, lifelike textures, gentle atmosphere',
-    'whimsy': 'Whimsical watercolor illustration, bright colours, playful style, charming characters, imaginative composition',
-    'vibrance': 'Colourful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
-    'inkwork': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal colour, hand-drawn aesthetic',
+    'playful': 'Whimsical watercolor illustration, bright colours, playful style, charming characters, imaginative composition',
+    'vibrant': 'Colourful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
+    'monochromatic': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal colour, hand-drawn aesthetic',
   };
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
   // automatically dismiss it and send once the device connects.
@@ -1082,11 +1082,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           children: [
             Expanded(child: _buildStyleChip('realism', 'Realism', Icons.brush, Colors.blue)),
             const SizedBox(width: 3),
-            Expanded(child: _buildStyleChip('whimsy', 'Whimsy', Icons.auto_awesome, Colors.purple)),
+            Expanded(child: _buildStyleChip('playful', 'Playful', Icons.auto_awesome, Colors.purple)),
             const SizedBox(width: 3),
-            Expanded(child: _buildStyleChip('vibrance', 'Vibrance', Icons.wb_sunny, Colors.orange)),
+            Expanded(child: _buildStyleChip('vibrant', 'Vibrant', Icons.wb_sunny, Colors.orange)),
             const SizedBox(width: 3),
-            Expanded(child: _buildStyleChip('inkwork', 'Inkwork', Icons.edit, Colors.grey)),
+            Expanded(child: _buildStyleChip('monochromatic', 'Monochromatic', Icons.edit, Colors.grey)),
           ],
         ),
         const SizedBox(height: 6),
@@ -1690,8 +1690,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     final q = _pixabaySearchController.text.trim();
     if(q.isEmpty){ setState(()=> _pixabayError='Enter a search term'); return; }
     
-    // Add "abstract textured colourful" to the search query (hidden from user)
-    final searchQuery = 'abstract textured colourful $q';
+    // Add "abstract textured colourful Art" to the search query (hidden from user)
+    final searchQuery = 'abstract textured colourful Art $q';
     
     setState((){ _isPixabaySearching=true; _pixabayError=null; _pixabayResults=[]; _selectedPixabayIndex=null; });
     _updateStatus('Searching "$q" on Pixabay...');
@@ -1809,7 +1809,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     
     // 2. Search Pixabay (max 200 per page allowed by API)
     try{
-      final searchQuery = 'abstract textured colourful $q';
+      final searchQuery = 'abstract textured colourful Art $q';
       final pixabayParams = <String,String>{
         'key': _pixabayApiKey,
         'q': searchQuery,
@@ -1957,9 +1957,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     final List<_OnlineImage> allResults = [];
     
     try{
-      // Add "abstract textured colourful" to category search query (hidden from user)
+      // Add "abstract textured colourful Art" to category search query (hidden from user)
       final baseQuery = cat == 'all' ? 'popular' : cat;
-      final searchQuery = 'abstract textured colourful $baseQuery';
+      final searchQuery = 'abstract textured colourful Art $baseQuery';
       
       final params = <String,String>{
         'key': _pixabayApiKey,
