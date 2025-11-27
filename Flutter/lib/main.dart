@@ -195,7 +195,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   String? _onlineError;
   // Pexels categories (similar to Pixabay)
   static const List<String> _pexelsCategories = [
-    'all','art','music','nature','travel','people','technology','animals','food','business','fashion','architecture','sports','health','abstract'
+    'all','abstract','art','music','nature','travel','people','technology','animals','food','business','fashion','architecture','sports','health'
   ];
   String _selectedPexelsCategory = 'all';
   // Pixabay state (Library window with online images)
@@ -208,7 +208,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   String? _pixabayError;
   // Pixabay categories
   static const List<String> _pixabayCategories = [
-    'all','backgrounds','music','fashion','nature','science','education','feelings','health','people','religion','places','animals','industry','computer','food','sports','transportation','travel','buildings','business'
+    'all','backgrounds','music','nature','feelings','fashion','science','education','people','religion','places','animals','industry','computer','food','sports','transportation','travel','buildings','business'
   ];
   String _selectedPixabayCategory = 'all';
   // Library Tab Controller
@@ -218,13 +218,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   int? _selectedCanvasBTIndex;
   bool _isCanvasBTLoading = false;
   String? _canvasBTError;
-  String _selectedCanvasBTCategory = 'Realism'; // Default category
+  String _selectedCanvasBTCategory = 'Moments'; // Default category
   // CanvasBT category folder IDs
   static const Map<String, String> _canvasBTCategories = {
-    'Realism': '1vt5crxDtFXRp0I7hVbj1HkLO4UO3I4dB',
-    'Monochromatic': '1j64UUf9y-1Ser8ZedzpxEwZw7YWEwyHV',
-    'Vibrant': '1VMK2WzAOhr-HA1Y3x685WnlNo6VoZS8B',
-    'Playful': '13h1a3_ow5YgAuQouQOCwR490Xqdp8rHR',
+    'Moments': '1vt5crxDtFXRp0I7hVbj1HkLO4UO3I4dB',
+    'Spaces': '1j64UUf9y-1Ser8ZedzpxEwZw7YWEwyHV',
+    'Tone': '1VMK2WzAOhr-HA1Y3x685WnlNo6VoZS8B',
+    'Pulse': '13h1a3_ow5YgAuQouQOCwR490Xqdp8rHR',
   };
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
@@ -245,12 +245,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   String _aiLoadingMessage = 'Creating your masterpiece...';
   Timer? _aiLoadingMessageTimer;
   // AI art style presets
-  String? _selectedAiStyle; // null = no style, otherwise one of: 'realism', 'playful', 'vibrant', 'monochromatic'
+  String? _selectedAiStyle; // null = no style, otherwise one of: 'moments', 'pulse', 'tone', 'spaces'
   static const Map<String, String> _aiStylePrompts = {
-    'realism': 'Realistic watercolor painting, soft brush strokes, natural colours, lifelike textures, gentle atmosphere',
-    'playful': 'Whimsical watercolor illustration, bright colours, playful style, charming characters, imaginative composition',
-    'vibrant': 'Colourful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
-    'monochromatic': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal colour, hand-drawn aesthetic',
+    'moments': 'Realistic watercolor painting, soft brush strokes, natural colours, lifelike textures, gentle atmosphere',
+    'pulse': 'Whimsical watercolor illustration, bright colours, playful style, charming characters, imaginative composition',
+    'tone': 'Colourful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
+    'spaces': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal colour, hand-drawn aesthetic',
   };
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
   // automatically dismiss it and send once the device connects.
@@ -1083,13 +1083,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _buildStyleChip('realism', 'Realism', Icons.brush, Colors.blue),
+              _buildStyleChip('moments', 'Lifelike', Icons.brush, Colors.blue),
               const SizedBox(width: 4),
-              _buildStyleChip('playful', 'Playful', Icons.auto_awesome, Colors.purple),
+              _buildStyleChip('pulse', 'Whimsical', Icons.auto_awesome, Colors.purple),
               const SizedBox(width: 4),
-              _buildStyleChip('vibrant', 'Vibrant', Icons.wb_sunny, Colors.orange),
+              _buildStyleChip('tone', 'Radiant', Icons.wb_sunny, Colors.orange),
               const SizedBox(width: 4),
-              _buildStyleChip('monochromatic', 'Monochromatic', Icons.edit, Colors.grey),
+              _buildStyleChip('spaces', 'Mono', Icons.edit, Colors.grey),
             ],
           ),
         ),
@@ -2535,13 +2535,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                _buildCategoryButton('Realism', Colors.pink.shade600),
+                _buildCategoryButton('Moments', Colors.pink.shade600),
                 const SizedBox(width: 4),
-                _buildCategoryButton('Monochromatic', Colors.purple.shade600),
+                _buildCategoryButton('Spaces', Colors.purple.shade600),
                 const SizedBox(width: 4),
-                _buildCategoryButton('Vibrant', Colors.orange.shade600),
+                _buildCategoryButton('Tone', Colors.orange.shade600),
                 const SizedBox(width: 4),
-                _buildCategoryButton('Playful', Colors.teal.shade600),
+                _buildCategoryButton('Pulse', Colors.teal.shade600),
               ],
             ),
           ),
@@ -2652,7 +2652,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     _updateStatus('Loading $_selectedCanvasBTCategory gallery...');
     
     try{
-      final String folderId = _canvasBTCategories[_selectedCanvasBTCategory] ?? _canvasBTCategories['Realism']!;
+      final String folderId = _canvasBTCategories[_selectedCanvasBTCategory] ?? _canvasBTCategories['Moments']!;
       
       // Fetch the public folder page
       final url = 'https://drive.google.com/drive/folders/$folderId';
