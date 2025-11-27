@@ -218,13 +218,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   int? _selectedCanvasBTIndex;
   bool _isCanvasBTLoading = false;
   String? _canvasBTError;
-  String _selectedCanvasBTCategory = 'Mix'; // Default category
+  String _selectedCanvasBTCategory = 'Realism'; // Default category
   // CanvasBT category folder IDs
   static const Map<String, String> _canvasBTCategories = {
-    'High-Fidelity': '1j64UUf9y-1Ser8ZedzpxEwZw7YWEwyHV',
-    'Color-Rich': '1VMK2WzAOhr-HA1Y3x685WnlNo6VoZS8B',
-    'Low-Motion': '13h1a3_ow5YgAuQouQOCwR490Xqdp8rHR',
-    'Mix': '1vt5crxDtFXRp0I7hVbj1HkLO4UO3I4dB',
+    'Realism': '1vt5crxDtFXRp0I7hVbj1HkLO4UO3I4dB',
+    'Monochromatic': '1j64UUf9y-1Ser8ZedzpxEwZw7YWEwyHV',
+    'Vibrant': '1VMK2WzAOhr-HA1Y3x685WnlNo6VoZS8B',
+    'Playful': '13h1a3_ow5YgAuQouQOCwR490Xqdp8rHR',
   };
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
@@ -2527,26 +2527,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Category buttons
+        // CanvasBT category buttons in horizontally scrollable row
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildCategoryButton('Mix', Colors.pink.shade600),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: _buildCategoryButton('High-Fidelity', Colors.purple.shade600),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: _buildCategoryButton('Color-Rich', Colors.orange.shade600),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: _buildCategoryButton('Low-Motion', Colors.teal.shade600),
-              ),
-            ],
+          child: SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _buildCategoryButton('Realism', Colors.pink.shade600),
+                const SizedBox(width: 4),
+                _buildCategoryButton('Monochromatic', Colors.purple.shade600),
+                const SizedBox(width: 4),
+                _buildCategoryButton('Vibrant', Colors.orange.shade600),
+                const SizedBox(width: 4),
+                _buildCategoryButton('Playful', Colors.teal.shade600),
+              ],
+            ),
           ),
         ),
         const SizedBox(height:4),
@@ -2575,7 +2572,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       child: Text(
         category,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
         ),
         textAlign: TextAlign.center,
@@ -2655,7 +2652,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     _updateStatus('Loading $_selectedCanvasBTCategory gallery...');
     
     try{
-      final String folderId = _canvasBTCategories[_selectedCanvasBTCategory] ?? _canvasBTCategories['Mix']!;
+      final String folderId = _canvasBTCategories[_selectedCanvasBTCategory] ?? _canvasBTCategories['Realism']!;
       
       // Fetch the public folder page
       final url = 'https://drive.google.com/drive/folders/$folderId';
