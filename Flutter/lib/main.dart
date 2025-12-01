@@ -54,6 +54,24 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
+        fontFamily: 'Roboto',
+        textTheme: const TextTheme(
+          displayLarge: TextStyle(fontFamily: 'Roboto'),
+          displayMedium: TextStyle(fontFamily: 'Roboto'),
+          displaySmall: TextStyle(fontFamily: 'Roboto'),
+          headlineLarge: TextStyle(fontFamily: 'Roboto'),
+          headlineMedium: TextStyle(fontFamily: 'Roboto'),
+          headlineSmall: TextStyle(fontFamily: 'Roboto'),
+          titleLarge: TextStyle(fontFamily: 'Roboto'),
+          titleMedium: TextStyle(fontFamily: 'Roboto'),
+          titleSmall: TextStyle(fontFamily: 'Roboto'),
+          bodyLarge: TextStyle(fontFamily: 'Roboto'),
+          bodyMedium: TextStyle(fontFamily: 'Roboto'),
+          bodySmall: TextStyle(fontFamily: 'Roboto'),
+          labelLarge: TextStyle(fontFamily: 'Roboto'),
+          labelMedium: TextStyle(fontFamily: 'Roboto'),
+          labelSmall: TextStyle(fontFamily: 'Roboto'),
+        ),
       ),
       // Keep UI consistent across devices by capping text scaling
       builder: (context, child){
@@ -274,7 +292,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     final buttonStyle = ElevatedButton.styleFrom(
       minimumSize: const Size(60,32),
       padding: const EdgeInsets.symmetric(horizontal:8, vertical:4),
-      textStyle: const TextStyle(fontSize:15, fontWeight: FontWeight.w600),
+      textStyle: const TextStyle(fontSize:15, fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
       backgroundColor: bgColor,
       foregroundColor: Colors.white,
       elevation: 2,
@@ -293,7 +311,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           children: [
             Icon(icon, size: 14),
             SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 15)),
+            Text(label, style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
           ],
         ),
       );
@@ -301,7 +319,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     return ElevatedButton(
       style: buttonStyle,
       onPressed: onPressed,
-      child: Text(label, style: TextStyle(fontSize: 15)),
+      child: Text(label, style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
     );
   }
 
@@ -734,7 +752,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 children: [
                   Icon(Icons.photo_library, size: 11),
                   SizedBox(width: 2),
-                  Text('Gallery', style: TextStyle(fontSize: 15)),
+                  Text('Gallery', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
                 ],
               ),
             ),
@@ -761,7 +779,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 children: [
                   Icon(Icons.bookmark, size: 11),
                   SizedBox(width: 2),
-                  Text('Saved', style: TextStyle(fontSize: 15)),
+                  Text('Saved', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
                 ],
               ),
             ),
@@ -788,7 +806,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 children: [
                   Icon(Icons.auto_awesome, size: 11),
                   SizedBox(width: 2),
-                  Text('AI', style: TextStyle(fontSize: 15)),
+                  Text('AI', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
                 ],
               ),
             ),
@@ -824,7 +842,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 children: [
                   Icon(Icons.cloud_download, size: 11),
                   SizedBox(width: 2),
-                  Text('Library', style: TextStyle(fontSize: 15)),
+                  Text('Library', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
                 ],
               ),
             ),
@@ -908,7 +926,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 children: [
                   LinearProgressIndicator(value: _transferProgress/100),
                   const SizedBox(height: 2),
-                  Text('$_transferProgress%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12)),
+                  Text('$_transferProgress%  ${_transferSpeed.toStringAsFixed(1)} KB/s', textAlign: TextAlign.center, style: const TextStyle(fontSize:12, fontFamily: 'Roboto')),
                 ],
               ),
             ),
@@ -1059,7 +1077,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               backgroundColor: Colors.green.shade600,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Roboto'),
             ),
             icon: const Icon(Icons.auto_awesome, size: 18),
             label: Text(_aiIsGenerating ? 'Generating...' : 'Simple Generate'),
@@ -1096,7 +1114,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         const SizedBox(height: 6),
         const Text(
           'Uses a free online generator and needs internet. Generation may take a few seconds.',
-          style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black54),
+          style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.black54, fontFamily: 'Roboto'),
         ),
         const SizedBox(height: 8),
         Expanded(
@@ -1132,7 +1150,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                   )
                 : (_aiPngBytes==null
                     ? Text(_aiError ?? 'Enter a prompt and tap a style button or Simple Generate',
-                        style: const TextStyle(fontSize: 14, color: Colors.black54),
+                        style: const TextStyle(fontSize: 14, color: Colors.black54, fontFamily: 'Roboto'),
                         textAlign: TextAlign.center)
                     : Image.memory(_aiPngBytes!, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
             ),
@@ -1155,6 +1173,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: Colors.white,
+            fontFamily: 'Roboto',
           )),
         ],
       ),
@@ -1583,7 +1602,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             Expanded(
               child: Text(
                 title,
-                style: TextStyle(color: Colors.green.shade700, fontSize: 20, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.green.shade700, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Roboto'),
               ),
             ),
           ],
@@ -1611,16 +1630,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             Expanded(
               child: Text(
                 title,
-                style: TextStyle(color: Colors.red.shade700, fontSize: 20, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.red.shade700, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'Roboto'),
               ),
             ),
           ],
         ),
-        content: Text(message, style: const TextStyle(fontSize: 15, height: 1.5)),
+        content: Text(message, style: const TextStyle(fontSize: 15, height: 1.5, fontFamily: 'Roboto')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            child: const Text('OK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Roboto')),
           ),
         ],
       ),
@@ -2252,7 +2271,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal:4, vertical:2),
                           decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
-                          child: Text(e.wasPortrait? 'Portrait' : 'Landscape', style: const TextStyle(color: Colors.white, fontSize:9, fontWeight: FontWeight.w500)),
+                          child: Text(e.wasPortrait? 'Portrait' : 'Landscape', style: const TextStyle(color: Colors.white, fontSize:9, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
                         ),
                       ),
                     ]),
@@ -2418,7 +2437,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         else
           _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedOnlineIndex==null || _isOnlineImporting)? null : _useSelectedOnlineImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
         const SizedBox(width:8),
-        Expanded(child: Text('Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600))),
+        Expanded(child: Text('Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600, fontFamily: 'Roboto'))),
         // Refresh button based on active tab
         if (_libraryTabController?.index == 0)
           IconButton(onPressed: _isCanvasBTLoading? null : _loadCanvasBTGallery, icon: const Icon(Icons.refresh))
@@ -2429,7 +2448,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       // Status message row
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4.0),
-        child: Text(_buildLibraryStatusMessage(), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+        child: Text(_buildLibraryStatusMessage(), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontFamily: 'Roboto')),
       ),
       const SizedBox(height:6),
       // TabBar
@@ -2590,7 +2609,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           children: [
             Icon(Icons.photo_library, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
-            Text(_canvasBTError ?? 'Tap refresh to load gallery', style: TextStyle(color: Colors.grey.shade600)),
+            Text(_canvasBTError ?? 'Tap refresh to load gallery', style: TextStyle(color: Colors.grey.shade600, fontFamily: 'Roboto')),
           ],
         ),
       ); 
@@ -2774,7 +2793,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           onPressed: _isOnlineSearching? null : _searchOnlineImages,
           icon: const Icon(Icons.search, size:18),
           label: Text(_isOnlineSearching? 'Searching...' : 'Search'),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
         )),
       ]),
       const SizedBox(height:8),
@@ -2787,7 +2806,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             children: [
               const Padding(
                 padding: EdgeInsets.only(right: 8.0),
-                child: Text('Pexels:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                child: Text('Pexels:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
               ),
               ..._pexelsCategories.map((c){
                 final selected = _selectedPexelsCategory == c;
@@ -2797,7 +2816,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                     label: Text(_titleCase(c)),
                     selected: selected,
                     selectedColor: Colors.green.shade600,
-                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12),
+                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12, fontFamily: 'Roboto'),
                     onSelected: (_){
                       setState(()=> _selectedPexelsCategory = c);
                       // Category triggers its own search independent of text field
@@ -2820,7 +2839,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             children: [
               const Padding(
                 padding: EdgeInsets.only(right: 8.0),
-                child: Text('Pixabay:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                child: Text('Pixabay:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
               ),
               ..._pixabayCategories.map((c){
                 final selected = _selectedPixabayCategory == c;
@@ -2830,7 +2849,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                     label: Text(_titleCase(c)),
                     selected: selected,
                     selectedColor: Colors.blue.shade600,
-                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12),
+                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12, fontFamily: 'Roboto'),
                     onSelected: (_){
                       setState(()=> _selectedPixabayCategory = c);
                       // Category triggers its own search independent of text field
@@ -2900,7 +2919,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           onPressed: _isPixabaySearching? null : _searchPixabayImages,
           icon: const Icon(Icons.search, size:18),
           label: Text(_isPixabaySearching? 'Searching...' : 'Search'),
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600)),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
         )),
       ]),
       const SizedBox(height:8),
@@ -2913,7 +2932,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             children: [
               const Padding(
                 padding: EdgeInsets.only(right: 8.0),
-                child: Text('Categories:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                child: Text('Categories:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
               ),
               ..._pixabayCategories.map((c){
                 final selected = _selectedPixabayCategory == c;
@@ -2923,7 +2942,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                     label: Text(_titleCase(c)),
                     selected: selected,
                     selectedColor: Colors.teal.shade600,
-                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12),
+                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12, fontFamily: 'Roboto'),
                     onSelected: (_){
                       setState(()=> _selectedPixabayCategory = c);
                       // Category triggers its own search independent of text field
@@ -3083,7 +3102,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                  child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
                 ),
               ),
               // Battery status bottom-left inside the "Frame" panel (no separate bar)
@@ -4439,7 +4458,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             ),
             ListTile(
               leading: const Icon(Icons.help_outline, color: Colors.blue, size: 28),
-              title: const Text('How to Use', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              title: const Text('How to Use', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
               onTap: () {
                 Navigator.pop(context);
@@ -4449,7 +4468,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.tune, color: Colors.orange, size: 28),
-              title: const Text('Calibrate Sensor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              title: const Text('Calibrate Sensor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
               onTap: () {
                 Navigator.pop(context);
@@ -4459,7 +4478,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.policy_outlined, color: Colors.green, size: 28),
-              title: const Text('Policies', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              title: const Text('Policies', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
               onTap: () {
                 Navigator.pop(context);
@@ -4469,7 +4488,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.shopping_cart, color: Colors.purple, size: 28),
-              title: const Text('Shop CanvasBT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              title: const Text('Shop CanvasBT', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
               onTap: () async {
                 Navigator.pop(context);
@@ -4539,12 +4558,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Step 1: Select Your Image
                       const Text(
                         'Step 1: Select Your Image',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'Choose an image from any of these sources:',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                        style: TextStyle(fontSize: 14, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Gallery - Browse your phone\'s photo collection'),
@@ -4556,12 +4575,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Step 2: Perfect Your Frame
                       const Text(
                         'Step 2: Perfect Your Frame',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'Once your image loads in the editor:',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                        style: TextStyle(fontSize: 14, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Orientation - Tap Portrait/Landscape to match your display'),
@@ -4575,12 +4594,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Step 3: Send to Display
                       const Text(
                         'Step 3: Send to Display',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'Ready to transfer? It\'s automatic!',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                        style: TextStyle(fontSize: 14, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Tap the blue Send button'),
@@ -4592,12 +4611,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Step 4: Save Your Creations
                       const Text(
                         'Step 4: Save Your Creations',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'Love what you made?',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                        style: TextStyle(fontSize: 14, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Tap Save to store your edited image'),
@@ -4608,7 +4627,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Pro Tips
                       const Text(
                         'Pro Tips',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Battery Status - Check your frame\'s battery in the preview corner'),
@@ -4621,7 +4640,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Quick Features
                       const Text(
                         'Quick Features',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('No Setup Required - Bluetooth connects automatically when you touch the frame'),
@@ -4633,7 +4652,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Troubleshooting
                       const Text(
                         'Troubleshooting',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Can\'t connect? Make sure Bluetooth is on and touch the frame to wake it'),
@@ -4658,7 +4677,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text('Got it!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    child: const Text('Got it!', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Roboto')),
                   ),
                 ),
               ),
@@ -4675,11 +4694,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('• ', style: TextStyle(fontSize: 16, color: Colors.blue, fontWeight: FontWeight.bold)),
+          const Text('• ', style: TextStyle(fontSize: 16, color: Colors.blue, fontWeight: FontWeight.bold, fontFamily: 'Roboto')),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+              style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87, fontFamily: 'Roboto'),
             ),
           ),
         ],
@@ -4734,19 +4753,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // What is Calibration
                       const Text(
                         'What is Sensor Calibration?',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'The e-paper frame uses a capacitive touch sensor to detect your finger touch. Calibration adjusts the sensor\'s sensitivity to ensure reliable touch detection in different environmental conditions.',
-                        style: TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+                        style: TextStyle(fontSize: 14, color: Colors.black87, height: 1.4, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 20),
                       
                       // When to Calibrate
                       const Text(
                         'When Should You Calibrate?',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Touch sensor not responding to your finger'),
@@ -4758,12 +4777,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // How to Calibrate
                       const Text(
                         'How to Calibrate',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'Follow these simple steps:',
-                        style: TextStyle(fontSize: 14, color: Colors.black87),
+                        style: TextStyle(fontSize: 14, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildNumberedPoint('1', 'Ensure your frame is ON (LED should be blinking). If not, connect to charging to keep it powered during calibration'),
@@ -4793,6 +4812,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.orange.shade700,
+                                    fontFamily: 'Roboto',
                                   ),
                                 ),
                               ],
@@ -4802,7 +4822,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                               '• Keep your finger AWAY from the sensor during calibration\n'
                               '• The calibration measures the baseline "no-touch" state\n'
                               '• You can also press the physical boot button (GPIO0) on the back to calibrate',
-                              style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.5),
+                              style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.5, fontFamily: 'Roboto'),
                             ),
                           ],
                         ),
@@ -4812,7 +4832,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Pro Tip
                       const Text(
                         'Pro Tip',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('If touch still doesn\'t work after calibration, try cleaning the sensor area with a soft cloth'),
@@ -4823,7 +4843,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       // Optimal Touch Technique
                       const Text(
                         'How to Touch the Frame for Best Results',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
                       Container(
@@ -4857,12 +4877,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                               '✓ Touch the corner sensor area directly, not the frame edge\n'
                               '✓ Keep fingers clean and dry for optimal conductivity\n'
                               '✓ Press with moderate pressure for 0.5-1 second',
-                              style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.6),
+                              style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.6, fontFamily: 'Roboto'),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'The finger pad provides the largest surface area and highest conductivity due to natural moisture and salts in your skin, ensuring reliable detection.',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.4),
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic, height: 1.4, fontFamily: 'Roboto'),
                             ),
                           ],
                         ),
@@ -4884,7 +4904,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                           _sendCalibrationCommand();
                         },
                         icon: const Icon(Icons.settings_remote, size: 20),
-                        label: const Text('Calibrate Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        label: const Text('Calibrate Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Roboto')),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.orange.shade600,
                           foregroundColor: Colors.white,
@@ -4908,7 +4928,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        child: const Text('Close', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        child: const Text('Close', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Roboto')),
                       ),
                     ),
                   ],
@@ -4951,7 +4971,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 text,
-                style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87),
+                style: const TextStyle(fontSize: 14, height: 1.4, color: Colors.black87, fontFamily: 'Roboto'),
               ),
             ),
           ),
@@ -5048,7 +5068,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                             const Expanded(
                               child: Text(
                                 'Your privacy matters! We don\'t collect, store, or share your personal information.',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87),
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87, fontFamily: 'Roboto'),
                               ),
                             ),
                           ],
@@ -5073,7 +5093,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text('Close', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    child: const Text('Close', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Roboto')),
                   ),
                 ),
               ),
@@ -5116,7 +5136,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           padding: const EdgeInsets.only(left: 50),
           child: Text(
             content,
-            style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black87),
+            style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black87, fontFamily: 'Roboto'),
           ),
         ),
       ],
@@ -5399,19 +5419,19 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                               children: const [
                                 Text(
                                   '• Drag with one finger to move',
-                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                  style: TextStyle(fontSize: 15, height: 1.6, fontFamily: 'Roboto'),
                                 ),
                                 Text(
                                   '• Pinch with two fingers to zoom',
-                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                  style: TextStyle(fontSize: 15, height: 1.6, fontFamily: 'Roboto'),
                                 ),
                                 Text(
                                   '• Rotate with two fingers to angle',
-                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                  style: TextStyle(fontSize: 15, height: 1.6, fontFamily: 'Roboto'),
                                 ),
                                 Text(
                                   '• Double-tap to reset view',
-                                  style: TextStyle(fontSize: 15, height: 1.6),
+                                  style: TextStyle(fontSize: 15, height: 1.6, fontFamily: 'Roboto'),
                                 ),
                               ],
                             ),
