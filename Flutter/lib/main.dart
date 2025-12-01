@@ -1104,7 +1104,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               const SizedBox(width: 4),
               _buildStyleChip('pulse', 'Whimsical', Icons.auto_awesome, Colors.purple.shade600),
               const SizedBox(width: 4),
-              _buildStyleChip('tone', 'Radiant', Icons.wb_sunny, Colors.orange.shade600),
+              _buildStyleChip('tone', 'Vibrant', Icons.wb_sunny, Colors.orange.shade600),
               const SizedBox(width: 4),
               _buildStyleChip('spaces', 'Mono', Icons.edit, Colors.teal.shade600),
             ],
@@ -2446,8 +2446,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedCanvasBTIndex==null || _isOnlineImporting)? null : _useSelectedCanvasBTImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600)
         else
           _smallBtn(_isOnlineImporting? 'Importing' : 'Use in Editor', (_selectedOnlineIndex==null || _isOnlineImporting)? null : _useSelectedOnlineImage, icon: Icons.cloud_download, backgroundColor: Colors.teal.shade600),
-        const SizedBox(width:8),
-        Expanded(child: Text('Library', textAlign: TextAlign.center, style: const TextStyle(fontSize:16, fontWeight: FontWeight.w600, fontFamily: 'Roboto'))),
+        const Spacer(),
         // Refresh button based on active tab
         if (_libraryTabController?.index == 0)
           IconButton(onPressed: _isCanvasBTLoading? null : _loadCanvasBTGallery, icon: const Icon(Icons.refresh))
