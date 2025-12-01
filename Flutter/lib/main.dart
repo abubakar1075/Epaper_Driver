@@ -730,125 +730,130 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // 3. "AI" button -> Opens AI generation window (_showAi=true, shows _buildAiView)
   Widget _connectedTopBar(){
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 1),
-      child: Row(children:[
-        Expanded(
-          child: SizedBox(
-            height: 32,
-            child: ElevatedButton(
-              onPressed: _pickImage,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                backgroundColor: Colors.blue.shade500,
-                foregroundColor: Colors.white,
-                elevation: 2,
-                shadowColor: Colors.blue.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Calculate equal width for all 4 buttons based on available width
+          final double spacing = 6.0;
+          final double totalSpacing = spacing * 3; // 3 gaps between 4 buttons
+          final double buttonWidth = (constraints.maxWidth - totalSpacing) / 4;
+          
+          return Row(children:[
+            SizedBox(
+              width: buttonWidth,
+              height: 32,
+              child: ElevatedButton(
+                onPressed: _pickImage,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  backgroundColor: Colors.blue.shade500,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shadowColor: Colors.blue.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.photo_library, size: 11),
+                    SizedBox(width: 2),
+                    Flexible(child: Text('Gallery', style: TextStyle(fontSize: 15, fontFamily: 'Roboto'), overflow: TextOverflow.ellipsis)),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.photo_library, size: 11),
-                  SizedBox(width: 2),
-                  Text('Gallery', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
-                ],
-              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: SizedBox(
-            height: 32,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                elevation: 2,
-                shadowColor: Colors.green.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            SizedBox(width: spacing),
+            SizedBox(
+              width: buttonWidth,
+              height: 32,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  elevation: 2,
+                  shadowColor: Colors.green.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: _openSavedWindow,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.bookmark, size: 11),
+                    SizedBox(width: 2),
+                    Flexible(child: Text('Saved', style: TextStyle(fontSize: 15, fontFamily: 'Roboto'), overflow: TextOverflow.ellipsis)),
+                  ],
                 ),
               ),
-              onPressed: _openSavedWindow,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.bookmark, size: 11),
-                  SizedBox(width: 2),
-                  Text('Saved', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
-                ],
-              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: SizedBox(
-            height: 32,
-            child: ElevatedButton(
-              onPressed: (){ setState((){ _showAi = true; _aiError = null; }); },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                backgroundColor: Colors.purple.shade500,
-                foregroundColor: Colors.white,
-                elevation: 2,
-                shadowColor: Colors.purple.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            SizedBox(width: spacing),
+            SizedBox(
+              width: buttonWidth,
+              height: 32,
+              child: ElevatedButton(
+                onPressed: (){ setState((){ _showAi = true; _aiError = null; }); },
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  backgroundColor: Colors.purple.shade500,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shadowColor: Colors.purple.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome, size: 11),
+                    SizedBox(width: 2),
+                    Flexible(child: Text('AI', style: TextStyle(fontSize: 15, fontFamily: 'Roboto'), overflow: TextOverflow.ellipsis)),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.auto_awesome, size: 11),
-                  SizedBox(width: 2),
-                  Text('AI', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
-                ],
-              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: SizedBox(
-            height: 32,
-            child: ElevatedButton(
-              onPressed: (){ 
-                setState((){ 
-                  _showOnline = true; 
-                  _onlineError = null; 
-                });
-                // Auto-load CanvasBT gallery on first open
-                if(_libraryTabController?.index == 0 && _canvasBTResults.isEmpty && !_isCanvasBTLoading) {
-                  _loadCanvasBTGallery();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                backgroundColor: Colors.orange.shade500,
-                foregroundColor: Colors.white,
-                elevation: 2,
-                shadowColor: Colors.orange.withOpacity(0.3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            SizedBox(width: spacing),
+            SizedBox(
+              width: buttonWidth,
+              height: 32,
+              child: ElevatedButton(
+                onPressed: (){ 
+                  setState((){ 
+                    _showOnline = true; 
+                    _onlineError = null; 
+                  });
+                  // Auto-load CanvasBT gallery on first open
+                  if(_libraryTabController?.index == 0 && _canvasBTResults.isEmpty && !_isCanvasBTLoading) {
+                    _loadCanvasBTGallery();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  backgroundColor: Colors.orange.shade500,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  shadowColor: Colors.orange.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_download, size: 11),
+                    SizedBox(width: 2),
+                    Flexible(child: Text('Library', style: TextStyle(fontSize: 15, fontFamily: 'Roboto'), overflow: TextOverflow.ellipsis)),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.cloud_download, size: 11),
-                  SizedBox(width: 2),
-                  Text('Library', style: TextStyle(fontSize: 15, fontFamily: 'Roboto')),
-                ],
-              ),
             ),
-          ),
-        ),
-      ]),
+          ]);
+        },
+      ),
     );
   }
 
@@ -868,10 +873,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     return LayoutBuilder(builder: (context, constraints){
       final maxH = constraints.maxHeight;
       // Fixed element heights
-      const double topBarH = 32.0; // button row height
-      const double spacingBelowTopBar = 4.0;
+      const double topBarH = 44.0; // button row height (32 + 6*2 padding)
+      const double spacingBelowTopBar = 8.0;
       const double actionBarH = 40.0;
-      const double spacingBelowAction = 4.0; // gap before action bar
+      const double spacingBelowAction = 6.0; // gap before action bar
       const double gapActionToPreview = 4.0; // gap after action bar
       const double statusH = 46.0;
       const double progressH = 30.0; // Always reserve space to prevent layout shift
@@ -5160,36 +5165,38 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       alignment: Alignment.topCenter,
                     ),
                   ),
-                  Positioned(
-                    top: 36,
-                    left: 16,
-                    child: SafeArea(
-                      child: GestureDetector(
-                        onTap: () => _scaffoldKey.currentState?.openDrawer(),
-                        child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              borderRadius: BorderRadius.circular(4),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            padding: const EdgeInsets.all(5),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(height: 4.5, width: 30, color: Colors.black87),
-                                const SizedBox(height: 4.5),
-                                Container(height: 4.5, width: 30, color: Colors.black87),
-                                const SizedBox(height: 4.5),
-                                Container(height: 4.5, width: 30, color: Colors.black87),
-                              ],
-                            ),
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 12),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: GestureDetector(
+                          onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                          child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.95),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              padding: const EdgeInsets.all(8),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(height: 3, width: 24, decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(1.5))),
+                                  const SizedBox(height: 5),
+                                  Container(height: 3, width: 24, decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(1.5))),
+                                  const SizedBox(height: 5),
+                                  Container(height: 3, width: 24, decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(1.5))),
+                                ],
+                              ),
+                          ),
                         ),
                       ),
                     ),
