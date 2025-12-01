@@ -1065,10 +1065,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       children: [
         Row(children:[
           // Back first, aligned left
-          _smallBtn('Back', (){ setState((){ _showAi = false; }); }, icon: Icons.arrow_back),
+          _smallBtn('Back', (){ setState((){ _showAi = false; }); }, icon: Icons.arrow_back, backgroundColor: Colors.grey.shade600),
           const SizedBox(width: 8),
           // Use in Editor next
-          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage, icon: Icons.open_in_new),
+          _smallBtn('Use in Editor', (_aiPngBytes==null || _aiIsGenerating) ? null : _useAiImage, icon: Icons.open_in_new, backgroundColor: Colors.teal.shade600),
           const Spacer(),
           // Simple Generate last, with green color, aligned right
           ElevatedButton.icon(
