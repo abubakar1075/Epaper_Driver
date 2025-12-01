@@ -1100,13 +1100,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _buildStyleChip('moments', 'Lifelike', Icons.brush, Colors.blue),
+              _buildStyleChip('moments', 'Lifelike', Icons.brush, Colors.pink.shade600),
               const SizedBox(width: 4),
-              _buildStyleChip('pulse', 'Whimsical', Icons.auto_awesome, Colors.purple),
+              _buildStyleChip('pulse', 'Whimsical', Icons.auto_awesome, Colors.purple.shade600),
               const SizedBox(width: 4),
-              _buildStyleChip('tone', 'Radiant', Icons.wb_sunny, Colors.orange),
+              _buildStyleChip('tone', 'Radiant', Icons.wb_sunny, Colors.orange.shade600),
               const SizedBox(width: 4),
-              _buildStyleChip('spaces', 'Mono', Icons.edit, Colors.grey),
+              _buildStyleChip('spaces', 'Mono', Icons.edit, Colors.teal.shade600),
             ],
           ),
         ),
