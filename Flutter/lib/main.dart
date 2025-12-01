@@ -4567,7 +4567,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Gallery - Browse your phone\'s photo collection'),
-                      _buildBulletPoint('Library - Discover beautiful images from Pixabay online'),
+                      _buildBulletPoint('Library - Discover beautiful images from Pexels and Pixabay online'),
                       _buildBulletPoint('AI - Create unique artwork with text prompts'),
                       _buildBulletPoint('Saved - Access images you\'ve previously edited'),
                       const SizedBox(height: 20),
@@ -5039,7 +5039,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       _buildPolicySection(
                         title: 'Image Sources',
                         icon: Icons.photo_library,
-                        content: 'When using Gallery, you access your own photos. Pixabay integration provides free stock images. AI generation uses OpenAI\'s DALL·E API with your provided key.',
+                        content: 'When using Gallery, you access your own photos. Pexels and Pixabay integration provides free stock images. AI generation uses OpenAI\'s DALL·E API with your provided key.',
                       ),
                       const SizedBox(height: 20),
                       _buildPolicySection(
@@ -5051,7 +5051,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       _buildPolicySection(
                         title: 'Third-Party Services',
                         icon: Icons.cloud_outlined,
-                        content: 'Pixabay API is used for image search. OpenAI API is used for AI generation (requires your API key). No personal data is shared with these services.',
+                        content: 'Pexels and Pixabay APIs are used for image search. OpenAI API is used for AI generation (requires your API key). No personal data is shared with these services.',
                       ),
                       const SizedBox(height: 20),
                       Container(
@@ -5067,7 +5067,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                             const SizedBox(width: 12),
                             const Expanded(
                               child: Text(
-                                'Your privacy matters! We don\'t collect, store, or share your personal information.',
+                                'Your privacy matters! We do not collect, store, or share your personal information.',
                                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black87, fontFamily: 'Roboto'),
                               ),
                             ),
