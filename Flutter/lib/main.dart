@@ -1163,21 +1163,22 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   }
 
   Widget _buildStyleChip(String styleId, String label, IconData icon, Color color) {
+    final isSelected = _selectedAiStyle == styleId;
     return ActionChip(
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.white),
+          Icon(icon, size: 14, color: isSelected ? Colors.white : Colors.black),
           const SizedBox(width: 4),
-          Text(label, style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+          Text(label, style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+            color: isSelected ? Colors.white : Colors.black,
             fontFamily: 'Roboto',
           )),
         ],
       ),
-      backgroundColor: color,
+      backgroundColor: isSelected ? color : Colors.grey.shade300,
       side: BorderSide.none,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       onPressed: _aiIsGenerating ? null : () {
@@ -1221,7 +1222,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   }
 
   Future<void> _generateAiImageWithStyle(String styleId) async {
-    setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
+    setState((){ 
+      _aiIsGenerating = true; 
+      _aiError = null; 
+      _aiPngBytes = null;
+      _selectedAiStyle = styleId; // Set selected style
+    });
     _startAiLoadingMessages();
     final prompt = _aiPromptController.text.trim();
     try{
@@ -1271,7 +1277,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   }
 
   Future<void> _generateAiImage() async {
-    setState((){ _aiIsGenerating = true; _aiError = null; _aiPngBytes = null; });
+    setState((){ 
+      _aiIsGenerating = true; 
+      _aiError = null; 
+      _aiPngBytes = null;
+      _selectedAiStyle = null; // Clear style selection for simple generate
+    });
     _startAiLoadingMessages();
     final prompt = _aiPromptController.text.trim();
     try{
@@ -2593,6 +2604,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         style: TextStyle(
           fontSize: 12,
           fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+          fontFamily: 'Roboto',
         ),
         textAlign: TextAlign.center,
       ),
