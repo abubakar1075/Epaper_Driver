@@ -1100,20 +1100,28 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         ),
         const SizedBox(height: 10),
         // Art style selector buttons in a scrollable row
-        SizedBox(
-          height: 36,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _buildStyleChip('moments', 'Lifelike', Icons.brush, Colors.pink.shade600),
-              const SizedBox(width: 4),
-              _buildStyleChip('pulse', 'Whimsical', Icons.auto_awesome, Colors.purple.shade600),
-              const SizedBox(width: 4),
-              _buildStyleChip('tone', 'Vibrant', Icons.wb_sunny, Colors.orange.shade600),
-              const SizedBox(width: 4),
-              _buildStyleChip('spaces', 'Mono', Icons.edit, Colors.teal.shade600),
-            ],
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Calculate equal width for all 4 style buttons
+            final double spacing = 6.0;
+            final double totalSpacing = spacing * 3; // 3 gaps between 4 buttons
+            final double buttonWidth = (constraints.maxWidth - totalSpacing) / 4;
+            
+            return SizedBox(
+              height: 36,
+              child: Row(
+                children: [
+                  SizedBox(width: buttonWidth, child: _buildStyleChip('moments', 'Lifelike', Icons.brush, Colors.pink.shade600)),
+                  SizedBox(width: spacing),
+                  SizedBox(width: buttonWidth, child: _buildStyleChip('pulse', 'Whimsical', Icons.auto_awesome, Colors.purple.shade600)),
+                  SizedBox(width: spacing),
+                  SizedBox(width: buttonWidth, child: _buildStyleChip('tone', 'Vibrant', Icons.wb_sunny, Colors.orange.shade600)),
+                  SizedBox(width: spacing),
+                  SizedBox(width: buttonWidth, child: _buildStyleChip('spaces', 'Mono', Icons.edit, Colors.teal.shade600)),
+                ],
+              ),
+            );
+          },
         ),
         const SizedBox(height: 6),
         const Text(
@@ -1168,27 +1176,32 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
   Widget _buildStyleChip(String styleId, String label, IconData icon, Color color) {
     final isSelected = _selectedAiStyle == styleId;
-    return ActionChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: isSelected ? Colors.white : Colors.black),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-            color: isSelected ? Colors.white : Colors.black,
-            fontFamily: 'Roboto',
-          )),
-        ],
+    return SizedBox(
+      width: double.infinity,
+      child: ActionChip(
+        label: SizedBox(
+          width: double.infinity,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+              color: isSelected ? Colors.white : Colors.black,
+              fontFamily: 'Roboto',
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.visible,
+          ),
+        ),
+        backgroundColor: isSelected ? color : Colors.grey.shade300,
+        side: BorderSide.none,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        onPressed: _aiIsGenerating ? null : () {
+          // Generate immediately with this style's pre-prompt
+          _generateAiImageWithStyle(styleId);
+        },
       ),
-      backgroundColor: isSelected ? color : Colors.grey.shade300,
-      side: BorderSide.none,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      onPressed: _aiIsGenerating ? null : () {
-        // Generate immediately with this style's pre-prompt
-        _generateAiImageWithStyle(styleId);
-      },
     );
   }
 
