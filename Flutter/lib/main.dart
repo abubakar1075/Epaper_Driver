@@ -2251,9 +2251,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         Row(children:[
           _smallBtn('Back', ()=> setState(()=> _showLibrary=false), icon: Icons.arrow_back, backgroundColor: Colors.grey.shade600),
           const SizedBox(width:6),
-          _smallBtn('Delete', _selectedLibraryIndex==null ? null : _deleteSelectedLibraryItem, icon: Icons.delete, backgroundColor: Colors.red.shade600),
-          const SizedBox(width:6),
           _smallBtn('Use in Editor', _selectedLibraryIndex==null ? null : _useSelectedLibraryItem, icon: Icons.open_in_new, backgroundColor: Colors.teal.shade600),
+          const SizedBox(width:6),
+          _smallBtn('Delete', _selectedLibraryIndex==null ? null : _deleteSelectedLibraryItem, icon: Icons.delete, backgroundColor: Colors.red.shade600),
         ]),
         const SizedBox(height:8),
         Expanded(
