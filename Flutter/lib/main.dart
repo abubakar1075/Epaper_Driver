@@ -978,7 +978,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             _buildOtaButton(),
             const SizedBox(width:1),
           ],
-          _smallBtn('Exit', _exitApp, icon: Icons.exit_to_app, backgroundColor: Colors.red.shade600),
         ])
       ]),
     );
@@ -3207,17 +3206,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       _updateFrameBorderColor();
     });
     _needsRecenteringOnce = true;
-  }
-
-  Future<void> _exitApp() async {
-    try{
-      if(_isSending){ /* cannot easily cancel mid-chunks here; rely on disconnect */ }
-      await _disconnectDevice();
-    } catch(_){ }
-    if(mounted){
-      // Close the app (works on Android); on iOS this is discouraged
-      SystemNavigator.pop();
-    }
   }
 
   // Request necessary permissions
