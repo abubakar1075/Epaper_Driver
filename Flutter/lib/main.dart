@@ -4415,59 +4415,92 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       try {
         // Fetch the folder page to find .bin files
         final url = 'https://drive.google.com/drive/folders/$_otaFolderId';
+        print('🔽 Fetching OTA folder for download...');
         final resp = await http.get(Uri.parse(url));
         
         if (resp.statusCode != 200) {
           throw Exception('Cannot access OTA folder');
         }
         
-        // Find the .bin file with highest version (33-character file IDs)
+        print('✅ Folder accessed, searching for .bin file...');
+        
         final html = resp.body;
+        
+        // Use the same improved logic as _getOtaFileVersion()
+        // Pattern 1: Standard quoted filename
+        RegExp pattern1 = RegExp(r'"([^"]*\.bin)"');
+        final matches1 = pattern1.allMatches(html);
+        
+        // Pattern 2: HTML-encoded or escaped
+        RegExp pattern2 = RegExp(r'([^\s<>"]+\.bin)');
+        final matches2 = pattern2.allMatches(html);
+        
+        // Combine all matches
+        final allFilenames = <String>{};
+        for (final match in matches1) {
+          final filename = match.group(1);
+          if (filename != null) allFilenames.add(filename);
+        }
+        for (final match in matches2) {
+          final filename = match.group(1);
+          if (filename != null && filename.endsWith('.bin')) allFilenames.add(filename);
+        }
+        
+        print('Found ${allFilenames.length} .bin filename(s)');
+        
+        String? targetFilename;
+        String? highestVersion;
+        
+        // Find the filename with highest version
+        for (final filename in allFilenames) {
+          RegExp versionRegex = RegExp(r'(?:^|[_\-\s])v?(\d{1,2}\.\d{1,2}\.\d{1,2})\.bin');
+          Match? versionMatch = versionRegex.firstMatch(filename);
+          
+          if (versionMatch != null) {
+            final version = versionMatch.group(1)!;
+            print('  "$filename" -> version $version');
+            
+            if (highestVersion == null || _compareVersions(version, highestVersion) > 0) {
+              highestVersion = version;
+              targetFilename = filename;
+            }
+          }
+        }
+        
+        if (targetFilename == null) {
+          throw Exception('No .bin file found in OTA folder');
+        }
+        
+        print('Selected file for download: "$targetFilename" (version $highestVersion)');
+        
+        // Now find the file ID for this filename
         final pattern = RegExp(r'["\[]([a-zA-Z0-9_-]{33})["\]]');
         final matches = pattern.allMatches(html);
         
         String? binFileId;
-        String? highestVersion;
         
         for (final match in matches) {
           final id = match.group(1);
           if (id != null && id != _otaFolderId) {
-            // Check if this ID is associated with a .bin filename
+            // Check if this ID is near our target filename
             final startPos = match.start;
-            final contextStart = (startPos - 200).clamp(0, html.length);
-            final contextEnd = (startPos + 200).clamp(0, html.length);
+            final contextStart = (startPos - 300).clamp(0, html.length);
+            final contextEnd = (startPos + 300).clamp(0, html.length);
             final context = html.substring(contextStart, contextEnd);
             
-            // Look for .bin filename and extract version
-            if (context.contains('.bin')) {
-              RegExp filenameRegex = RegExp(r'"([^"]*\.bin)"');
-              Match? filenameMatch = filenameRegex.firstMatch(context);
-              
-              if (filenameMatch != null) {
-                final filename = filenameMatch.group(1);
-                RegExp versionRegex = RegExp(r'v?(\d+\.\d+\.\d+)');
-                Match? versionMatch = versionRegex.firstMatch(filename ?? '');
-                
-                if (versionMatch != null) {
-                  final version = versionMatch.group(1)!;
-                  
-                  // Keep the file with the highest version
-                  if (highestVersion == null || _compareVersions(version, highestVersion) > 0) {
-                    highestVersion = version;
-                    binFileId = id;
-                    print('Found OTA file: $filename (version $version, ID: $id)');
-                  }
-                }
-              }
+            if (context.contains(targetFilename)) {
+              binFileId = id;
+              print('Found file ID: $id');
+              break;
             }
           }
         }
         
         if (binFileId == null) {
-          throw Exception('No .bin file found in OTA folder');
+          throw Exception('Could not find file ID for $targetFilename');
         }
         
-        print('Selected OTA file for download: version $highestVersion (ID: $binFileId)');
+        print('Downloading file ID: $binFileId');
         
         // Download the file
         final downloadUrl = 'https://drive.google.com/uc?export=download&id=$binFileId';
