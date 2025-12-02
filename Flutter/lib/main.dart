@@ -244,6 +244,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     'Tone': '1VMK2WzAOhr-HA1Y3x685WnlNo6VoZS8B',
     'Pulse': '13h1a3_ow5YgAuQouQOCwR490Xqdp8rHR',
   };
+  static const String _otaFolderId = '1S0WNt0Ib3heUdmeiK3JZlj0KxKGkjClm';
   Uint8List? _processedPngBytes; // cache processed PNG
   Directory? _libraryDir; // persistent directory
   DateTime _lastStatusUpdate = DateTime.fromMillisecondsSinceEpoch(0);
@@ -1424,13 +1425,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   Future<void> _checkFirmwareVersion() async {
     if (_connectedDevice == null || _rxCharacteristic == null) return;
     
+    print('');
+    print('════════════════════════════════════════');
+    print('🔄 Starting firmware version check...');
+    print('════════════════════════════════════════');
+    
     setState(() => _isCheckingVersion = true);
     
     try {
       // Query firmware version from ESP32
+      print('📡 Querying ESP32 for firmware version...');
       String? deviceVersion = await _queryDeviceFirmwareVersion();
+      print('#####################');
+      print('ESP32 VERSION: $deviceVersion');
+      print('#####################');
       
       // Get OTA file version
+      print('☁️ Fetching OTA file version from Google Drive...');
       String? otaVersion = await _getOtaFileVersion();
       
       if (mounted) {
@@ -1443,6 +1454,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         });
       }
       
+      print('');
+      print('#####################');
+      print('VERSION COMPARISON SUMMARY:');
+      print('ESP32 Version: $deviceVersion');
+      print('Google Drive Version: $otaVersion');
+      print('OTA Button Enabled: $_otaButtonEnabled');
+      print('#####################');
+      print('════════════════════════════════════════');
+      print('');
+      
       if (deviceVersion != null && otaVersion != null) {
         if (_otaButtonEnabled) {
           _updateStatus('OTA available: Device v$deviceVersion → v$otaVersion');
@@ -1453,10 +1474,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         _updateStatus('Ready to Send', persist: true);
       }
     } catch (e) {
+      print('❌ Error checking firmware version: $e');
       if (mounted) {
         setState(() {
           _isCheckingVersion = false;
-          _otaButtonEnabled = true; // Enable by default on error
+          _otaButtonEnabled = false; // Hide button on error
           _versionCheckCompleted = true; // Mark as completed even on error
         });
       }
@@ -1675,48 +1697,137 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   
   Future<String?> _getOtaFileVersion() async {
     try {
-      // Try to read version from OTA filename or embedded metadata
-      // For now, we'll check if the file exists and extract version from filename
-      final otaPath = 'OTAFile/Spectra6.ino.bin';
+      // Fetch OTA file list from Google Drive folder
+      final url = 'https://drive.google.com/drive/folders/$_otaFolderId';
+      print('🔍 Fetching OTA folder from Google Drive...');
+      print('URL: $url');
+      final resp = await http.get(Uri.parse(url));
       
-      // Load the asset to check if it exists
-      try {
-        await rootBundle.load(otaPath);
-        // If we can load it, it exists
-        
-        // For now, extract version from filename or use a default
-        // You can modify this to embed version in the binary or filename
-        String filename = otaPath.split('/').last;
-        
-        // Check if filename contains version pattern like "v1.0.0" or "1.0.0"
-        RegExp versionRegex = RegExp(r'v?(\d+\.\d+\.\d+)');
-        Match? match = versionRegex.firstMatch(filename);
-        
-        if (match != null) {
-          return match.group(1); // Return version without 'v' prefix
-        }
-        
-        // If no version in filename, you could read it from binary metadata
-        // For now, return a default version that you should update manually
-        return "1.37.0"; // Update this when you create new OTA files
-        
-      } catch (e) {
-        print('OTA file not found: $e');
+      if (resp.statusCode != 200) {
+        print('❌ Cannot access OTA folder: HTTP ${resp.statusCode}');
         return null;
       }
+      
+      print('✅ OTA folder accessed successfully (${resp.body.length} bytes)');
+      
+      // Find .bin file IDs and names in the HTML
+      final html = resp.body;
+      
+      // Debug: Check if the folder is accessible and contains expected content
+      if (html.contains('Sign in') || html.contains('Request access')) {
+        print('⚠️ Folder appears to require authentication or access request');
+      }
+      
+      // Try multiple regex patterns to find .bin files
+      print('#####################');
+      print('GOOGLE DRIVE SEARCH:');
+      
+      // Pattern 1: Standard quoted filename
+      RegExp pattern1 = RegExp(r'"([^"]*\.bin)"');
+      final matches1 = pattern1.allMatches(html);
+      print('Pattern 1 (quoted): Found ${matches1.length} matches');
+      
+      // Pattern 2: HTML-encoded or escaped
+      RegExp pattern2 = RegExp(r'([^\s<>"]+\.bin)');
+      final matches2 = pattern2.allMatches(html);
+      print('Pattern 2 (unquoted): Found ${matches2.length} matches');
+      
+      // Pattern 3: Look for the specific file you mentioned
+      final searchTerms = ['1.38.0.bin', '1.37.0.bin', '.bin'];
+      for (final term in searchTerms) {
+        if (html.contains(term)) {
+          print('✅ Found "$term" in HTML');
+        } else {
+          print('❌ "$term" NOT found in HTML');
+        }
+      }
+      
+      String? latestVersion;
+      String? latestFilename;
+      
+      print('GOOGLE DRIVE FILES:');
+      
+      // Combine all matches from different patterns
+      final allMatches = <String>{};
+      for (final match in matches1) {
+        final filename = match.group(1);
+        if (filename != null) allMatches.add(filename);
+      }
+      for (final match in matches2) {
+        final filename = match.group(1);
+        if (filename != null && filename.endsWith('.bin')) allMatches.add(filename);
+      }
+      
+      print('Total unique .bin filenames found: ${allMatches.length}');
+      
+      for (final filename in allMatches) {
+        print('Found filename: "$filename"');
+        
+        // Extract version from filename - supports formats:
+        // "1.38.0.bin", "v1.38.0.bin", "firmware_1.38.0.bin", "Spectra6_v1.38.0.bin"
+        // Also supports leading zeros: "01.37.0.bin"
+        // Use word boundary or start to avoid capturing longer numbers like "221.38.0"
+        RegExp versionRegex = RegExp(r'(?:^|[_\-\s])v?(\d{1,2}\.\d{1,2}\.\d{1,2})\.bin');
+        Match? versionMatch = versionRegex.firstMatch(filename);
+        
+        if (versionMatch != null) {
+          final version = versionMatch.group(1)!;
+          print('Extracted version: $version');
+          
+          // If we find multiple .bin files, keep the highest version
+          if (latestVersion == null || _compareVersions(version, latestVersion) > 0) {
+            latestVersion = version;
+            latestFilename = filename;
+            print('Selected as latest version');
+          }
+        } else {
+          print('No version pattern found in filename');
+        }
+      }
+      
+      print('FINAL GOOGLE DRIVE VERSION: $latestVersion');
+      print('FINAL GOOGLE DRIVE FILENAME: $latestFilename');
+      print('#####################');
+      
+      if (latestVersion != null) {
+        return latestVersion;
+      }
+      
+      // If no version found in filename
+      print('❌ No version found in any OTA filename');
+      print('⚠️ Make sure the Google Drive folder is set to "Anyone with the link can view"');
+      return null;
+      
     } catch (e) {
-      print('Error getting OTA file version: $e');
+      print('❌ Error getting OTA file version: $e');
       return null;
     }
   }
   
   bool _shouldEnableOtaButton(String? deviceVersion, String? otaVersion) {
+    print('🔍 Checking if OTA button should be enabled...');
+    print('   Device version: $deviceVersion');
+    print('   OTA version: $otaVersion');
+    
     if (deviceVersion == null || otaVersion == null) {
-      return true; // Enable by default if we can't determine versions
+      print('❌ OTA button disabled: Missing version info');
+      return false; // Hide button if we can't determine versions
     }
     
-    // Compare versions
-    return _compareVersions(deviceVersion, otaVersion) < 0; // Device version < OTA version
+    // Compare versions - show button only if OTA version > device version
+    final comparison = _compareVersions(otaVersion, deviceVersion);
+    print('📊 Version comparison result: $comparison');
+    print('   (OTA $otaVersion vs Device $deviceVersion)');
+    
+    if (comparison > 0) {
+      print('✅ OTA button ENABLED: Update available');
+    } else if (comparison == 0) {
+      print('ℹ️ OTA button DISABLED: Versions are equal');
+    } else {
+      print('ℹ️ OTA button DISABLED: Device version is newer');
+    }
+    
+    return comparison > 0; // OTA version > Device version
   }
   
   int _compareVersions(String version1, String version2) {
@@ -4296,24 +4407,88 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     }
 
     try {
-      // Load first available bin from assets/OTAFile
+      // Download OTA file from Google Drive
+      _updateStatus("Downloading update file...");
+      
       Uint8List? otaBytes;
-      final candidates = [
-        'OTAFile/firmware.bin',
-        'OTAFile/ota.bin',
-        'OTAFile/update.bin',
-        'OTAFile/Spectra6.ino.bin',
-      ];
-      for (final path in candidates) {
-        try {
-          final bd = await rootBundle.load(path);
-          otaBytes = bd.buffer.asUint8List();
-          _updateStatus("Update file ready");
-          break;
-        } catch (_) {}
+      
+      try {
+        // Fetch the folder page to find .bin files
+        final url = 'https://drive.google.com/drive/folders/$_otaFolderId';
+        final resp = await http.get(Uri.parse(url));
+        
+        if (resp.statusCode != 200) {
+          throw Exception('Cannot access OTA folder');
+        }
+        
+        // Find the .bin file with highest version (33-character file IDs)
+        final html = resp.body;
+        final pattern = RegExp(r'["\[]([a-zA-Z0-9_-]{33})["\]]');
+        final matches = pattern.allMatches(html);
+        
+        String? binFileId;
+        String? highestVersion;
+        
+        for (final match in matches) {
+          final id = match.group(1);
+          if (id != null && id != _otaFolderId) {
+            // Check if this ID is associated with a .bin filename
+            final startPos = match.start;
+            final contextStart = (startPos - 200).clamp(0, html.length);
+            final contextEnd = (startPos + 200).clamp(0, html.length);
+            final context = html.substring(contextStart, contextEnd);
+            
+            // Look for .bin filename and extract version
+            if (context.contains('.bin')) {
+              RegExp filenameRegex = RegExp(r'"([^"]*\.bin)"');
+              Match? filenameMatch = filenameRegex.firstMatch(context);
+              
+              if (filenameMatch != null) {
+                final filename = filenameMatch.group(1);
+                RegExp versionRegex = RegExp(r'v?(\d+\.\d+\.\d+)');
+                Match? versionMatch = versionRegex.firstMatch(filename ?? '');
+                
+                if (versionMatch != null) {
+                  final version = versionMatch.group(1)!;
+                  
+                  // Keep the file with the highest version
+                  if (highestVersion == null || _compareVersions(version, highestVersion) > 0) {
+                    highestVersion = version;
+                    binFileId = id;
+                    print('Found OTA file: $filename (version $version, ID: $id)');
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        if (binFileId == null) {
+          throw Exception('No .bin file found in OTA folder');
+        }
+        
+        print('Selected OTA file for download: version $highestVersion (ID: $binFileId)');
+        
+        // Download the file
+        final downloadUrl = 'https://drive.google.com/uc?export=download&id=$binFileId';
+        _updateStatus("Downloading from Google Drive...");
+        final downloadResp = await http.get(Uri.parse(downloadUrl));
+        
+        if (downloadResp.statusCode != 200) {
+          throw Exception('Failed to download OTA file');
+        }
+        
+        otaBytes = downloadResp.bodyBytes;
+        _updateStatus("Update file ready (${(otaBytes.length / 1024).toStringAsFixed(1)} KB)");
+        
+      } catch (e) {
+        print('Error downloading OTA file: $e');
+        _updateStatus("Failed to download update: $e");
+        return;
       }
-      if (otaBytes == null || otaBytes.isEmpty) {
-        _updateStatus("Update file not found");
+      
+      if (otaBytes.isEmpty) {
+        _updateStatus("Update file is empty");
         return;
       }
 
