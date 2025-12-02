@@ -2817,7 +2817,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           onSubmitted: (_)=> _searchOnlineImages(),
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
-            hintText: 'Search (e.g. car)',
+            hintText: 'Search (e.g. Abstract Art)',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal:12, vertical:10),
           ),
@@ -2830,72 +2830,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade600, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
         )),
       ]),
-      const SizedBox(height:8),
-      // Pexels Categories
-      SizedBox(
-        height: 40,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(right: 8.0),
-                child: Text('Pexels:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
-              ),
-              ..._pexelsCategories.map((c){
-                final selected = _selectedPexelsCategory == c;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(_titleCase(c)),
-                    selected: selected,
-                    selectedColor: Colors.green.shade600,
-                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12, fontFamily: 'Roboto'),
-                    onSelected: (_){
-                      setState(()=> _selectedPexelsCategory = c);
-                      // Category triggers its own search independent of text field
-                      if(!_isOnlineSearching){ _searchPexelsByCategory(c); }
-                    },
-                  ),
-                );
-              }).toList(),
-            ],
-          ),
-        ),
-      ),
-      const SizedBox(height:8),
-      // Pixabay Categories
-      SizedBox(
-        height: 40,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(right: 8.0),
-                child: Text('Pixabay:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
-              ),
-              ..._pixabayCategories.map((c){
-                final selected = _selectedPixabayCategory == c;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(_titleCase(c)),
-                    selected: selected,
-                    selectedColor: Colors.blue.shade600,
-                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87, fontSize: 12, fontFamily: 'Roboto'),
-                    onSelected: (_){
-                      setState(()=> _selectedPixabayCategory = c);
-                      // Category triggers its own search independent of text field
-                      if(!_isOnlineSearching){ _searchPixabayByCategory(c); }
-                    },
-                  ),
-                );
-              }).toList(),
-            ],
-          ),
-        ),
-      ),
     ]);
   }
 
