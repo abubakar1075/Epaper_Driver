@@ -256,7 +256,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // =============================================================
   // Simple on-device "AI Images" generator (prompt -> synthesized PNG)
   bool _showAi = false;
-  final TextEditingController _aiPromptController = TextEditingController(text: 'A cozy cabin in snowy mountains at sunset');
+  final TextEditingController _aiPromptController = TextEditingController(text: 'A cosy cabin in snowy mountains at sunset');
   bool _aiIsGenerating = false;
   Uint8List? _aiPngBytes;
   String? _aiError;
@@ -746,10 +746,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 onPressed: _pickImage,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                  backgroundColor: Colors.blue.shade500,
+                  backgroundColor: Colors.pink.shade600,
                   foregroundColor: Colors.white,
                   elevation: 2,
-                  shadowColor: Colors.blue.withOpacity(0.3),
+                  shadowColor: Colors.pink.withOpacity(0.3),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -770,11 +770,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               height: 32,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
+                  backgroundColor: Colors.purple.shade600,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                   elevation: 2,
-                  shadowColor: Colors.green.withOpacity(0.3),
+                  shadowColor: Colors.purple.withOpacity(0.3),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -798,10 +798,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 onPressed: (){ setState((){ _showAi = true; _aiError = null; }); },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                  backgroundColor: Colors.purple.shade500,
+                  backgroundColor: Colors.orange.shade600,
                   foregroundColor: Colors.white,
                   elevation: 2,
-                  shadowColor: Colors.purple.withOpacity(0.3),
+                  shadowColor: Colors.orange.withOpacity(0.3),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -833,10 +833,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                  backgroundColor: Colors.orange.shade500,
+                  backgroundColor: Colors.teal.shade600,
                   foregroundColor: Colors.white,
                   elevation: 2,
-                  shadowColor: Colors.orange.withOpacity(0.3),
+                  shadowColor: Colors.teal.withOpacity(0.3),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -967,22 +967,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               setState(() => _updateFrameBorderColor());
             } : null,
             icon: Icons.screen_rotation,
-            backgroundColor: Colors.indigo.shade600,
+            backgroundColor: Colors.teal.shade600,
           ),
-          const SizedBox(width:1),
-          _smallBtn('Save', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.green.shade600),
-          const SizedBox(width:1),
-          _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send, backgroundColor: Colors.blue.shade600),
+          const SizedBox(width:8),
+          _smallBtn('Save', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.purple.shade600),
         ]),
         const Spacer(),
         // Right side controls
         Row(children:[
-          // Only add spacing if OTA button is visible (after version check is complete)
-          if (_versionCheckCompleted && (_otaButtonEnabled || _isCheckingVersion)) ...[
-            const SizedBox(width:1),
+          // OTA button if available
+          if (_versionCheckCompleted && (_otaButtonEnabled || _isCheckingVersion))
             _buildOtaButton(),
+          if (_versionCheckCompleted && (_otaButtonEnabled || _isCheckingVersion))
             const SizedBox(width:1),
-          ],
+          // Send button always at the extreme right
+          _smallBtn('Send', _sendOrProcessThenSend, icon: Icons.send, backgroundColor: Colors.blue.shade600),
         ])
       ]),
     );
@@ -2572,24 +2571,31 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Category buttons
-        // CanvasBT category buttons in horizontally scrollable row
+        // Category buttons with equal spacing
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-          child: SizedBox(
-            height: 36,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _buildCategoryButton('Moments', Colors.pink.shade600),
-                const SizedBox(width: 4),
-                _buildCategoryButton('Spaces', Colors.purple.shade600),
-                const SizedBox(width: 4),
-                _buildCategoryButton('Tone', Colors.orange.shade600),
-                const SizedBox(width: 4),
-                _buildCategoryButton('Pulse', Colors.teal.shade600),
-              ],
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Calculate equal width for all 4 category buttons
+              final double spacing = 6.0;
+              final double totalSpacing = spacing * 3; // 3 gaps between 4 buttons
+              final double buttonWidth = (constraints.maxWidth - totalSpacing) / 4;
+              
+              return SizedBox(
+                height: 36,
+                child: Row(
+                  children: [
+                    SizedBox(width: buttonWidth, child: _buildCategoryButton('Moments', Colors.pink.shade600)),
+                    SizedBox(width: spacing),
+                    SizedBox(width: buttonWidth, child: _buildCategoryButton('Spaces', Colors.purple.shade600)),
+                    SizedBox(width: spacing),
+                    SizedBox(width: buttonWidth, child: _buildCategoryButton('Tone', Colors.orange.shade600)),
+                    SizedBox(width: spacing),
+                    SizedBox(width: buttonWidth, child: _buildCategoryButton('Pulse', Colors.teal.shade600)),
+                  ],
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height:4),
