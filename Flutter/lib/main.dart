@@ -4355,16 +4355,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // =====================================================================
 
   Future<void> _sendOtaFile() async {
+    // Guard: Check connection
     if (!await _isReallyConnected()) {
       setState((){ _connectedDevice = null; _rxCharacteristic = null; });
       _updateStatus("Not connected. Trying to connect...");
-      // Reuse the same UX pattern as _sendOrProcessThenSend when disconnected
+      
       if(!mounted) return;
       final String? fingerAsset = await _resolveFingerAssetForOrientation(_isPortrait);
-      _pendingSend = _PendingSend.ota; // remember user's intent
+      _pendingSend = _PendingSend.ota;
       if (!mounted) return;
       
-      // Use scaffold context for reliable dialog display
       final dialogContext = _scaffoldKey.currentContext ?? context;
       await showDialog(
         context: dialogContext,
@@ -4394,187 +4394,219 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         }
       );
       _activeDialogContext = null;
-      // Only clear intent if still disconnected (manual dismiss). If connected, keep for auto-resume.
+      
       final stillDisconnected = (_connectedDevice == null || _rxCharacteristic == null);
       if (stillDisconnected) {
         _pendingSend = _PendingSend.none;
       }
       return;
     }
+    
+    // Guard: Prevent concurrent transfers
     if (_isSending) {
       _updateStatus("Another transfer is in progress");
       return;
     }
 
+    // Set sending state BEFORE any async operations
+    setState(() {
+      _isSending = true;
+      _transferProgress = 0;
+      _transferSpeed = 0;
+    });
+
+    Uint8List? otaBytes;
+    
     try {
-      // Download OTA file from Google Drive
+      // Step 1: Download firmware from Google Drive
       _updateStatus("Downloading update file...");
       
-      Uint8List? otaBytes;
+      final url = 'https://drive.google.com/drive/folders/$_otaFolderId';
+      print('🔽 [OTA] Fetching folder: $url');
       
-      try {
-        // Fetch the folder page to find .bin files
-        final url = 'https://drive.google.com/drive/folders/$_otaFolderId';
-        print('🔽 Fetching OTA folder for download...');
-        final resp = await http.get(Uri.parse(url));
-        
-        if (resp.statusCode != 200) {
-          throw Exception('Cannot access OTA folder');
-        }
-        
-        print('✅ Folder accessed, searching for .bin file...');
-        
-        final html = resp.body;
-        
-        // Use the same improved logic as _getOtaFileVersion()
-        // Pattern 1: Standard quoted filename
-        RegExp pattern1 = RegExp(r'"([^"]*\.bin)"');
-        final matches1 = pattern1.allMatches(html);
-        
-        // Pattern 2: HTML-encoded or escaped
-        RegExp pattern2 = RegExp(r'([^\s<>"]+\.bin)');
-        final matches2 = pattern2.allMatches(html);
-        
-        // Combine all matches
-        final allFilenames = <String>{};
-        for (final match in matches1) {
-          final filename = match.group(1);
-          if (filename != null) allFilenames.add(filename);
-        }
-        for (final match in matches2) {
-          final filename = match.group(1);
-          if (filename != null && filename.endsWith('.bin')) allFilenames.add(filename);
-        }
-        
-        print('Found ${allFilenames.length} .bin filename(s)');
-        
-        String? targetFilename;
-        String? highestVersion;
-        
-        // Find the filename with highest version
-        for (final filename in allFilenames) {
-          RegExp versionRegex = RegExp(r'(?:^|[_\-\s])v?(\d{1,2}\.\d{1,2}\.\d{1,2})\.bin');
-          Match? versionMatch = versionRegex.firstMatch(filename);
-          
-          if (versionMatch != null) {
-            final version = versionMatch.group(1)!;
-            print('  "$filename" -> version $version');
-            
-            if (highestVersion == null || _compareVersions(version, highestVersion) > 0) {
-              highestVersion = version;
-              targetFilename = filename;
-            }
-          }
-        }
-        
-        if (targetFilename == null) {
-          throw Exception('No .bin file found in OTA folder');
-        }
-        
-        print('Selected file for download: "$targetFilename" (version $highestVersion)');
-        
-        // Now find the file ID for this filename
-        final pattern = RegExp(r'["\[]([a-zA-Z0-9_-]{33})["\]]');
-        final matches = pattern.allMatches(html);
-        
-        String? binFileId;
-        
-        for (final match in matches) {
-          final id = match.group(1);
-          if (id != null && id != _otaFolderId) {
-            // Check if this ID is near our target filename
-            final startPos = match.start;
-            final contextStart = (startPos - 300).clamp(0, html.length);
-            final contextEnd = (startPos + 300).clamp(0, html.length);
-            final context = html.substring(contextStart, contextEnd);
-            
-            if (context.contains(targetFilename)) {
-              binFileId = id;
-              print('Found file ID: $id');
-              break;
-            }
-          }
-        }
-        
-        if (binFileId == null) {
-          throw Exception('Could not find file ID for $targetFilename');
-        }
-        
-        print('Downloading file ID: $binFileId');
-        
-        // Download the file
-        final downloadUrl = 'https://drive.google.com/uc?export=download&id=$binFileId';
-        _updateStatus("Downloading latest firmware...");
-        final downloadResp = await http.get(Uri.parse(downloadUrl));
-        
-        if (downloadResp.statusCode != 200) {
-          throw Exception('Failed to download OTA file');
-        }
-        
-        otaBytes = downloadResp.bodyBytes;
-        _updateStatus("Update file ready (${(otaBytes.length / 1024).toStringAsFixed(1)} KB)");
-        
-      } catch (e) {
-        print('Error downloading OTA file: $e');
-        _updateStatus("Failed to download update: $e");
-        return;
+      final resp = await http.get(Uri.parse(url));
+      if (resp.statusCode != 200) {
+        throw Exception('Cannot access OTA folder (HTTP ${resp.statusCode})');
       }
+      
+      final html = resp.body;
+      
+      // Extract all .bin filenames using multiple patterns
+      final allFilenames = <String>{};
+      
+      // Pattern 1: Quoted filenames
+      RegExp pattern1 = RegExp(r'"([^"]*\.bin)"');
+      for (final match in pattern1.allMatches(html)) {
+        final filename = match.group(1);
+        if (filename != null) allFilenames.add(filename);
+      }
+      
+      // Pattern 2: Unquoted filenames
+      RegExp pattern2 = RegExp(r'([^\s<>"]+\.bin)');
+      for (final match in pattern2.allMatches(html)) {
+        final filename = match.group(1);
+        if (filename != null && filename.endsWith('.bin')) allFilenames.add(filename);
+      }
+      
+      if (allFilenames.isEmpty) {
+        throw Exception('No .bin files found in folder');
+      }
+      
+      print('🔍 [OTA] Found ${allFilenames.length} .bin file(s)');
+      
+      // Find filename with highest version
+      String? targetFilename;
+      String? highestVersion;
+      
+      final versionRegex = RegExp(r'(?:^|[_\-\s])v?(\d{1,2}\.\d{1,2}\.\d{1,2})\.bin');
+      
+      for (final filename in allFilenames) {
+        final versionMatch = versionRegex.firstMatch(filename);
+        if (versionMatch != null) {
+          final version = versionMatch.group(1)!;
+          print('  📄 "$filename" → v$version');
+          
+          if (highestVersion == null || _compareVersions(version, highestVersion) > 0) {
+            highestVersion = version;
+            targetFilename = filename;
+          }
+        }
+      }
+      
+      if (targetFilename == null) {
+        throw Exception('No valid version found in .bin filenames');
+      }
+      
+      print('✅ [OTA] Selected: "$targetFilename" (v$highestVersion)');
+      
+      // Step 2: Find file ID for download
+      final idPattern = RegExp(r'["\[]([a-zA-Z0-9_-]{33})["\]]');
+      String? binFileId;
+      
+      for (final match in idPattern.allMatches(html)) {
+        final id = match.group(1);
+        if (id == null || id == _otaFolderId) continue;
+        
+        // Check if this ID is associated with our target filename
+        final startPos = match.start;
+        final contextStart = (startPos - 300).clamp(0, html.length);
+        final contextEnd = (startPos + 300).clamp(0, html.length);
+        final context = html.substring(contextStart, contextEnd);
+        
+        if (context.contains(targetFilename)) {
+          binFileId = id;
+          print('🆔 [OTA] File ID: $id');
+          break;
+        }
+      }
+      
+      if (binFileId == null) {
+        throw Exception('Could not find download ID for $targetFilename');
+      }
+      
+      // Step 3: Download the firmware binary
+      final downloadUrl = 'https://drive.google.com/uc?export=download&id=$binFileId';
+      _updateStatus("Downloading latest firmware...");
+      print('⬇️ [OTA] Downloading from: $downloadUrl');
+      
+      final downloadResp = await http.get(Uri.parse(downloadUrl));
+      
+      if (downloadResp.statusCode != 200) {
+        throw Exception('Download failed (HTTP ${downloadResp.statusCode})');
+      }
+      
+      otaBytes = downloadResp.bodyBytes;
       
       if (otaBytes.isEmpty) {
-        _updateStatus("Update file is empty");
-        return;
+        throw Exception('Downloaded file is empty');
       }
-
-      setState(() {
-        _isSending = true;
-        _transferProgress = 0;
-        _transferSpeed = 0;
-      });
-
-      // Protocol: send 1-byte type (OTA) + 4-byte LE size then raw chunks
+      
+      final sizeKB = (otaBytes.length / 1024).toStringAsFixed(1);
+      print('✅ [OTA] Downloaded ${sizeKB} KB');
+      _updateStatus("Update ready ($sizeKB KB)");
+      
+      await Future.delayed(const Duration(milliseconds: 500)); // Brief pause for user feedback
+      
+      // Step 4: Send firmware via BLE
       final totalSize = otaBytes.length;
+      
+      // Send header: 1 byte type + 4 bytes size (little endian)
       final header = Uint8List(5);
       header[0] = TRANSFER_TYPE_OTA;
       final bd = ByteData.view(header.buffer);
       bd.setUint32(1, totalSize, Endian.little);
+      
+      print('📤 [OTA] Sending header: type=${header[0]}, size=$totalSize');
       await _rxCharacteristic!.write(header);
-  await Future.delayed(const Duration(milliseconds: 10));
-
-      final start = DateTime.now().millisecondsSinceEpoch;
+      await Future.delayed(const Duration(milliseconds: 10));
+      
+      // Send firmware data in chunks
+      final startTime = DateTime.now().millisecondsSinceEpoch;
       int sent = 0;
-      int dynamicChunkOta = BLE_CHUNK_SIZE;
+      int chunkSize = BLE_CHUNK_SIZE;
+      
+      print('📤 [OTA] Starting transfer...');
+      
       for (int i = 0; i < otaBytes.length;) {
-        final end = (i + dynamicChunkOta > otaBytes.length) ? otaBytes.length : i + dynamicChunkOta;
-        final view = Uint8List.sublistView(otaBytes, i, end);
+        final end = math.min(i + chunkSize, otaBytes.length);
+        final chunk = Uint8List.sublistView(otaBytes, i, end);
+        
         try {
-          await _rxCharacteristic!.write(view, withoutResponse: true);
+          await _rxCharacteristic!.write(chunk, withoutResponse: true);
           sent = end;
           i = end;
-        } catch (e) {
-          _updateStatus("Transfer error, retrying...", force: true);
-          dynamicChunkOta = math.max(20, dynamicChunkOta ~/ 2);
-          await Future.delayed(const Duration(milliseconds: 25));
-          if (dynamicChunkOta <= 20 && view.length <= 20) {
-            throw Exception("OTA failed at offset $i: $e");
+          
+          // Update progress
+          final now = DateTime.now().millisecondsSinceEpoch;
+          final elapsed = (now - startTime) / 1000.0;
+          final speed = elapsed > 0 ? (sent / 1024.0) / elapsed : 0.0;
+          final progress = (sent * 100 ~/ totalSize);
+          
+          if (mounted) {
+            setState(() {
+              _transferSpeed = speed;
+              _transferProgress = progress;
+            });
           }
+          
+          await Future.delayed(const Duration(milliseconds: 1));
+          
+        } catch (e) {
+          // Retry with smaller chunk on error
+          print('⚠️ [OTA] Write error at $i, reducing chunk size');
+          _updateStatus("Transfer error, retrying...", force: true);
+          
+          chunkSize = math.max(20, chunkSize ~/ 2);
+          await Future.delayed(const Duration(milliseconds: 25));
+          
+          if (chunkSize <= 20 && chunk.length <= 20) {
+            throw Exception("Transfer failed at byte $i: $e");
+          }
+          
           continue;
         }
-
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final elapsed = (now - start) / 1000.0;
-        final speed = elapsed > 0 ? (sent / 1024.0) / elapsed : 0.0;
-        final progress = (sent * 100 ~/ totalSize);
-        setState(() { _transferSpeed = speed; _transferProgress = progress; });
-
-        await Future.delayed(const Duration(milliseconds: 1));
       }
-
-      final end = DateTime.now().millisecondsSinceEpoch;
-      final totalSec = (end - start) / 1000.0;
+      
+      final endTime = DateTime.now().millisecondsSinceEpoch;
+      final totalSec = (endTime - startTime) / 1000.0;
+      final avgSpeed = (totalSize / 1024.0) / totalSec;
+      
+      print('✅ [OTA] Transfer complete: ${totalSec.toStringAsFixed(1)}s @ ${avgSpeed.toStringAsFixed(1)} KB/s');
       _updateStatus("Update sent successfully in ${totalSec.toStringAsFixed(1)} seconds");
-      // keep _isSending true until ACK_COMPLETE from device
+      
+      // Keep _isSending true until device confirms completion
+      
     } catch (e) {
-      setState(() { _isSending = false; });
+      print('❌ [OTA] Error: $e');
+      _updateStatus("Failed to download update: $e");
+      
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+          _transferProgress = 0;
+          _transferSpeed = 0;
+        });
+      }
     }
   }
 
