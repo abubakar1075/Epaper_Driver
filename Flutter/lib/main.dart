@@ -4830,7 +4830,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       _buildBulletPoint('Battery Status - Check your frame\'s battery in the preview corner'),
                       _buildBulletPoint('USB Charging - Frame stays awake and shows breathing LED when charging'),
                       _buildBulletPoint('Auto-Connect - App remembers and reconnects to your frame automatically'),
-                      _buildBulletPoint('OTA Updates - Orange OTA button appears when firmware updates are available'),
+                      _buildBulletPoint('Firmware Updates - Orange OTA button appears when new firmware is available. Touch frame to connect, then press OTA to update'),
                       _buildBulletPoint('Smart Search - Library filters images by your current orientation (Portrait/Landscape)'),
                       const SizedBox(height: 20),
                       
@@ -4852,6 +4852,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
+                      _buildBulletPoint('LED not lighting on touch? Battery may be depleted or sensor needs calibration. Connect USB charger (LED will breathe), then use "Calibrate Sensor" in menu'),
                       _buildBulletPoint('Can\'t connect? Make sure Bluetooth is on and touch the frame to wake it'),
                       _buildBulletPoint('Frame not responding? Hold the boot button 5 seconds for factory reset'),
                       _buildBulletPoint('Low battery? Connect USB cable - frame shows charging status to the app'),
