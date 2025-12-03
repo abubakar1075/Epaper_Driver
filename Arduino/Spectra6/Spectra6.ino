@@ -1080,6 +1080,19 @@ void stopingSleep() {
     extern void bleTick();
     bleTick();
 
+    // Every ~10s, if connected, send a calibration-needed opcode to app
+    static unsigned long lastCalibPrompt = 0;
+    if (BLE.connected()) {
+      unsigned long now = millis();
+      if (now - lastCalibPrompt >= 10000UL) {
+        extern BLECharacteristic txCharacteristic;
+        uint8_t msg[] = { 0xC2 }; // Calibration-needed opcode
+        txCharacteristic.writeValue(msg, sizeof(msg));
+        Serial.println("[stopingSleep] Sent calibration-needed opcode (0xC2)");
+        lastCalibPrompt = now;
+      }
+    }
+
     // Keep the idle timer alive while payload is ongoing
     if (!receivingSize) {
       connectionStartTime = millis();

@@ -117,6 +117,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   static const int ACK_ERROR = 0xFF;
   static const int ACK_BATTERY = 0xB0; // Battery percentage notification
   static const int ACK_CHARGING = 0xB1; // Charging status notification
+  static const int ACK_CALIBRATION_NEEDED = 0xC2; // Prompt app to show calibration dialog
   // Transfer-type header values (1 byte)
   static const int TRANSFER_TYPE_IMAGE = 0x10;
   static const int TRANSFER_TYPE_OTA   = 0x20;
@@ -278,6 +279,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   BuildContext? _activeDialogContext;
   // Track which action should auto-resume after connect when the popup was shown
   _PendingSend _pendingSend = _PendingSend.none;
+  // Prevent duplicate calibration prompts
+  bool _calibrationPromptVisible = false;
 
   // =============================================================
   // OTA VERSION CHECKING
@@ -4206,6 +4209,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     if (handled) return;
 
     switch (ackType) {
+      case ACK_CALIBRATION_NEEDED:
+        _showCalibrationNeededPrompt();
+        break;
       case ACK_BATTERY:
         if (data.length >= 2) {
           final int batt = data[1].clamp(0, 100);
@@ -5465,6 +5471,45 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         ),
       ),
     );
+  }
+
+  // Show a popup when the device reports persistent touch readings
+  void _showCalibrationNeededPrompt() {
+    if (!mounted) return;
+    if (_calibrationPromptVisible) return;
+    _calibrationPromptVisible = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Persistent Touch Detected'),
+        content: const Text(
+          'The frame is continuously detecting touch input. If this repeats and you’re not touching the frame (and the corner sensor area is clear), please calibrate the touch sensor to restore normal operation.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _calibrationPromptVisible = false;
+              Navigator.of(ctx).pop();
+            },
+            child: const Text('OK'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _calibrationPromptVisible = false;
+              Navigator.of(ctx).pop();
+              _sendCalibrationCommand();
+            },
+            child: const Text('Calibrate Now'),
+          ),
+        ],
+      ),
+    ).then((_) {
+      // Ensure flag resets even if dismissed by back/overlay
+      _calibrationPromptVisible = false;
+    });
   }
 
   Widget _buildPolicySection({required String title, required IconData icon, required String content}) {
