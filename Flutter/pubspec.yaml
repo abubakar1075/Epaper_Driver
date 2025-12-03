@@ -79,7 +79,6 @@ flutter:
   assets:
     - SamplePics/
     - Framepic/
-    - OTAFile/
     - Logo/
 
 # Configure app icons generation

@@ -31,6 +31,7 @@ import 'package:tuple/tuple.dart';
 import 'package:path_provider/path_provider.dart'; // persistent storage dir
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'services/logging.dart';
 
 // Tracks which action the user intended when tapping while disconnected
 enum _PendingSend { none, image, ota }
@@ -155,6 +156,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   bool _mtuRequestedForThisConnection = false; // guard to avoid repeated MTU requests per connection
   int? _batteryPercent; // latest battery percent from device
   bool _isCharging = false; // charging status from device
+  bool _permissionsReady = false; // gate BLE operations until runtime permissions granted
   // Periodic connection status for bottom bar
   Timer? _connectionStatusTimer;
   Timer? _batteryStatusTimer; // Poll battery while charging
@@ -395,6 +397,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   @override
   void initState(){
     super.initState();
+    AppLog.d('APP', 'initState start');
+    // Log platform and basic environment info
+    AppLog.d('APP', 'Platform', {
+      'dart': Platform.version,
+      'os': Platform.operatingSystem,
+      'android': Platform.isAndroid,
+      'ios': Platform.isIOS,
+    });
     // Initialise animated splash
     _introCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
     _introScale = CurvedAnimation(parent: _introCtrl, curve: Curves.easeOutBack);
@@ -415,17 +425,24 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     
     // Track Bluetooth adapter state
     _btStateSub = FlutterBluePlus.adapterState.listen((s){
+      AppLog.d('BLE', 'Adapter state change', {'state': s.name});
       final isOn = (s == BluetoothAdapterState.on);
       // If Bluetooth just turned ON and we are not connected, kick off auto scan/connect
-      if(isOn && _connectedDevice==null && !_isScanning){
+      if(isOn && _permissionsReady && _connectedDevice==null && !_isScanning){
         _scanForDevices();
       }
     });
     
     // Initialise app after first frame with proper sequencing
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      AppLog.d('APP', 'PostFrame init begin');
       // Step 1: Request permissions
       await _checkPermissions();
+      // Ensure we do not proceed until permissions are granted
+      if(!_permissionsReady){
+        AppLog.d('PERM', 'Waiting for permissions before BLE operations');
+        return; // stop postFrame init; timers will trigger reconnect when ready
+      }
       
       // Step 2: Initialise Library and load first image
       await _initPersistentLibrary();
@@ -439,18 +456,28 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         try {
           final state = await FlutterBluePlus.adapterState.first;
           print('Initial Bluetooth state: $state');
-          if(state == BluetoothAdapterState.on && _connectedDevice == null && !_isScanning){
+          AppLog.d('BLE', 'Initial adapter state', {'state': state.name});
+          if(state == BluetoothAdapterState.on && _permissionsReady && _connectedDevice == null && !_isScanning){
             print('Starting initial BLE scan after app launch...');
+            AppLog.d('BLE', 'Starting initial scan');
             // Add small delay to ensure permissions are fully processed
             await Future.delayed(const Duration(milliseconds: 500));
+            try {
+              final isScanningNow = await FlutterBluePlus.isScanning.first;
+              AppLog.d('BLE', 'isScanning state before kick', {'isScanning': isScanningNow});
+            } catch (e) {
+              AppLog.e('BLE', 'Failed to read isScanning', e);
+            }
             if(mounted && _connectedDevice == null && !_isScanning){
               _scanForDevices();
             }
           } else {
             print('Skipping initial scan - BT off or already connected/scanning');
+            AppLog.d('BLE', 'Skip initial scan', {'connected': _connectedDevice!=null, 'scanning': _isScanning});
           }
         } catch(e){
           print('Error checking initial Bluetooth state: $e');
+          AppLog.e('BLE', 'Initial state check failed', e);
         }
       }
     });
@@ -2233,6 +2260,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
   // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
   Future<void> _addCurrentToLibrary() async {
+    AppLog.d('LIB', 'Add current to library tapped');
     // Save the cropped area from the ORIGINAL high-quality image
     if(_originalImage==null){ return; }
     
@@ -2267,6 +2295,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     );
     setState((){ _library.insert(0, entry); });
     _updateStatus('Added to library (total ${_library.length})');
+    AppLog.d('LIB', 'Entry added to memory', {'id': entry.id, 'portrait': entry.wasPortrait});
     _persistLibraryEntry(entry);
   }
 
@@ -3279,23 +3308,51 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // Request necessary permissions
   Future<void> _checkPermissions() async {
     if (Platform.isAndroid) {
-      Map<Permission, PermissionStatus> statuses = await [
+      AppLog.d('PERM', 'Requesting permissions');
+      // Request core BLE + Location permissions first; treat storage as optional
+      final coreList = [
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
         Permission.bluetoothAdvertise,
         Permission.location,
-        Permission.storage,
-      ].request();
+      ];
+      Map<Permission, PermissionStatus> statuses = await coreList.request();
+      // Request storage separately (optional)
+      PermissionStatus storageStatus = await Permission.storage.request();
       
+      // Also log service status for Location as it gates scan results
+      try {
+        final locService = await Permission.location.serviceStatus;
+        AppLog.d('PERM', 'Location service status', {'status': locService.toString()});
+      } catch (e) {
+        AppLog.e('PERM', 'Failed to read location service status', e);
+      }
+
       bool allGranted = true;
       statuses.forEach((permission, status) {
+        AppLog.d('PERM', 'Permission result', {
+          'permission': permission.toString(),
+          'granted': status.isGranted,
+          'status': status.toString(),
+        });
         if (!status.isGranted) {
           allGranted = false;
         }
       });
+      // Log optional storage separately and do NOT block BLE on it
+      AppLog.d('PERM', 'Storage permission', {
+        'permission': Permission.storage.toString(),
+        'granted': storageStatus.isGranted,
+        'status': storageStatus.toString(),
+      });
       
       if (!allGranted) {
         _updateStatus("Missing permissions. Please grant Bluetooth and location permissions.");
+        AppLog.e('PERM', 'Missing required permissions');
+        _permissionsReady = false;
+      } else {
+        AppLog.d('PERM', 'All required permissions granted');
+        _permissionsReady = true;
       }
     }
   }
@@ -3757,6 +3814,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
   // Start BLE device scan
   Future<void> _scanForDevices() async {
+    // Do not scan until runtime permissions are confirmed
+    if (!_permissionsReady) {
+      AppLog.d('BLE', 'Scan blocked: permissions not ready');
+      return;
+    }
     if (_isScanning) return;
     
     if (!mounted) return;
@@ -3766,12 +3828,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   _autoConnectTried = false;
     });
   _updateStatus("finding CanvasBT");
+  AppLog.d('BLE', 'Scan start');
     
     try {
       // Check if Bluetooth is on
       var adapterState = await FlutterBluePlus.adapterState.first;
       if (adapterState != BluetoothAdapterState.on) {
         _updateStatus("Bluetooth is turned off");
+        AppLog.e('BLE', 'Scan aborted: adapter OFF');
         if (mounted) {
           setState(() {
             _isScanning = false;
@@ -3781,16 +3845,43 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       }
       
       // Start scanning
-      FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+      AppLog.d('BLE', 'Calling startScan', {
+        'timeout_s': 10,
+        'filter_service': UART_SERVICE_UUID,
+        'duplicates': true,
+        'scanMode': 'lowLatency'
+      });
+      // Prefer filtering by Nordic UART Service to find the target faster.
+      // flutter_blue_plus v1.x supports withServices only.
+      try {
+        await FlutterBluePlus.startScan(
+          timeout: const Duration(seconds: 10),
+          withServices: [Guid(UART_SERVICE_UUID)],
+        );
+      } catch (e) {
+        // Fallback without filters if API signature changes on platform
+        AppLog.e('BLE', 'startScan with service filter failed, retrying plain', e);
+        FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      }
       
       // Listen for scan results
       // Cancel any previous listener to avoid duplicates
       await _scanSub?.cancel();
       _scanSub = FlutterBluePlus.scanResults.listen((results) {
+        AppLog.d('BLE', 'Scan results batch', {'count': results.length});
         for (ScanResult result in results) {
           final advName = result.advertisementData.advName;
           final devName = result.device.advName;
           final name = advName.isNotEmpty ? advName : devName;
+          AppLog.d('BLE', 'Device seen', {
+            'name': name,
+            'rssi': result.rssi,
+            'id': result.device.remoteId.str,
+            'connectable': result.advertisementData.connectable,
+            'txPower': result.advertisementData.txPowerLevel,
+            'manufacturer': result.advertisementData.manufacturerData.toString(),
+            'serviceUuids': result.advertisementData.serviceUuids.map((u)=>u.str).toList(),
+          });
           if (name.isNotEmpty && !_devicesList.contains(result.device)) {
             if (mounted) setState(() { _devicesList.add(result.device); });
           }
@@ -3802,16 +3893,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               _updateStatus("Auto-connecting to $name");
               // Stop further scanning to speed up connect
               try { FlutterBluePlus.stopScan(); } catch(_){ }
+              AppLog.d('BLE', 'Auto-connecting to candidate', {'name': name});
               _connectToDevice(result.device);
               break; // exit loop
             }
           }
         }
       }, onError: (e) {
+        AppLog.e('BLE', 'Scan stream error', e);
       });
       
       // When scan completes
+      AppLog.d('BLE', 'Awaiting scan completion');
       await FlutterBluePlus.isScanning.where((val) => val == false).first;
+      AppLog.d('BLE', 'Scan completed', {'found': _devicesList.length});
       
       if (mounted) {
         setState(() {
@@ -3822,17 +3917,43 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       
       if (_devicesList.isEmpty) {
         _updateStatus("No BLE devices found");
+        AppLog.e('BLE', 'No devices found on scan');
+        // Retry one quick scan to catch late advertisements
+        try {
+          AppLog.d('BLE', 'Retrying quick scan', {
+            'timeout_s': 5,
+            'filter_service': UART_SERVICE_UUID,
+            'duplicates': true,
+            'scanMode': 'balanced'
+          });
+          try {
+            await FlutterBluePlus.startScan(
+              timeout: const Duration(seconds: 5),
+              withServices: [Guid(UART_SERVICE_UUID)],
+            );
+          } catch (e) {
+            AppLog.e('BLE', 'Quick scan with service filter failed, retrying plain', e);
+            FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
+          }
+          await FlutterBluePlus.isScanning.where((val) => val == false).first;
+          AppLog.d('BLE', 'Quick scan completed', {'found': _devicesList.length});
+        } catch (e) {
+          AppLog.e('BLE', 'Quick scan failed', e);
+        }
       } else {
         _updateStatus("Found ${_devicesList.length} BLE devices");
+        AppLog.d('BLE', 'Devices found', {'count': _devicesList.length});
         // Find devices whose name begins with 'EPD'
         final epdDevices = _devicesList.where((d)=> d.advName.toUpperCase().startsWith('EPD')).toList();
         if(epdDevices.length == 1 && _connectedDevice==null && !_isConnecting){
           final target = epdDevices.first;
           _updateStatus("Auto-connecting to ${target.advName}");
+          AppLog.d('BLE', 'Single EPD candidate, connecting', {'name': target.advName});
           _connectToDevice(target);
         }
       }
     } catch (e) {
+      AppLog.e('BLE', 'Scan exception', e);
       if (mounted) {
         setState(() {
           _isScanning = false;
@@ -3852,18 +3973,23 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     });
     
     _updateStatus("Connecting to ${device.advName}...");
+    AppLog.d('BLE', 'Connecting', {'name': device.advName, 'id': device.remoteId.str});
     
     try {
       // Connect to the device
+      final t0 = DateTime.now();
       await device.connect();
+      AppLog.d('BLE', 'Connected at GAP', {'ms': DateTime.now().difference(t0).inMilliseconds});
       
       // Request MTU increase once per connection (no user-facing success message)
       if (!_mtuRequestedForThisConnection) {
         try {
           await device.requestMtu(512);
+          AppLog.d('BLE', 'MTU request issued', {'mtu': 512});
           _mtuRequestedForThisConnection = true;
-        } catch (e) {
+        } catch (e, st) {
           // Continue anyway with smaller chunks
+          AppLog.e('BLE', 'MTU request failed', e, st);
         }
       }
       
@@ -3871,24 +3997,29 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       _updateStatus("Setting up connection...");
       List<BluetoothService> services;
       try {
+        final t1 = DateTime.now();
         services = await device.discoverServices().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
             throw Exception("Service discovery timed out after 5 seconds");
           },
         );
+        AppLog.d('BLE', 'Services discovered', {'count': services.length, 'ms': DateTime.now().difference(t1).inMilliseconds});
       } catch (e) {
         // If service discovery fails, try reconnecting once
         _updateStatus("Retrying connection...");
+        AppLog.e('BLE', 'Service discovery failed, retrying', e);
         await device.disconnect();
         await Future.delayed(const Duration(milliseconds: 500));
         await device.connect();
+        final t2 = DateTime.now();
         services = await device.discoverServices().timeout(
           const Duration(seconds: 3),
           onTimeout: () {
             throw Exception("Service discovery timed out on retry");
           },
         );
+        AppLog.d('BLE', 'Services discovered (retry)', {'count': services.length, 'ms': DateTime.now().difference(t2).inMilliseconds});
       }
       
       // Find our UART service
@@ -3897,11 +4028,21 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       BluetoothCharacteristic? txChar;
       
       for (BluetoothService service in services) {
+        AppLog.d('BLE', 'Service', {'uuid': service.uuid.str});
         if (service.uuid.toString().toUpperCase() == UART_SERVICE_UUID.toUpperCase()) {
           uartService = service;
           
           // Find our characteristics
           for (BluetoothCharacteristic characteristic in service.characteristics) {
+            AppLog.d('BLE', 'Characteristic', {
+              'uuid': characteristic.uuid.str,
+              'props': {
+                'read': characteristic.properties.read,
+                'write': characteristic.properties.write,
+                'writeWithoutResponse': characteristic.properties.writeWithoutResponse,
+                'notify': characteristic.properties.notify,
+              }
+            });
             if (characteristic.uuid.toString().toUpperCase() == UART_RX_CHAR_UUID.toUpperCase()) {
               rxChar = characteristic;
             } else if (characteristic.uuid.toString().toUpperCase() == UART_TX_CHAR_UUID.toUpperCase()) {
@@ -3913,12 +4054,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       }
       
       if (uartService == null || rxChar == null || txChar == null) {
+        AppLog.e('BLE', 'UART service/characteristics not found');
         throw Exception("Required UART service or characteristics not found");
       }
       
       // Set up notification handler for TX characteristic
       await txChar.setNotifyValue(true);
+      AppLog.d('BLE', 'Notifications enabled on TX');
       txChar.onValueReceived.listen(_handleNotification);
+      try {
+        final currentMtu = await device.mtu.first;
+        AppLog.d('BLE', 'Current MTU', {'mtu': currentMtu});
+      } catch (e) {
+        AppLog.e('BLE', 'Failed to read current MTU', e);
+      }
       
       if (mounted) {
         setState(() {
@@ -3928,6 +4077,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     // Remain on the connected UI; first window was removed
         });
       }
+      AppLog.d('BLE', 'Connected + characteristics ready');
       // If the popup was visible (user tapped while disconnected), close it
       if(_activeDialogContext != null){
         _dismissActiveDialog();
@@ -3947,6 +4097,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       await _connStateSub?.cancel();
       _connStateSub = device.connectionState.listen((s) async {
         if(s == BluetoothConnectionState.disconnected){
+          AppLog.e('BLE', 'Disconnected by event');
           if(mounted){
             setState((){
               _connectedDevice = null;
@@ -3977,6 +4128,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         }
       });
     } catch (e) {
+      AppLog.e('BLE', 'Connect failed', e);
       if (mounted) {
         setState(() {
           _isConnecting = false;
@@ -4006,6 +4158,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     
     // Parse the acknowledgment type
     int ackType = data[0];
+    AppLog.d('BLE', 'Notification', {'len': data.length, 'first': ackType});
 
     // First, try to decode as UTF-8 text message before treating as binary ACK.
     // This handles ASCII status messages like "Touch(15) = 69  Battery=82%"  
@@ -4057,6 +4210,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         if (data.length >= 2) {
           final int batt = data[1].clamp(0, 100);
           print('🔋 Battery status received: $batt%');
+          AppLog.d('BLE', 'Battery', {'percent': batt});
           if (mounted) {
             setState(() {
               _batteryPercent = batt;
@@ -4072,6 +4226,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       case ACK_CHARGING:
         // Charging status received - always show immediately
         print('🔌 Charging status received');
+        AppLog.d('BLE', 'Charging');
         if (mounted) {
           setState(() {
             _batteryPercent = null; // Clear percentage when charging
@@ -4137,6 +4292,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     
     try {
       _updateStatus("Preparing image data...");
+      AppLog.d('TX', 'Preparing data', {'bytes': _processedBytes!.length, 'portrait': _isPortrait});
       
       final Uint8List src = _processedBytes!; // raw codes length w*h
       Uint8List toSend;
@@ -4147,14 +4303,17 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         // PORTRAIT MODE: Apply standard 180° rotation
         toSend = _applyPortraitModeRotation(src);
         _updateStatus("Applied portrait mode rotation (180°)");
+        AppLog.d('TX', 'Applied portrait rotation');
       } else {
         // LANDSCAPE MODE: Apply special landscape rotation
         toSend = _applyLandscapeModeRotation(src);
         _updateStatus("Applied landscape mode rotation");
+        AppLog.d('TX', 'Applied landscape rotation');
       }
       
       // Pack the rotated image data for efficient BLE transfer (2 pixels per byte)
       Uint8List packedData = _packPixels(toSend);
+      AppLog.d('TX', 'Packed data', {'bytes': packedData.length});
       
       // First send a 1-byte type + 4-byte little-endian size header
       int totalSize = packedData.length;
@@ -4164,6 +4323,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       bd.setUint32(1, totalSize, Endian.little);
       // Send the header
       await _rxCharacteristic!.write(header);
+      AppLog.d('TX', 'Header sent', {'type': TRANSFER_TYPE_IMAGE, 'size': totalSize});
       _updateStatus("Starting image transfer...", force: true);
       
       // Short delay to ensure Arduino processes the header
@@ -4190,11 +4350,14 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           i = end;
         } catch (e) {
           // Adaptive fallback: reduce dynamic chunk size and retry same offset
+          AppLog.e('TX', 'Chunk write failed, reducing size', e, null, {'from': dynamicChunk});
           dynamicChunk = math.max(20, dynamicChunk ~/ 2);
           await Future.delayed(const Duration(milliseconds: 25));
           if (dynamicChunk <= 20 && view.length <= 20) {
             // Even the smallest failed; abort
-            throw Exception("BLE data transfer failed at offset $i: $e");
+            final err = Exception("BLE data transfer failed at offset $i: $e");
+            AppLog.e('TX', 'Aborting transfer', err);
+            throw err;
           }
         }
         
@@ -4218,11 +4381,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       // Final transfer statistics
       int endTime = DateTime.now().millisecondsSinceEpoch;
       double totalTime = (endTime - startTime) / 1000;
+      AppLog.d('TX', 'Transfer complete (bytes header->last)', {'bytes': totalSize, 'sec': totalTime.toStringAsFixed(2)});
       
       _updateStatus("Image sent successfully in ${totalTime.toStringAsFixed(1)} seconds", force: true);
       
       // We don't set _isSending to false here - wait for ACK_COMPLETE
     } catch (e) {
+      AppLog.e('TX', 'Transfer failed', e);
       if (mounted) {
         setState(() {
           _isSending = false;
@@ -5762,19 +5927,24 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       (_libraryDir == null) ? null : File('${_libraryDir!.path}/asset_image1.deleted');
   Future<void> _initPersistentLibrary() async {
     try {
+      AppLog.d('LIB', 'Init persistent library begin');
       final dir = await getApplicationDocumentsDirectory();
       _libraryDir = Directory('${dir.path}/library');
       if(!await _libraryDir!.exists()){
         await _libraryDir!.create(recursive: true);
+        AppLog.d('LIB', 'Created library directory', {'path': _libraryDir!.path});
       }
       final indexFile = File('${_libraryDir!.path}/index.json');
       if(await indexFile.exists()){
+        AppLog.d('LIB', 'Loading library index', {'path': indexFile.path});
         await _loadLibraryIndex(indexFile);
       }
       // Seed sample image from assets into Saved if missing
       await _seedSampleImageIfMissing();
       _refresh();
+      AppLog.d('LIB', 'Init persistent library done', {'entries': _library.length});
     } catch (e) {
+      AppLog.e('LIB', 'Init persistent library failed', e);
     }
   }
 
@@ -5783,6 +5953,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       final text = await indexFile.readAsString();
       final data = jsonDecode(text);
       if(data is! List) return;
+      int loaded = 0;
       for(final item in data){
         if(item is! Map) continue;
         final id = item['id'] as String?; if(id==null) continue;
@@ -5810,9 +5981,11 @@ extension _LibraryPersistence on _EPaperImageSenderState {
               isDefaultAsset: isAsset,
               title: title,
             ));
+            loaded++;
           }catch(_){ }
         }
       }
+      AppLog.d('LIB', 'Index loaded', {'count': loaded});
     }catch(e){ }
   }
 
@@ -5823,6 +5996,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       final pngFile = File('${_libraryDir!.path}/${entry.id}.png');
       await rawFile.writeAsBytes(entry.rawCodes, flush: true);
       await pngFile.writeAsBytes(entry.pngBytes, flush: true);
+      AppLog.d('LIB', 'Persisted entry', {'id': entry.id});
       if(writeIndex){ await _writeLibraryIndex(); }
     }catch(e){ }
   }
@@ -5839,6 +6013,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
         'wasVertical': e.wasPortrait,
       }).toList();
       await indexFile.writeAsString(jsonEncode(list), flush: true);
+      AppLog.d('LIB', 'Index written', {'path': indexFile.path, 'count': _library.length});
     }catch(e){ }
   }
 
@@ -5849,6 +6024,7 @@ extension _LibraryPersistence on _EPaperImageSenderState {
       final pngFile = File('${_libraryDir!.path}/${entry.id}.png');
       if(await rawFile.exists()) { await rawFile.delete(); }
       if(await pngFile.exists()) { await pngFile.delete(); }
+      AppLog.d('LIB', 'Deleted entry files', {'id': entry.id});
       // If deleting the bundled sample, record a flag so we don't auto-reseed it later
       if (entry.id.toLowerCase() == 'asset_image1') {
         final flag = _asset1DeletedFlagFile;
