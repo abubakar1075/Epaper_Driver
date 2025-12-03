@@ -4504,7 +4504,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         
         // Download the file
         final downloadUrl = 'https://drive.google.com/uc?export=download&id=$binFileId';
-        _updateStatus("Downloading from Google Drive...");
+        _updateStatus("Downloading latest firmware...");
         final downloadResp = await http.get(Uri.parse(downloadUrl));
         
         if (downloadResp.statusCode != 200) {
