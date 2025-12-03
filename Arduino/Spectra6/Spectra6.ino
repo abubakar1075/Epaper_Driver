@@ -577,12 +577,9 @@ void setup() {
     // Display from SPIFFS if available, then sleep again
     displayImageFromSPIFFS();
     Serial.println("Refresh complete. Going back to deep sleep for next cycle...");
-    // Keep both timer, touch, and USB voltage as wake sources
-    touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
-    esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_39, ESP_EXT1_WAKEUP_ANY_HIGH);
-    esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
+    // Use central sleep function for consistency
     Serial.flush();
-    esp_deep_sleep_start();
+    goToSleep();
   }
 
   pinMode(GND, OUTPUT); // Will be ignored if GPIO35 is input-only
@@ -602,8 +599,8 @@ void setup() {
   Serial.println(" *****************");
   Serial.println("*************************************************************************");
 
-  Serial.printf("Going to deep sleep... touch GPIO%d to wake up\n", TOUCH_PIN);
-  touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
+  // Note: Deep sleep configuration is centralized in goToSleep().
+  // Do not configure wake sources here to keep logic consistent.
 
   Serial.println("E-Paper Display + BLE Example");
   #if (LED2 == 34)
@@ -685,11 +682,8 @@ void setup() {
         hardwareInitializedOnWake = true;
         
         // Go directly to sleep (no need to turn off BLE as it hasn't started yet)
-        touchSleepWakeUpEnable(TOUCH_PIN, touchThreshold);
-        esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_39, ESP_EXT1_WAKEUP_ANY_HIGH);
-        esp_sleep_enable_timer_wakeup(REFRESH_INTERVAL_US);
         Serial.flush();
-        esp_deep_sleep_start();
+        goToSleep();
       }
     }
   }
@@ -969,6 +963,14 @@ void loop() {
  * Put the device into deep sleep mode
  */
 void goToSleep() {
+  // Pre-sleep guard: if touch is currently active, defer sleep and run BLE window
+  uint16_t preTouch = touchRead(TOUCH_PIN);
+  if (preTouch < touchThreshold) {
+    Serial.println("[sleep] Touch detected before sleep - invoking stopingSleep()");
+    Serial.flush();
+    stopingSleep();
+    return; // stopingSleep will re-enter sleep when touch is released
+  }
   // Ensure the e-paper display is commanded to sleep. Use non-blocking variant
   // so that the ESP32 will still go to sleep even if the display is not present
   // or its BUSY pin is floating.
@@ -1008,6 +1010,113 @@ void goToSleep() {
   
   // Go to deep sleep
   esp_deep_sleep_start();
+}
+
+/**
+ * stopingSleep: Delay deep sleep when the user is touching the sensor.
+ * - Immediately powers up BLE and behaves like the normal 30s active window.
+ * - Keeps polling touch; as soon as touch is released, proceeds to deep sleep.
+ * - Adds detailed serial messages at all stages for diagnostics.
+ */
+void stopingSleep() {
+  Serial.println("==========================================");
+  Serial.println("[stopingSleep] Touch present - delaying sleep");
+  Serial.println("==========================================");
+
+  // Power up BLE if not already active
+  if (!bleActive) {
+    Serial.println("[stopingSleep] Starting BLE services...");
+    startBLE();
+    bleActive = true;
+    Serial.println("[stopingSleep] BLE started");
+  } else {
+    Serial.println("[stopingSleep] BLE already active");
+  }
+
+  // Reset connection timeout window like normal active period
+  connectionStartTime = millis();
+
+  // Run an active loop while touch is held
+  while (true) {
+    uint16_t t = touchRead(TOUCH_PIN);
+
+    // If an image has been received during the hold, display immediately
+    if (dataReceived) {
+      Serial.println("[stopingSleep] Image transfer complete during hold - updating display");
+      // Disconnect and stop BLE to prevent further writes
+      if (BLE.connected()) {
+        BLE.disconnect();
+        delay(100);
+      }
+      BLE.end();
+      bleActive = false;
+      Serial.println("[stopingSleep] BLE stopped after image receipt");
+
+      if (!skipDisplay) {
+        Serial.println("[stopingSleep] Displaying image from LittleFS...");
+        displayImageFromSPIFFS();
+        Serial.println("[stopingSleep] Display update complete");
+      } else {
+        Serial.println("[stopingSleep] Image corrupted - skipping display update");
+        skipDisplay = false; // reset for next transfer
+      }
+
+      dataReceived = false; // clear flag
+
+      // After successful display, proceed to sleep immediately
+      Serial.println("[stopingSleep] Displayed image - entering deep sleep");
+      Serial.flush();
+      goToSleep();
+      return;
+    }
+    if (t >= touchThreshold) {
+      Serial.println("[stopingSleep] Touch released - proceeding to sleep");
+      break;
+    }
+
+    // Normal active-period behaviors
+    handleLedBlinking();
+    BLE.poll();
+    extern void bleTick();
+    bleTick();
+
+    // Keep the idle timer alive while payload is ongoing
+    if (!receivingSize) {
+      connectionStartTime = millis();
+    }
+
+    // Optional status every 1s
+    static unsigned long lastPrint = 0;
+    if (millis() - lastPrint >= 1000) {
+      lastPrint = millis();
+      // Read USB and battery voltages for context
+      int gpio39Raw = analogRead(39);
+      float gpio39Voltage = (gpio39Raw / 4095.0) * 3.3;
+      float usbVoltage = gpio39Voltage * 2.0;
+      int batteryRaw = analogRead(BATTERY_PIN);
+      float batteryAdcVoltage = (batteryRaw / 4095.0) * 3.3;
+      float batteryVoltage = batteryAdcVoltage * 2.0;
+      Serial.printf("[stopingSleep] Holding awake | Touch:%u | usb:%.2fV | bat:%.2fV\n", t, usbVoltage, batteryVoltage);
+    }
+
+    delay(10);
+  }
+
+  // After touch release: gracefully stop BLE and enter sleep using central function
+  if (bleActive) {
+    Serial.println("[stopingSleep] Shutting down BLE before sleep...");
+    if (BLE.connected()) {
+      BLE.disconnect();
+      delay(100);
+    }
+    BLE.end();
+    bleActive = false;
+    Serial.println("[stopingSleep] BLE stopped");
+  }
+
+  Serial.println("[stopingSleep] Entering deep sleep now");
+  Serial.flush();
+  goToSleep();
 }
 
 
