@@ -5023,7 +5023,34 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
-                      _buildBulletPoint('LED not lighting on touch? Battery may be depleted or sensor needs calibration. Connect USB charger (LED will breathe), then use "Calibrate Sensor" in menu'),
+                      // Light not Flashing
+                      const Padding(
+                        padding: EdgeInsets.only(left: 16, bottom: 6),
+                        child: Text(
+                          'Light not Flashing',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                            fontFamily: 'Roboto',
+                          ),
+                        ),
+                      ),
+                      _buildBulletPoint('Battery may be low or the sensor needs calibration. Connect USB (LED will breathe), then use "Calibrate Sensor" in the menu'),
+                      // Light Always on
+                      const Padding(
+                        padding: EdgeInsets.only(left: 16, bottom: 6, top: 6),
+                        child: Text(
+                          'Light Always on',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red,
+                            fontFamily: 'Roboto',
+                          ),
+                        ),
+                      ),
+                      _buildBulletPoint('LED solid (not breathing)? The frame is continuously detecting touch. If you’re not touching it and the corner sensor is clear, run "Calibrate Sensor" to restore normal sensitivity'),
                       _buildBulletPoint('Can\'t connect? Make sure Bluetooth is on and touch the frame to wake it'),
                       _buildBulletPoint('Frame not responding? Hold the boot button 5 seconds for factory reset'),
                       _buildBulletPoint('Low battery? Connect USB cable - frame shows charging status to the app'),
