@@ -2374,11 +2374,25 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       if (_originalImage != null) {
         await _processImage();
         if (_processedBytes != null) { await _sendImageData(); return; }
-      } else if (_processedPngBytes != null) {
+      } else {
         // Case B: Editor image came from a saved PNG (no original file)
-        final decoded = img.decodeImage(_processedPngBytes!);
+        // Try to get a decodable source image for cropping:
+        // 1) Use cached PNG if available
+        // 2) Otherwise encode the ui.Image to PNG bytes and decode
+        img.Image? decoded;
+        if (_processedPngBytes != null) {
+          decoded = img.decodeImage(_processedPngBytes!);
+        }
+        if (decoded == null) {
+          try {
+            final byteData = await _uiOriginal!.toByteData(format: ui.ImageByteFormat.png);
+            if (byteData != null) {
+              final pngBytes = byteData.buffer.asUint8List();
+              decoded = img.decodeImage(pngBytes);
+            }
+          } catch (_) {}
+        }
         if (decoded != null) {
-          // Re-sample using current pan/zoom/rotation to 800x480/480x800, then quantize
           final base = _generateCroppedBaseImage(decoded);
           final q = _quantizeTo6ColorAndCreateRawBytes(base);
           setState(() {
