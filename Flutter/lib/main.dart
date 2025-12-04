@@ -2368,14 +2368,32 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     }
     // Connected path: ensure we don't mistakenly treat as pending
     _activeDialogContext = null;
-    // If we already have processed bytes, send directly
-    if(_processedBytes!=null){ await _sendImageData(); return; }
-    // If we have an original image selected, process then send
-    if(_originalImage!=null){
-      await _processImage();
-      if(_processedBytes!=null){ await _sendImageData(); return; }
+    // Always prefer rendering from the current crop if an image is in the editor
+    if (_uiOriginal != null) {
+      // Case A: We have a real original file backing the editor -> use full pipeline
+      if (_originalImage != null) {
+        await _processImage();
+        if (_processedBytes != null) { await _sendImageData(); return; }
+      } else if (_processedPngBytes != null) {
+        // Case B: Editor image came from a saved PNG (no original file)
+        final decoded = img.decodeImage(_processedPngBytes!);
+        if (decoded != null) {
+          // Re-sample using current pan/zoom/rotation to 800x480/480x800, then quantize
+          final base = _generateCroppedBaseImage(decoded);
+          final q = _quantizeTo6ColorAndCreateRawBytes(base);
+          setState(() {
+            _processedImage = q.item1;
+            _processedBytes = Uint8List.fromList(q.item2);
+            _processedPngBytes = Uint8List.fromList(img.encodePng(q.item1));
+          });
+          await _sendImageData();
+          return;
+        }
+      }
     }
-    // If we have a processed PNG preview, derive raw codes and send
+    // If no editor image is active, fall back to any existing processed bytes
+    if(_processedBytes!=null){ await _sendImageData(); return; }
+    // As another fallback, if we only have a processed PNG preview, derive raw codes and send
     if(_processedPngBytes!=null){
       final decoded = img.decodeImage(_processedPngBytes!);
       if(decoded!=null){
