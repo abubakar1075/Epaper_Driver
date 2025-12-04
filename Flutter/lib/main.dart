@@ -5547,7 +5547,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               _calibrationPromptVisible = false;
               Navigator.of(ctx).pop();
             },
-            child: const Text('OK'),
+            child: const Text('Skip'),
           ),
           ElevatedButton(
             onPressed: () {
