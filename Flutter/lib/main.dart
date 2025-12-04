@@ -1001,7 +1001,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             backgroundColor: Colors.teal.shade600,
           ),
           const SizedBox(width:8),
-          _smallBtn('Save', _originalImage==null ? null : _addCurrentToLibrary, icon: Icons.library_add, backgroundColor: Colors.purple.shade600),
+          _smallBtn('Save', _saveCurrent, icon: Icons.library_add, backgroundColor: Colors.purple.shade600),
         ]),
         const Spacer(),
         // Right side controls
@@ -2259,6 +2259,58 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
       _updateStatus('Loaded ${chosen.source} image by ${chosen.author}');
     }catch(e){ if(mounted){ setState(()=> _onlineError='Import failed: $e'); } }
     finally{ if(mounted){ setState(()=> _isOnlineImporting=false); } }
+  }
+
+  // Save button handler: always enabled. Saves from the best available source.
+  Future<void> _saveCurrent() async {
+    // Preferred: save from the original file using existing pipeline
+    if (_originalImage != null) {
+      await _addCurrentToLibrary();
+      return;
+    }
+
+    // If there's a UI image (e.g., from a saved/online source), write it to a temp file
+    // and reuse _addCurrentToLibrary() so it captures the current crop correctly.
+    if (_uiOriginal != null) {
+      try {
+        final bd = await _uiOriginal!.toByteData(format: ui.ImageByteFormat.png);
+        if (bd != null) {
+          final bytes = bd.buffer.asUint8List();
+          final dir = await getTemporaryDirectory();
+          final file = File('${dir.path}/canvasbt_save_${DateTime.now().millisecondsSinceEpoch}.png');
+          await file.writeAsBytes(bytes);
+
+          final prev = _originalImage;
+          _originalImage = file;
+          await _addCurrentToLibrary();
+          _originalImage = prev;
+          return;
+        }
+      } catch (e) {
+        _updateStatus('Failed to save: $e');
+        return;
+      }
+    }
+
+    // As a fallback, if we only have a processed preview, try saving that
+    if (_processedPngBytes != null) {
+      try {
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/canvasbt_save_${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(_processedPngBytes!);
+
+        final prev = _originalImage;
+        _originalImage = file;
+        await _addCurrentToLibrary();
+        _originalImage = prev;
+        return;
+      } catch (e) {
+        _updateStatus('Failed to save: $e');
+        return;
+      }
+    }
+
+    _updateStatus('No image to save. Pick or import first.');
   }
 
   // Save the currently processed frame into the in-memory library (PNG cached for fast thumbnails)
