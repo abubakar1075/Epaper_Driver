@@ -110,6 +110,7 @@ unsigned long lastFlushSize = 0;
 // Periodic BLE tasks
 static unsigned long lastBatteryAnnounce = 0;
 static bool wasCharging = false; // Track previous charging state
+static unsigned long chargingStoppedAtMs = 0; // Timestamp when charger disconnect detected
 void bleTick() {
   if (!BLE.connected()) return;
   
@@ -126,13 +127,23 @@ void bleTick() {
     txCharacteristic.writeValue(chargingMsg, sizeof(chargingMsg));
     Serial.println("Started charging - sent status to Android");
     wasCharging = true;
+    chargingStoppedAtMs = 0; // clear any pending stop timestamp
   } else if (!isCharging && wasCharging) {
-    // Just stopped charging - send battery percentage ONCE
-    uint8_t batt = getBatteryPercent();
-    uint8_t battMsg[] = {ACK_BATTERY, batt};
-    txCharacteristic.writeValue(battMsg, sizeof(battMsg));
-    Serial.println("Stopped charging - sent battery % to Android");
+    // Charger just disconnected: record timestamp, delay battery % send by 100ms
+    chargingStoppedAtMs = millis();
     wasCharging = false;
+  }
+
+  // If we recently stopped charging and 500ms have passed, send battery percentage once
+  if (!isCharging && chargingStoppedAtMs != 0) {
+    unsigned long elapsed = millis() - chargingStoppedAtMs;
+    if (elapsed >= 500) {
+      uint8_t batt = getBatteryPercent();
+      uint8_t battMsg[] = {ACK_BATTERY, batt};
+      txCharacteristic.writeValue(battMsg, sizeof(battMsg));
+      Serial.println("Stopped charging (500ms) - sent battery % to Android");
+      chargingStoppedAtMs = 0; // prevent repeat
+    }
   }
 }
 
