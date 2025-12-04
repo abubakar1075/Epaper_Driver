@@ -2372,7 +2372,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     if (_uiOriginal != null) {
       // Case A: We have a real original file backing the editor -> use full pipeline
       if (_originalImage != null) {
-        await _processImage();
+        await _processImage(); 
         if (_processedBytes != null) { await _sendImageData(); return; }
       } else {
         // Case B: Editor image came from a saved PNG (no original file)
@@ -4277,7 +4277,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         _batteryStatusTimer?.cancel();
         _batteryStatusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
           if (_isCharging && mounted) {
-            _updateStatus("Charging...");
+            // intentionally no status text while charging
           }
         });
         break;
