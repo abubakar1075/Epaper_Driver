@@ -4999,7 +4999,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       ),
                       const SizedBox(height: 8),
                       _buildBulletPoint('Battery Status - Check your frame\'s battery in the preview corner'),
-                      _buildBulletPoint('USB Charging - Frame stays awake and shows breathing LED when charging'),
+                      _buildBulletPoint('USB Charging - Frame stays awake and shows breathing LED Indicator when charging'),
                       _buildBulletPoint('Auto-Connect - App remembers and reconnects to your frame automatically'),
                       _buildBulletPoint('Firmware Updates - Orange OTA button appears when new firmware is available. Touch frame to connect, then press OTA to update'),
                       _buildBulletPoint('Smart Search - Library filters images by your current orientation (Portrait/Landscape)'),
@@ -5023,11 +5023,37 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
+                      // LED location illustration
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: AspectRatio(
+                            aspectRatio: 16/9,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.asset(
+                                'Framepic/TroubleshootImage.png',
+                                fit: BoxFit.contain,
+                                filterQuality: FilterQuality.high,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const Center(
+                                    child: Text(
+                                      'LED location image not found',
+                                      style: TextStyle(color: Colors.red, fontSize: 12),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                       // Light not Flashing
                       const Padding(
                         padding: EdgeInsets.only(left: 16, bottom: 6),
                         child: Text(
-                          'Light not Flashing',
+                          'LED indicator not flashing',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -5036,12 +5062,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                           ),
                         ),
                       ),
-                      _buildBulletPoint('Battery may be low or the sensor needs calibration. Connect USB (LED will breathe), then use "Calibrate Sensor" in the menu'),
+                      _buildBulletPoint('Battery may be low or the sensor needs calibration. Connect USB (LED Indicator will breathe), then use "Calibrate Sensor" in the menu'),
                       // Light Always on
                       const Padding(
                         padding: EdgeInsets.only(left: 16, bottom: 6, top: 6),
                         child: Text(
-                          'Light Always on',
+                          'LED indicator Always on',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -5050,7 +5076,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                           ),
                         ),
                       ),
-                      _buildBulletPoint('LED solid (not breathing)? The frame is continuously detecting touch. If you’re not touching it and the corner sensor is clear, run "Calibrate Sensor" to restore normal sensitivity'),
+                      _buildBulletPoint('LED Indicator solid (not breathing)? The frame is continuously detecting touch. If you’re not touching it and the corner sensor is clear, run "Calibrate Sensor" to restore normal sensitivity'),
                       _buildBulletPoint('Can\'t connect? Make sure Bluetooth is on and touch the frame to wake it'),
                       _buildBulletPoint('Frame not responding? Hold the boot button 5 seconds for factory reset'),
                       _buildBulletPoint('Low battery? Connect USB cable - frame shows charging status to the app'),
@@ -5181,10 +5207,10 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                         style: TextStyle(fontSize: 14, color: Colors.black87, fontFamily: 'Roboto'),
                       ),
                       const SizedBox(height: 8),
-                      _buildNumberedPoint('1', 'Ensure your frame is ON (LED should be blinking). If not, connect to charging to keep it powered during calibration'),
+                      _buildNumberedPoint('1', 'Ensure your frame is ON (LED Indicator should be blinking). If not, connect to charging to keep it powered during calibration'),
                       _buildNumberedPoint('2', 'Do NOT touch the sensor area during calibration'),
                       _buildNumberedPoint('3', 'Tap the "Calibrate Now" button below'),
-                      _buildNumberedPoint('4', 'Wait for the frame\'s LED to flash 3 times confirming success'),
+                      _buildNumberedPoint('4', 'Wait for the frame\'s LED Indicator to flash 3 times confirming success'),
                       const SizedBox(height: 20),
                       
                       // Important Notes
@@ -5217,7 +5243,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                             const Text(
                               '• Keep your finger AWAY from the sensor during calibration\n'
                               '• The calibration measures the baseline "no-touch" state\n'
-                              '• You can also press the physical boot button (GPIO0) on the back to calibrate',
+                              '• You can also press the physical boot button on the back to calibrate',
                               style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.5, fontFamily: 'Roboto'),
                             ),
                           ],
