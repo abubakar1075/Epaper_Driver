@@ -3216,8 +3216,8 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                   child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600, fontFamily: 'Roboto')),
                 ),
               ),
-              // Battery status bottom-left inside the "Frame" panel (no separate bar)
-              if (title == 'Frame' && (_batteryPercent != null || _isCharging))
+              // Battery status bottom-left inside the "Frame" panel, only when BLE connected
+              if (title == 'Frame' && _connectionStatusText == 'Connected' && (_batteryPercent != null || _isCharging))
                 Positioned(
                   left: 4,
                   bottom: 4,
