@@ -258,6 +258,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // =============================================================
   // UI HELPERS
   // =============================================================
+  // AI-Generated Content reporting
+  static const String REPORT_ENDPOINT = ""; // Optional HTTPS endpoint to receive reports (set to your server URL)
+  final TextEditingController _reportDescriptionController = TextEditingController();
+  String _reportIssueType = 'Offensive';
+  XFile? _reportScreenshot;
+  bool _isSubmittingReport = false;
   // Simple on-device "AI Images" generator (prompt -> synthesized PNG)
   bool _showAi = false;
   final TextEditingController _aiPromptController = TextEditingController(text: 'A cosy cabin in snowy mountains at sunset');
@@ -4919,6 +4925,16 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
             ),
             const Divider(height: 1),
             ListTile(
+              leading: const Icon(Icons.flag_outlined, color: Colors.redAccent, size: 28),
+              title: const Text('Report AI Content', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+              onTap: () {
+                Navigator.pop(context);
+                _showReportDialog();
+              },
+            ),
+            const Divider(height: 1),
+            ListTile(
               leading: const Icon(Icons.tune, color: Colors.orange, size: 28),
               title: const Text('Calibrate Sensor', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
               trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
@@ -5686,6 +5702,153 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
         ),
       ],
     );
+  }
+
+  // ========================= AI Report Dialog =========================
+  void _showReportDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, StateSetter setLocalState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: const [
+                Icon(Icons.flag_outlined, color: Colors.redAccent),
+                SizedBox(width: 8),
+                Text('Report AI Content'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('If something looks wrong, please report it.'),
+                  const SizedBox(height: 12),
+                  const Text('Type of issue'),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    value: _reportIssueType,
+                    items: const [
+                      DropdownMenuItem(value: 'Offensive', child: Text('Offensive')),
+                      DropdownMenuItem(value: 'Sexual', child: Text('Sexual')),
+                      DropdownMenuItem(value: 'Violent', child: Text('Violent')),
+                      DropdownMenuItem(value: 'Misleading', child: Text('Misleading')),
+                      DropdownMenuItem(value: 'Other', child: Text('Other')),
+                    ],
+                    onChanged: (v){ setLocalState((){ _reportIssueType = v ?? 'Offensive'; }); },
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Describe the problem'),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _reportDescriptionController,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      hintText: 'Provide details so we can fix it',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _smallBtn(
+                        _reportScreenshot==null ? 'Attach screenshot' : 'Change screenshot',
+                        () async {
+                          try{
+                            final shot = await _picker.pickImage(source: ImageSource.gallery);
+                            if(shot!=null){ setLocalState((){ _reportScreenshot = shot; }); }
+                          }catch(_){ }
+                        },
+                        icon: Icons.add_a_photo,
+                        backgroundColor: Colors.blueGrey.shade600,
+                      ),
+                      const SizedBox(width: 8),
+                      if(_reportScreenshot!=null)
+                        Expanded(child: Text(_reportScreenshot!.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Reports are sent to the developer for moderation. We may use them to improve filters.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: (){ Navigator.of(ctx).pop(); },
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: _isSubmittingReport ? null : () async {
+                  await _submitReport(ctx, setLocalState);
+                },
+                child: _isSubmittingReport
+                  ? const SizedBox(width:16, height:16, child: CircularProgressIndicator(strokeWidth:2))
+                  : const Text('Submit'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _submitReport(BuildContext dialogCtx, StateSetter setLocalState) async {
+    final description = _reportDescriptionController.text.trim();
+    if(description.isEmpty){
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please describe the problem')),
+      );
+      return;
+    }
+
+    setLocalState((){ _isSubmittingReport = true; });
+    try{
+      if(REPORT_ENDPOINT.isNotEmpty){
+        final uri = Uri.parse(REPORT_ENDPOINT);
+        http.MultipartRequest req = http.MultipartRequest('POST', uri);
+        req.fields['issueType'] = _reportIssueType;
+        req.fields['description'] = description;
+        req.fields['app'] = 'CanvasBT';
+        req.fields['platform'] = Platform.operatingSystem;
+        if(_reportScreenshot!=null){
+          final bytes = await _reportScreenshot!.readAsBytes();
+          req.files.add(http.MultipartFile.fromBytes('screenshot', bytes, filename: _reportScreenshot!.name));
+        }
+        final resp = await req.send();
+        if(resp.statusCode>=200 && resp.statusCode<300){
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Thanks! Your report was submitted.')),
+          );
+          Navigator.of(dialogCtx).pop();
+        }else{
+          throw Exception('Server responded ${resp.statusCode}');
+        }
+      }else{
+        final subject = Uri.encodeComponent('CanvasBT AI Content Report');
+        final body = Uri.encodeComponent('Type: $_reportIssueType\n\nDescription:\n$description');
+        final uri = Uri.parse('mailto:support@inventorstech.io?subject=$subject&body=$body');
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mail composer opened to send your report.')),
+        );
+        Navigator.of(dialogCtx).pop();
+      }
+    }catch(e){
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not submit report: $e')),
+      );
+    }finally{
+      setLocalState((){ _isSubmittingReport = false; });
+      _reportDescriptionController.clear();
+      _reportScreenshot = null;
+      _reportIssueType = 'Offensive';
+    }
   }
 
   @override
