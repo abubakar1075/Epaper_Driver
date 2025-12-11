@@ -301,15 +301,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   }
 
   Future<void> _prefillReportWithCurrentAiAndOpen() async {
-    try{
-      if(_aiPngBytes!=null){
-        final dir = await getTemporaryDirectory();
-        final path = '${dir.path}/ai_report_${DateTime.now().millisecondsSinceEpoch}.png';
-        final f = File(path);
-        await f.writeAsBytes(_aiPngBytes!);
-        setState((){ _reportScreenshot = XFile(f.path); });
-      }
-    }catch(_){ /* ignore prefill errors */ }
+    // Do not auto-attach the AI image; only open the dialog
     _showReportDialog();
   }
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
@@ -5818,7 +5810,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('If something looks wrong, please report it.'),
+                  const Text('Notice Something wrong? tell us.'),
                   const SizedBox(height: 12),
                   const Text('Type of issue'),
                   const SizedBox(height: 6),
@@ -5840,7 +5832,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                     controller: _reportDescriptionController,
                     maxLines: 5,
                     decoration: const InputDecoration(
-                      hintText: 'Provide details so we can fix it',
+                      hintText: 'Explain the issue so we can fix it',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -5848,7 +5840,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                   Row(
                     children: [
                       _smallBtn(
-                        _reportScreenshot==null ? 'Attach screenshot' : 'Change screenshot',
+                        _reportScreenshot==null ? 'Add Screenshot' : 'Change Screenshot',
                         () async {
                           try{
                             final shot = await _picker.pickImage(source: ImageSource.gallery);
@@ -5865,7 +5857,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Reports are sent to the developer for moderation. We may use them to improve filters.',
+                    'Your reports are reviewed by our team and help improve safety and quality filters',
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                 ],
@@ -5895,6 +5887,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     final description = _reportDescriptionController.text.trim();
     if(description.isEmpty){
       _updateStatus('Please describe the problem');
+      return;
+    }
+
+    // Require a screenshot to be attached, same as description
+    if (_reportScreenshot == null) {
+      _updateStatus('Please add a screenshot');
       return;
     }
 
@@ -5947,7 +5945,12 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
         if(resp.statusCode>=200 && resp.statusCode<400){
           // 2xx = success, 3xx = redirect (but Apps Script returns 302 with success body)
-          _updateStatus(screenshotB64!=null ? 'Report submitted with screenshot!' : 'Report submitted!', persist: true);
+          _updateStatus(
+            screenshotB64!=null
+              ? 'Report submitted with screenshot! Thank you'
+              : 'Report submitted! Thank you',
+            persist: true,
+          );
           Navigator.of(dialogCtx).pop();
         }else{
           throw Exception('Server responded ${resp.statusCode}');
