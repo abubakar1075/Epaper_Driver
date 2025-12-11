@@ -1239,36 +1239,28 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                           ),
                           Positioned(
                             top: 8,
-                            left: 8,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.6),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Text('AI-generated', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                            right: 8,
+                            child: GestureDetector(
+                              onTap: _aiIsGenerating ? null : (){
+                                debugPrint('REPORT overlay tapped');
+                                _prefillReportWithCurrentAiAndOpen();
+                              },
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _aiIsGenerating ? Colors.redAccent.shade200 : Colors.redAccent.shade400,
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                const SizedBox(width: 8),
-                                ElevatedButton.icon(
-                                  onPressed: _aiIsGenerating ? null : (){
-                                    debugPrint('REPORT overlay tapped');
-                                    _prefillReportWithCurrentAiAndOpen();
-                                  },
-                                  icon: const Icon(Icons.flag_outlined, size: 16),
-                                  label: const Text('Report', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.redAccent.shade400,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    minimumSize: const Size(64, 36),
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    elevation: 2,
-                                  ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.flag_outlined, color: Colors.white, size: 12),
+                                    SizedBox(width: 4),
+                                    Text('Report', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ],
