@@ -5945,7 +5945,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               barrierDismissible: true,
               builder: (ctx) => AlertDialog(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                content: const Text('Thank you! Your Submission has been received.'),
+                insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+                contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                content: const SizedBox(
+                  width: 300,
+                  child: Text('Thank you! Your Submission has been received.'),
+                ),
+                actionsPadding: const EdgeInsets.only(right: 12, bottom: 8),
                 actions: [
                   TextButton(
                     onPressed: () { Navigator.of(ctx).pop(); },
