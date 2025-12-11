@@ -259,7 +259,11 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // UI HELPERS
   // =============================================================
   // AI-Generated Content reporting
-  static const String REPORT_ENDPOINT = "https://script.google.com/macros/s/AKfycbz_FFMPZ-1Do9CNBS3aswFgRJtpGlqSS2hhNeSXcsukGgbWHuz-TIFBmYbUpk-3BRFdcw/exec"; // Optional HTTPS endpoint to receive reports (set to your server URL)
+  static const String _REPORT_ENDPOINT_DEFAULT = "https://script.google.com/macros/s/AKfycbz_FFMPZ-1Do9CNBS3aswFgRJtpGlqSS2hhNeSXcsukGgbWHuz-TIFBmYbUpk-3BRFdcw/exec"; // replace with your own
+  static const String REPORT_ENDPOINT = String.fromEnvironment(
+    'REPORT_ENDPOINT',
+    defaultValue: _REPORT_ENDPOINT_DEFAULT,
+  ); // HTTPS endpoint to receive reports
   final TextEditingController _reportDescriptionController = TextEditingController();
   String _reportIssueType = 'Offensive';
   XFile? _reportScreenshot;
@@ -280,6 +284,33 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     'tone': 'Colourful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
     'spaces': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal colour, hand-drawn aesthetic',
   };
+  // Basic on-device prompt safety filter (client-side)
+  static final List<RegExp> _blockedPromptPatterns = [
+    RegExp(r'\b(sex|sexual|porn|nude|nsfw)\b', caseSensitive: false),
+    RegExp(r'\b(violence|gore|blood|beheading|torture|kill|murder)\b', caseSensitive: false),
+    RegExp(r'\b(hate|racist|sexist|rape|genocide|slur)\b', caseSensitive: false),
+    RegExp(r'\b(child|minor).*(sex|nude|explicit)\b', caseSensitive: false),
+  ];
+  bool _isPromptAllowed(String prompt){
+    final p = prompt.toLowerCase();
+    for(final re in _blockedPromptPatterns){
+      if(re.hasMatch(p)) return false;
+    }
+    return true;
+  }
+
+  Future<void> _prefillReportWithCurrentAiAndOpen() async {
+    try{
+      if(_aiPngBytes!=null){
+        final dir = await getTemporaryDirectory();
+        final path = '${dir.path}/ai_report_${DateTime.now().millisecondsSinceEpoch}.png';
+        final f = File(path);
+        await f.writeAsBytes(_aiPngBytes!);
+        setState((){ _reportScreenshot = XFile(f.path); });
+      }
+    }catch(_){ /* ignore prefill errors */ }
+    _showReportDialog();
+  }
   // Auto-send support: when user taps Send while disconnected and the popup is visible,
   // automatically dismiss it and send once the device connects.
   BuildContext? _activeDialogContext;
@@ -1200,7 +1231,48 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                     ? Text(_aiError ?? 'Enter a prompt and tap a style button or Simple Generate',
                         style: const TextStyle(fontSize: 14, color: Colors.black54, fontFamily: 'Roboto'),
                         textAlign: TextAlign.center)
-                    : Image.memory(_aiPngBytes!, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
+                    : Stack(
+                        children: [
+                          // Image should be behind overlay controls
+                          Positioned.fill(
+                            child: Image.memory(_aiPngBytes!, fit: BoxFit.contain, filterQuality: FilterQuality.high),
+                          ),
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text('AI-generated', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  onPressed: _aiIsGenerating ? null : (){
+                                    debugPrint('REPORT overlay tapped');
+                                    _prefillReportWithCurrentAiAndOpen();
+                                  },
+                                  icon: const Icon(Icons.flag_outlined, size: 16),
+                                  label: const Text('Report', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.redAccent.shade400,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    minimumSize: const Size(64, 36),
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    elevation: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )),
             ),
           ),
         ),
@@ -1283,6 +1355,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     });
     _startAiLoadingMessages();
     final prompt = _aiPromptController.text.trim();
+    // Client-side safety check
+    if(!_isPromptAllowed(prompt)){
+      _aiLoadingMessageTimer?.cancel();
+      if(mounted){
+        setState((){
+          _aiIsGenerating = false;
+          _aiError = 'Prompt violates safety policy. Please revise and try again.';
+        });
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please revise the prompt to avoid unsafe content.')),
+      );
+      return;
+    }
     try{
       // Build prompt with ONLY the style pre-prompt (no Generate button prefix)
       String fullPrompt = '';
@@ -1338,6 +1424,20 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     });
     _startAiLoadingMessages();
     final prompt = _aiPromptController.text.trim();
+    // Client-side safety check
+    if(!_isPromptAllowed(prompt)){
+      _aiLoadingMessageTimer?.cancel();
+      if(mounted){
+        setState((){
+          _aiIsGenerating = false;
+          _aiError = 'Prompt violates safety policy. Please revise and try again.';
+        });
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please revise the prompt to avoid unsafe content.')),
+      );
+      return;
+    }
     try{
       // Build prompt with ONLY the colour optimisation prefix (Generate button works independently)
       String fullPrompt = 'colourful use solid black,white,red,yellow,blue,green colours, beautiful looking for Spectra 6';
@@ -5561,7 +5661,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       _buildPolicySection(
                         title: 'Image Sources',
                         icon: Icons.photo_library,
-                        content: 'When using Gallery, you access your own photos. Pexels and Pixabay integration provides free stock images. AI generation uses OpenAI\'s DALL·E API with your provided key.',
+                        content: 'When using Gallery, you access your own photos. Pexels and Pixabay integration provides free stock images. AI image generation uses a third-party service (Pollinations) to create images from prompts. AI-generated images are labeled in-app and include a built-in Report feature.',
                       ),
                       const SizedBox(height: 20),
                       _buildPolicySection(
@@ -5573,7 +5673,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                       _buildPolicySection(
                         title: 'Third-Party Services',
                         icon: Icons.cloud_outlined,
-                        content: 'Pexels and Pixabay APIs are used for image search. OpenAI API is used for AI generation (requires your API key). No personal data is shared with these services.',
+                        content: 'Pexels and Pixabay APIs are used for image search. Pollinations is used for optional AI image generation. If reporting is configured, a Google Apps Script endpoint receives in-app reports (issue type, description, optional screenshot, app name, platform). No personal data is collected beyond what you submit.',
                       ),
                       const SizedBox(height: 20),
                       Container(
@@ -5864,14 +5964,9 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
           throw Exception('Server responded ${resp.statusCode}');
         }
       }else{
-        final subject = Uri.encodeComponent('CanvasBT AI Content Report');
-        final body = Uri.encodeComponent('Type: $_reportIssueType\n\nDescription:\n$description');
-        final uri = Uri.parse('mailto:support@inventorstech.io?subject=$subject&body=$body');
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Mail composer opened to send your report.')),
+          const SnackBar(content: Text('Reporting unavailable: endpoint not configured.')),
         );
-        Navigator.of(dialogCtx).pop();
       }
     }catch(e){
       ScaffoldMessenger.of(context).showSnackBar(

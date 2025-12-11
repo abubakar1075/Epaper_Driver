@@ -26,17 +26,35 @@ flutter run
 
 ## AI-Generated Content Reporting
 
-- Open the app menu and tap `Report AI Content`.
+- Open the app menu or the AI view and tap `Report AI Content` / `Report Image`.
 - Select issue type: Offensive • Sexual • Violent • Misleading • Other.
-- Describe the problem and optionally attach a screenshot.
-- Submit directly in-app. Reports are sent via a configurable HTTPS endpoint.
+- Describe the problem and optionally include a screenshot (auto-attached for AI images).
+- Submits directly in-app via HTTPS; no leaving the app.
 
-### Configure report endpoint
+### Configure report endpoint (Google Apps Script recommended)
 
-- Set `REPORT_ENDPOINT` in `lib/main.dart` to your HTTPS URL that accepts `multipart/form-data`:
-	- Fields: `issueType`, `description`, `app`, `platform`
-	- File: `screenshot` (optional)
-- If unset, the app falls back to opening the email composer addressed to `support@inventorstech.io`.
+- The app posts `application/x-www-form-urlencoded` to your Web App URL (`/exec`).
+- Fields sent:
+	- `issueType`, `description`, `app`, `platform`, optional `screenshotBase64` (PNG/JPEG base64)
+- Configure the endpoint at build time using `--dart-define` (preferred):
+
+```powershell
+flutter run --dart-define=REPORT_ENDPOINT=https://script.google.com/macros/s/XXXX/exec
+```
+
+- Alternatively, set the default in `lib/main.dart` (`_REPORT_ENDPOINT_DEFAULT`).
+
+### Apps Script quick-start (summary)
+
+- Create a Google Apps Script > Deploy > Web app > Anyone.
+- Implement `doPost(e)` to append to a Sheet and save `screenshotBase64` to Drive (optional) and return JSON.
+- Ensure the Web App URL ends with `/exec` and accepts form-encoded data via `e.parameter`.
+
+### Disclosure and safety
+
+- AI-generated images are labeled in-app and include a built-in Report button.
+- Basic on-device filtering blocks obviously unsafe prompts before generation.
+- Reports contain only what you submit plus app name and platform; used for moderation only.
 
 ## Key Files
 
