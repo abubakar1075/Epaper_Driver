@@ -5009,15 +5009,6 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
               },
             ),
             const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.flag_outlined, color: Colors.redAccent, size: 28),
-              title: const Text('Report AI Content', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFamily: 'Roboto')),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-              onTap: () {
-                Navigator.pop(context);
-                _showReportDialog();
-              },
-            ),
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.tune, color: Colors.orange, size: 28),
@@ -5945,8 +5936,25 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
         if(resp.statusCode>=200 && resp.statusCode<400){
           // 2xx = success, 3xx = redirect (but Apps Script returns 302 with success body)
-          _updateStatus('Thank you! Your Submission has been received.', persist: true);
+          // Close the report dialog first
           Navigator.of(dialogCtx).pop();
+          // Show confirmation popup with OK button
+          if (mounted) {
+            await showDialog(
+              context: context,
+              barrierDismissible: true,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                content: const Text('Thank you! Your Submission has been received.'),
+                actions: [
+                  TextButton(
+                    onPressed: () { Navigator.of(ctx).pop(); },
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
         }else{
           throw Exception('Server responded ${resp.statusCode}');
         }
