@@ -284,6 +284,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     'tone': 'Colourful artistic watercolor scene, bold strokes, vivid lighting, expressive atmosphere, dynamic contrasts',
     'spaces': 'Sketch and ink drawing, fine lines, textured shading, monochrome or minimal colour, hand-drawn aesthetic',
   };
+  // (Removed) SnackBar-based helper in favor of unified _updateStatus()
   // Basic on-device prompt safety filter (client-side)
   static final List<RegExp> _blockedPromptPatterns = [
     RegExp(r'\b(sex|sexual|porn|nude|nsfw)\b', caseSensitive: false),
@@ -5893,9 +5894,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   Future<void> _submitReport(BuildContext dialogCtx, StateSetter setLocalState) async {
     final description = _reportDescriptionController.text.trim();
     if(description.isEmpty){
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please describe the problem')),
-      );
+      _updateStatus('Please describe the problem');
       return;
     }
 
@@ -5948,9 +5947,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
         if(resp.statusCode>=200 && resp.statusCode<400){
           // 2xx = success, 3xx = redirect (but Apps Script returns 302 with success body)
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(screenshotB64!=null ? 'Report submitted with screenshot!' : 'Report submitted!')),
-          );
+          _updateStatus(screenshotB64!=null ? 'Report submitted with screenshot!' : 'Report submitted!', persist: true);
           Navigator.of(dialogCtx).pop();
         }else{
           throw Exception('Server responded ${resp.statusCode}');
