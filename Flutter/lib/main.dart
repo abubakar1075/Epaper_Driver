@@ -5945,12 +5945,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
         if(resp.statusCode>=200 && resp.statusCode<400){
           // 2xx = success, 3xx = redirect (but Apps Script returns 302 with success body)
-          _updateStatus(
-            screenshotB64!=null
-              ? 'Report submitted with screenshot! Thank you'
-              : 'Report submitted! Thank you',
-            persist: true,
-          );
+          _updateStatus('Thank you! Your Submission has been received', persist: true);
           Navigator.of(dialogCtx).pop();
         }else{
           throw Exception('Server responded ${resp.statusCode}');
