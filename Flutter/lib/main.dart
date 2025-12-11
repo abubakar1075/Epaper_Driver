@@ -5810,7 +5810,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Notice Something wrong? tell us.'),
+                  const Text('Notice something wrong? Tell us.'),
                   const SizedBox(height: 12),
                   const Text('Type of issue'),
                   const SizedBox(height: 6),
@@ -5832,7 +5832,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                     controller: _reportDescriptionController,
                     maxLines: 5,
                     decoration: const InputDecoration(
-                      hintText: 'Explain the issue so we can fix it',
+                      hintText: 'Explain the issue so we can fix it.',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -5857,7 +5857,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Your reports are reviewed by our team and help improve safety and quality filters',
+                    'Your reports are reviewed by our team and help improve safety and quality filters.',
                     style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                 ],
@@ -5886,13 +5886,13 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   Future<void> _submitReport(BuildContext dialogCtx, StateSetter setLocalState) async {
     final description = _reportDescriptionController.text.trim();
     if(description.isEmpty){
-      _updateStatus('Please describe the problem');
+      _updateStatus('Please describe the problem.');
       return;
     }
 
     // Require a screenshot to be attached, same as description
     if (_reportScreenshot == null) {
-      _updateStatus('Please add a screenshot');
+      _updateStatus('Please add a screenshot.');
       return;
     }
 
@@ -5945,7 +5945,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
 
         if(resp.statusCode>=200 && resp.statusCode<400){
           // 2xx = success, 3xx = redirect (but Apps Script returns 302 with success body)
-          _updateStatus('Thank you! Your Submission has been received', persist: true);
+          _updateStatus('Thank you! Your Submission has been received.', persist: true);
           Navigator.of(dialogCtx).pop();
         }else{
           throw Exception('Server responded ${resp.statusCode}');
