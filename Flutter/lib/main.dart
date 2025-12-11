@@ -259,7 +259,7 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
   // UI HELPERS
   // =============================================================
   // AI-Generated Content reporting
-  static const String REPORT_ENDPOINT = "https://script.google.com/macros/s/AKfycbzP7sLL66BbQvBIOKDk-7nRFHCBvYoj48wfo2geMSRIclfG2IQpJvFIOctbhVbJ4H-dVg/exec"; // Optional HTTPS endpoint to receive reports (set to your server URL)
+  static const String REPORT_ENDPOINT = "https://script.google.com/macros/s/AKfycbz_FFMPZ-1Do9CNBS3aswFgRJtpGlqSS2hhNeSXcsukGgbWHuz-TIFBmYbUpk-3BRFdcw/exec"; // Optional HTTPS endpoint to receive reports (set to your server URL)
   final TextEditingController _reportDescriptionController = TextEditingController();
   String _reportIssueType = 'Offensive';
   XFile? _reportScreenshot;
@@ -5810,72 +5810,58 @@ class _EPaperImageSenderState extends State<EPaperImageSender> with TickerProvid
     setLocalState((){ _isSubmittingReport = true; });
     try{
       if(REPORT_ENDPOINT.isNotEmpty){
-        Uri uri = Uri.parse(REPORT_ENDPOINT);
+        final Uri originalUri = Uri.parse(REPORT_ENDPOINT);
 
-        Future<http.StreamedResponse> sendOnce(Uri u) async {
-          final req = http.MultipartRequest('POST', u);
-          req.fields['issueType'] = _reportIssueType;
-          req.fields['description'] = description;
-          req.fields['app'] = 'CanvasBT';
-          req.fields['platform'] = Platform.operatingSystem;
-          if(_reportScreenshot!=null){
-            final bytes = await _reportScreenshot!.readAsBytes();
-            req.files.add(http.MultipartFile.fromBytes('screenshot', bytes, filename: _reportScreenshot!.name));
-          }
-          return await req.send();
-        }
-
-        // First attempt
-        http.StreamedResponse resp = await sendOnce(uri);
-        // Follow one redirect (Apps Script often returns 302)
-        if(resp.statusCode==301 || resp.statusCode==302){
-          final location = resp.headers['location'];
-          if(location!=null){
-            uri = Uri.parse(location);
-            resp = await sendOnce(uri);
+        // Read screenshot bytes ONCE at start
+        Uint8List? screenshotBytes;
+        print('________________ REPORT: _reportScreenshot is ${_reportScreenshot == null ? "NULL" : "SET"}');
+        if(_reportScreenshot!=null){
+          try{
+            print('________________ REPORT: Reading screenshot bytes from ${_reportScreenshot!.path}');
+            screenshotBytes = await _reportScreenshot!.readAsBytes();
+            print('________________ REPORT: Screenshot bytes read: ${screenshotBytes.length} bytes');
+          }catch(e){
+            print('________________ REPORT: ERROR reading screenshot: $e');
+            screenshotBytes = null;
           }
         }
 
-        if(resp.statusCode>=200 && resp.statusCode<300){
+        // For Google Apps Script: use form-encoded directly (multipart causes 405 on redirects)
+        // Encode screenshot as base64 if present
+        String? screenshotB64;
+        if(screenshotBytes!=null && screenshotBytes.isNotEmpty){
+          screenshotB64 = base64Encode(screenshotBytes);
+          print('________________ REPORT: Base64 encoded: ${screenshotB64.length} chars');
+        }
+
+        // Build form body
+        final Map<String, String> formBody = {
+          'issueType': _reportIssueType,
+          'description': description,
+          'app': 'CanvasBT',
+          'platform': Platform.operatingSystem,
+        };
+        if(screenshotB64!=null && screenshotB64.isNotEmpty){
+          formBody['screenshotBase64'] = screenshotB64;
+        }
+
+        print('________________ REPORT: Sending form-encoded POST to ${originalUri.toString()}');
+        final resp = await http.post(
+          originalUri,
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: formBody,
+        );
+        print('________________ REPORT: Response status: ${resp.statusCode}');
+        print('________________ REPORT: Response body: ${resp.body}');
+
+        if(resp.statusCode>=200 && resp.statusCode<400){
+          // 2xx = success, 3xx = redirect (but Apps Script returns 302 with success body)
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Thanks! Your report was submitted.')),
+            SnackBar(content: Text(screenshotB64!=null ? 'Report submitted with screenshot!' : 'Report submitted!')),
           );
           Navigator.of(dialogCtx).pop();
-        }else if(resp.statusCode==405){
-          // Fallback: some endpoints only accept form-encoded; retry without screenshot
-          // Prepare optional base64 for endpoints that can't handle multipart
-          String? screenshotB64;
-          if(_reportScreenshot!=null){
-            try{
-              final bytes = await _reportScreenshot!.readAsBytes();
-              screenshotB64 = base64Encode(bytes);
-            }catch(_){ screenshotB64 = null; }
-          }
-          final formResp = await http.post(
-            uri,
-            headers: {'Content-Type':'application/x-www-form-urlencoded'},
-            body: {
-              'issueType': _reportIssueType,
-              'description': description,
-              'app': 'CanvasBT',
-              'platform': Platform.operatingSystem,
-              if(screenshotB64!=null) 'screenshotBase64': screenshotB64,
-            },
-          );
-          if(formResp.statusCode>=200 && formResp.statusCode<300){
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Report submitted (without screenshot)')),
-            );
-            Navigator.of(dialogCtx).pop();
-          }else{
-            throw Exception('Server responded 405 and form submit failed ${formResp.statusCode}');
-          }
         }else{
-          // Friendly hint for common Apps Script misconfig
-          final hint = REPORT_ENDPOINT.contains('/exec')
-            ? ''
-            : ' (Tip: Use the published Web App URL ending with /exec)';
-          throw Exception('Server responded ${resp.statusCode}$hint');
+          throw Exception('Server responded ${resp.statusCode}');
         }
       }else{
         final subject = Uri.encodeComponent('CanvasBT AI Content Report');
